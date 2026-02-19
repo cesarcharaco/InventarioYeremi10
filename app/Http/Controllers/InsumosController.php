@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use App\Http\Requests\InsumosRequest;
 use App\Http\Requests\InsumosUpdateRequest;
 use Illuminate\Support\Facades\DB; // Añadido al namespace
+use Illuminate\Support\Facades\Gate;
 
 class InsumosController extends Controller
 {
@@ -20,6 +21,7 @@ class InsumosController extends Controller
      */
     public function index()
     {
+        Gate::authorize('ver-logistica');
         // Se ajustó para obtener stock_min/max desde la tabla insumos
         // y la cantidad física desde la tabla pivot
         $insumos = DB::table('insumos')
@@ -45,6 +47,7 @@ class InsumosController extends Controller
 
     public function precios()
     {
+        Gate::authorize('ver-costos');
             $insumos = DB::table('insumos')
         ->join('categorias', 'insumos.categoria_id', '=', 'categorias.id')
         ->join('modelos_venta', 'insumos.modelo_venta_id', '=', 'modelos_venta.id')
@@ -71,6 +74,7 @@ class InsumosController extends Controller
    
     public function actualizarCosto(Request $request) 
     {
+        Gate::authorize('editar-datos-maestros');
         try {
             // 1. Validar que lleguen los datos
             if (!$request->id || !$request->costo) {
@@ -145,6 +149,7 @@ class InsumosController extends Controller
     }
     public function create()
     {
+        Gate::authorize('gestionar-insumos');
         $modelos = ModeloVenta::all();
         $locales = Local::all(); 
         $categorias = Categoria::orderBy('categoria', 'asc')->get();
@@ -260,6 +265,7 @@ class InsumosController extends Controller
 
     public function destroy(Request $request)
     {
+        Gate::authorize('editar-datos-maestros');
         $this->authorize('gestionar-insumos');
         $insumo = Insumos::find($request->id_insumo);
 

@@ -20,6 +20,7 @@ class DespachoController extends Controller
      */
     public function index()
     {
+        Gate::authorize('ver-logistica');
         // Cargamos relaciones para evitar el problema de N+1 consultas
         $despachos = Despachos::with(['origen', 'destino'])->orderBy('created_at', 'desc')->get();
         return view('despachos.index', compact('despachos'));
@@ -30,9 +31,14 @@ class DespachoController extends Controller
      */
     public function create()
     {
-        /// Solo locales activos
-        $locales = Local::where('estado', 'Activo')->get();
-        
+        Gate::authorize('crear-despacho');
+            // Si tiene permiso global, trae todos los locales
+        if (Gate::allows('seleccionar-cualquier-origen')) {
+            $locales = Local::all();
+        } else {
+            // Si no, solo puede usar el local al que pertenece
+            $locales = $usuario->local; // Relación belongsToMany
+        }        
         // Solo traemos insumos con estado global 'En Venta'
         $insumos = Insumos::where('estado', 'En Venta')->get();
         
@@ -48,6 +54,7 @@ class DespachoController extends Controller
      */
     public function store(Request $request)
     {
+        Gate::authorize('crear-despacho');
             $request->validate([
             'id_local_origen' => 'required|different:id_local_destino',
             'id_local_destino' => 'required',
@@ -142,6 +149,7 @@ class DespachoController extends Controller
 
     public function show($id)
     {
+        Gate::authorize('ver-logistica');
         try {
             // 1. Buscamos el despacho solo con origen y destino
             $despacho = \App\Models\Despachos::with(['origen', 'destino'])->findOrFail($id);
@@ -162,6 +170,7 @@ class DespachoController extends Controller
     
     public function confirmar($id)
     {
+        Gate::authorize('recibir-despacho');
         try {
             $despacho = \App\Models\Despachos::findOrFail($id);
             
@@ -176,9 +185,11 @@ class DespachoController extends Controller
 
     public function edit($id)
     {
+        Gate::authorize('editar-despacho');
         // 1. Verificación de seguridad
         if (Gate::denies('editar-despacho')) {
-            abort(403, 'No tienes permiso para editar despachos.');
+            return redirect()->back()->with('error', 'No tienes permiso para editar despachos.');
+            
         }
 
         // 2. Carga del despacho con sus detalles e insumos relacionados
@@ -201,6 +212,7 @@ class DespachoController extends Controller
 
     public function update(Request $request, $id)
     {
+
         if (Gate::denies('editar-despacho')) {
             return redirect()->back()->with('error', 'No tienes permiso.');
         }
@@ -282,9 +294,10 @@ class DespachoController extends Controller
     }
     public function destroy($id)
     {
-        if (Gate::denies('eliminar-despacho')) {
+        Gate::authorize('eliminar-despacho');
+        /*if (Gate::denies('eliminar-despacho')) {
             return redirect()->back()->with('error', 'No tienes permiso.');
-        }
+        }*/
 
         // Cargamos el despacho con sus detalles
         $despacho = Despachos::with('detalles')->findOrFail($id);

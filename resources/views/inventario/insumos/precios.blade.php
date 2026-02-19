@@ -58,18 +58,25 @@
               </td>
 
               {{-- CELDA EDITABLE DE COSTO --}}
-              <td class="text-center celda-editable" style="cursor: pointer; position: relative;">
-                <span class="costo-texto font-weight-bold text-secondary">${{ number_format($key->costo, 2) }}</span>
-                @can('gestionar-insumos')
-                <div class="contenedor-edicion d-none">
-                  <input type="number" step="0.01" class="form-control input-costo form-control-sm" value="{{ $key->costo }}">
-                  <div class="mt-1">
-                    <button class="btn btn-success btn-sm btn-guardar"><i class="fa fa-check"></i></button>
-                    <button class="btn btn-danger btn-sm btn-cancelar"><i class="fa fa-times"></i></button>
-                  </div>
-                </div>
+                @can('editar-costos')
+                    <td class="text-center celda-editable" style="cursor: pointer; position: relative;">
+                    <span class="costo-texto font-weight-bold text-secondary">${{ number_format($key->costo, 2) }}</span>
+                        <div class="contenedor-edicion d-none">
+                          <input type="number" step="0.01" class="form-control input-costo form-control-sm" value="{{ $key->costo }}">
+                          <div class="mt-1">
+                            <button class="btn btn-success btn-sm btn-guardar"><i class="fa fa-check"></i></button>
+                            <button class="btn btn-danger btn-sm btn-cancelar"><i class="fa fa-times"></i></button>
+                          </div>
+                        </div>
+                    </td>
+                @else
+                    <td class="text-center celda-no-editable" style="cursor: pointer; position: relative;">
+                        
+                        <span class="costo-texto2 font-weight-bold text-secondary">{{ $key->costo }}</span>
+                        
+                    </td>
                 @endcan
-              </td>
+              
 
               {{-- RESULTADOS CALCULADOS --}}
               <td class="text-center font-weight-bold col-venta-usd" style="color: #1e8449; background-color: #eafaf1;">

@@ -18,7 +18,7 @@ class User extends Authenticatable
     const ROLE_VENDEDOR = 'vendedor';       // Solo ventas
 
     protected $fillable = [
-        'name', 'cedula', 'telefono', 'email', 'password', 'role', 'activo'
+        'name', 'cedula', 'telefono', 'email', 'password', 'role', 'activo', 'foto'
     ];
 
     protected $hidden = [

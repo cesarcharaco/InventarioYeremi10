@@ -41,6 +41,11 @@ class AuthServiceProvider extends ServiceProvider
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
         });
 
+        // Editar Precios de Costo: Solo Admin y Encargado
+        Gate::define('editar-costos', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN]);
+        });
+
         // Puede entrar a la vista de crear/editar y ver botones de acción
         Gate::define('gestionar-insumos', function (User $user) {
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
@@ -79,6 +84,11 @@ class AuthServiceProvider extends ServiceProvider
         // eliminar de despachos de mercancia
         Gate::define('eliminar-despacho', function (User $user) {
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+        });
+
+        // Define quién puede elegir CUALQUIER local como origen (Poder Global)
+        Gate::define('seleccionar-cualquier-origen', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
 
         //Registro de incidencias todos
@@ -143,5 +153,62 @@ class AuthServiceProvider extends ServiceProvider
             return false;
         });
 
+        // gestion del modulo de modelos de venta
+        Gate::define('gestionar-modelos-venta', function ($user) {
+            return $user->role === User::ROLE_SUPERADMIN;
+        });
+
+        // Solo el Dueño/SuperAdmin puede crear, editar o eliminar cuentas de acceso
+        Gate::define('gestionar-usuarios', function ($user) {
+            return $user->role === User::ROLE_SUPERADMIN;
+        });
+        
+        // 1. Gestión base de clientes (Ver lista, Crear y Editar datos básicos)
+        // Permitido para: SuperAdmin, Encargado y Vendedor
+        Gate::define('gestionar-clientes', function (User $user) {
+            return in_array($user->role, [
+                User::ROLE_SUPERADMIN, 
+                User::ROLE_ENCARGADO, 
+                User::ROLE_VENDEDOR
+            ]);
+        });
+
+        // 2. Gestión avanzada de créditos (Aumentar límites, Revalorizar deuda)
+        // Permitido para: SuperAdmin y Encargado solamente
+        Gate::define('gestionar-creditos-avanzado', function (User $user) {
+            return in_array($user->role, [
+                User::ROLE_SUPERADMIN, 
+                User::ROLE_ENCARGADO
+            ]);
+        });
+
+        // 3. Eliminar clientes (Acción crítica)
+        // Permitido para: Solo SuperAdmin
+        Gate::define('eliminar-clientes', function (User $user) {
+            return $user->role === User::ROLE_SUPERADMIN;
+        });
+
+        // 1. Quién puede abrir y operar una caja (Día a día)
+        Gate::define('operar-caja', function (User $user) {
+            return in_array($user->role, [
+                User::ROLE_VENDEDOR, 
+                User::ROLE_ENCARGADO, 
+                User::ROLE_SUPERADMIN
+            ]);
+        });
+
+        // 2. Quién puede ver reportes de cajas de otros (Auditoría)
+        // El vendedor solo ve su propia caja, el admin ve todas.
+        Gate::define('auditar-cajas', function (User $user) {
+            return in_array($user->role, [
+                User::ROLE_SUPERADMIN, 
+                User::ROLE_ENCARGADO
+            ]);
+        });
+
+        // 3. Quién puede reabrir una caja cerrada (Acción crítica por error humano)
+        Gate::define('reabrir-caja', function (User $user) {
+            return $user->role === User::ROLE_SUPERADMIN;
+        });
     }
 }

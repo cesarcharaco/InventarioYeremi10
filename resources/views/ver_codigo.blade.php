@@ -1,66 +1,83 @@
+@extends('layouts.app')
 
-@foreach($insumos as $key)
-    @php
-<td class="text-center">
-    @php
-        // 1. Identificar Rol y Alcance
-        $rol = is_object(auth()->user()->role) ? auth()->user()->role->nombre : auth()->user()->role;
-        $esDuenioLocal = (Gate::allows('gestionar-estado-local', $key->id_local));
-        $esAdmin = (in_array($rol, ['Admin', 'Almacenista']));
-        
-        // 2. Determinar Nivel de Interacción
-        $modo = ($esAdmin || ($rol === 'Encargado' && $esDuenioLocal)) ? 'editable' : 'lectura';
-    @endphp
+@section('title') Registro de Categoría @endsection
 
-    <div class="dropdown">
-        @if($modo === 'editable')
-            <button class="btn btn-sm btn-link dropdown-toggle p-0" type="button" data-toggle="dropdown" style="text-decoration: none;">
-        @endif
-
-        {{-- SWITCH DE VISUALIZACIÓN DE BADGES --}}
-        @switch(true)
-            {{-- Prioridad 1: Bloqueo Global --}}
-            @case($key->estado !== 'En Venta')
-                <span class="badge badge-dark" title="Bloqueo desde Administración Central">
-                    <i class="fas fa-globe"></i> Global: {{ $key->estado }}
-                </span>
-                @break
-
-            {{-- Prioridad 2: Bloqueo Local --}}
-            @case($key->estado_local === 'Suspendido')
-                <span class="badge badge-danger" title="Suspendido en este local">
-                    <i class="fas fa-hand-paper"></i> Local: Suspendido
-                </span>
-                @break
-
-            {{-- Caso 3: Todo Operativo --}}
-            @default
-                <span class="badge badge-success">
-                    <i class="fas fa-check-circle"></i> Disponible
-                </span>
-        @endswitch
-
-        @if($modo === 'editable')
-            </button>
-            <div class="dropdown-menu dropdown-menu-right">
-                <h6 class="dropdown-header">Gestión de Estado</h6>
-                
-                {{-- Opciones que verá el usuario --}}
-                <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'En Venta', {{ $key->id_local }}, {{ $esAdmin ? 'true' : 'false' }}, {{ $esDuenioLocal ? 'true' : 'false' }})">
-                    <span class="text-success"><i class="fa fa-play"></i> Activar (Venta/Disponible)</span>
-                </a>
-                
-                <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'Suspendido', {{ $key->id_local }}, {{ $esAdmin ? 'true' : 'false' }}, {{ $esDuenioLocal ? 'true' : 'false' }})">
-                    <span class="text-danger"><i class="fa fa-pause"></i> Suspender</span>
-                </a>
-
-                @if($esAdmin)
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'No Disponible', {{ $key->id_local }}, true, true)">
-                        <span class="text-dark"><i class="fa fa-ban"></i> Marcar No Disponible (Global)</span>
-                    </a>
-                @endif
-            </div>
-        @endif
+@section('content')
+<main class="app-content">
+  {{-- Verificación de permiso para crear --}}
+  @cannot('crear-configuracion')
+    <div class="tile text-center">
+        <h1 class="text-danger"><i class="fa fa-lock"></i> Acceso Restringido</h1>
+        <p>No tienes permisos para registrar nuevas categorías en el sistema.</p>
+        <a href="{{ route('categorias.index') }}" class="btn btn-primary">Volver al listado</a>
     </div>
-</td>
+  @else
+  <div class="tile mb-4">
+    <div class="row">
+      <div class="col-lg-12">
+        <div class="page-header">
+          <h2 class="mb-3 line-head" id="indicators">Categorías</h2>
+        </div><br>
+        <div class="basic-tb-hd text-center">            
+            @include('layouts.partials.flash-messages')
+            
+            {{-- Errores de validación --}}
+            @if ($errors->any())
+                <div class="alert alert-danger">
+                    <ul style="margin-bottom: 0;">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-12">
+        <div class="tile">
+          <h4>Nueva Categoría <small>Todos los campos (<b style="color: red;">*</b>) son requeridos.</small></h4>
+          <div class="tile-body">
+            <form action="{{ route('categorias.store') }}" method="POST" name="registrar_categoria" data-parsley-validate>
+              @csrf
+              <div class="row">
+                <div class="col-md-12">                  
+                  <div class="form-group">
+                    <label class="control-label">Nombre de la Categoría <b style="color: red;">*</b></label>
+                    <input class="form-control @error('categoria') is-invalid @enderror" 
+                           type="text" 
+                           placeholder="Ej: Accesorios, Frenos, Motor..." 
+                           name="categoria" 
+                           id="categoria" 
+                           required="required" 
+                           value="{{ old('categoria') }}">
+                    
+                    @error('categoria')
+                        <span class="invalid-feedback" role="alert">
+                            <strong>{{ $message }}</strong>
+                        </span>
+                    @enderror
+                  </div>
+                </div>
+              </div>
+
+              <div class="tile-footer">
+                <button class="btn btn-primary" type="submit">
+                    <i class="fa fa-fw fa-lg fa-check-circle"></i> Registrar
+                </button>
+                &nbsp;&nbsp;&nbsp;
+                <a class="btn btn-secondary" href="{{ route('categorias.index') }}">
+                    <i class="fa fa-fw fa-lg fa-times-circle"></i> Volver
+                </a>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  @endcannot
+</main>
+@endsection

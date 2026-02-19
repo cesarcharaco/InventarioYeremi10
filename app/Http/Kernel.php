@@ -70,5 +70,6 @@ class Kernel extends HttpKernel
     protected $routeMiddleware = [
         // ...
        'guest' => \Illuminate\Auth\Middleware\RedirectIfAuthenticated::class,
+       'caja.abierta' => \App\Http\Middleware\CheckCajaAbierta::class,
     ];
 }

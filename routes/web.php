@@ -14,6 +14,12 @@ use App\Http\Controllers\ReportesController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ModeloVentaController;
 use App\Http\Controllers\DespachoController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\CreditoController;
+use App\Http\Controllers\CajaController;
+use App\Http\Controllers\VentaController;
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -33,6 +39,17 @@ Auth::routes();
 // Forzar el nombre si algo lo está pisando
 //Route::get('login', [App\Http\Controllers\Auth\LoginController::class, 'showLoginForm'])->name('login');
 Route::middleware(['auth'])->group(function () {
+    // Rutas de Usuarios
+// Rutas de Perfil Personal
+    Route::get('/perfil', [PerfilController::class, 'edit'])->name('perfil.edit');
+    Route::put('/perfil', [PerfilController::class, 'update'])->name('perfil.update');
+    Route::get('/usuarios', [UserController::class, 'index'])->name('usuarios.index');
+    Route::get('/usuarios/crear', [UserController::class, 'create'])->name('usuarios.create');
+    Route::post('/usuarios/guardar', [UserController::class, 'store'])->name('usuarios.store');
+    Route::get('/usuarios/{id}/editar', [UserController::class, 'edit'])->name('usuarios.edit');
+    Route::put('/usuarios/{id}/actualizar', [UserController::class, 'update'])->name('usuarios.update');
+    Route::delete('/usuarios/{id}/eliminar', [UserController::class, 'destroy'])->name('usuarios.destroy');
+
     Route::get('/home', [HomeController::class, 'index'])->name('home');
 
 /*Route::get('/login', [LoginController::class, 'show'])->middleware('guest');
@@ -124,8 +141,50 @@ Route::resource('modelos-venta', ModeloVentaController::class);
 // Ruta extra que necesitaremos para el cálculo "instantáneo" más adelante
 Route::get('api/modelo-datos/{id}', [App\Http\Controllers\ModeloVentaController::class, 'getDatos']);
 
+// --- MÓDULO DE CLIENTES ---
+    // Incluye: index, create, store, show, edit, update, destroy
+    Route::resource('clientes', ClienteController::class);
+    
+    // Ruta adicional para el registro rápido desde el modal de ventas (AJAX)
+    Route::post('clientes/store-rapido', [ClienteController::class, 'storeRapido'])->name('clientes.storeRapido');
+
+    // ==========================================
+    // GESTIÓN DE CAJA (Apertura y Cierre)
+    // ==========================================
+    // No están en el grupo de 'caja.abierta' porque el usuario 
+    // debe poder entrar aquí precisamente para abrirla.
+    Route::resource('cajas', CajaController::class)->only(['create', 'store', 'edit', 'update']);
+    Route::get('cajas/historial', [CajaController::class, 'index'])->name('cajas.index'); // Para auditoría
 
 
+    // ==========================================
+    // MÓDULO DE VENTAS (Protegido por Caja)
+    // ==========================================
+    Route::middleware(['caja.abierta'])->group(function () {
+        
+        Route::resource('ventas', VentaController::class);
+        
+        // Ruta para imprimir factura (útil para el post-venta)
+        Route::get('ventas/{id}/ticket', [VentaController::class, 'imprimirTicket'])->name('ventas.ticket');
+        
+        // Ruta AJAX para obtener el precio actual de un insumo al vender
+        Route::get('api/insumos/{id}/precio', [VentaController::class, 'getPrecioInsumo']);
+    });
+    // --- MÓDULO DE CRÉDITOS ---
+    // Incluye: index (lista de deudores), show (detalle de deuda), etc.
+    Route::resource('creditos', CreditoController::class);
+
+    // ==========================================
+    // MÓDULO DE CRÉDITOS
+    // ==========================================
+    // (Asegúrate de que estas rutas existan para completar el flujo)
+    Route::prefix('creditos')->group(function () {
+        Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
+        Route::get('/{id}', [CreditoController::class, 'show'])->name('creditos.show');
+        Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
+        Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
+        Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
+    });
 Route::get('generar_reporte', [ReportesController::class, 'store']);
 Route::get('generar_reporte', [ReportesController::class, 'store'])->name('generar_reporte');
 Route::resource('reportes', ReportesController::class);

@@ -8,18 +8,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 class LocalController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware(function ($request, $next) {
-            if (auth()->user()->role !== User::ROLE_SUPERADMIN) {
-                return redirect('home')->with('error', 'No tienes permisos de administrador.');
-            }
-            return $next($request);
-        });
-    }
     
     public function index()
     {
+        Gate::authorize('editar-configuracion');
         // Traemos todos los locales para la vista
         $local = Local::all();
         return view('local.index', compact('local'));
@@ -27,11 +19,13 @@ class LocalController extends Controller
 
     public function create()
     {
+        Gate::authorize('editar-configuracion');
         return view('local.create');
     }
 
     public function store(Request $request)
     {
+        Gate::authorize('editar-configuracion');
         // 1. Validamos que el nombre sea único
         $buscar = Local::where('nombre', $request->nombre)->first();
 
@@ -51,12 +45,14 @@ class LocalController extends Controller
 
     public function edit($id)
     {
+        Gate::authorize('editar-configuracion');
         $local = Local::findOrFail($id);
         return view('local.edit', compact('local'));
     }
 
     public function update(Request $request, $id)
     {
+        Gate::authorize('editar-configuracion');
         $local = Local::findOrFail($id);
         //dd($request->all());
         // Evitar duplicados si se cambia el nombre a uno que ya existe (excepto el propio)
@@ -76,6 +72,7 @@ class LocalController extends Controller
     // Función para activar/desactivar locales sin eliminarlos
     public function cambiar_estado(Request $request)
     {
+        Gate::authorize('editar-configuracion');
         $local = Local::findOrFail($request->id_local);
         
         // Validamos que lo que venga sea 'Activo' o 'Inactivo'
@@ -88,6 +85,7 @@ class LocalController extends Controller
 
     public function destroy($id)
     {
+        Gate::authorize('editar-configuracion');
         $local = Local::findOrFail($id);
         
         // Nota: En un sistema de inventario, borrar un local con stock 

@@ -1,12 +1,27 @@
 @extends('layouts.app')
+
 @section('title') Nuevo Despacho @endsection
+
 @section('content')
 <main class="app-content">
+  {{-- 1. VERIFICACIÓN DE PERMISO PARA CREAR (ESTILO CATEGORÍAS) --}}
+  @cannot('crear-despacho')
+    <div class="tile text-center">
+        <h1 class="text-danger"><i class="fa fa-lock"></i> Acceso Restringido</h1>
+        <p>No tienes permisos para registrar salidas de mercancía en el sistema.</p>
+        <a href="{{ route('despacho.index') }}" class="btn btn-primary">Volver al listado</a>
+    </div>
+  @else
   <div class="app-title">
     <div>
       <h1><i class="fa fa-truck"></i> Gestión de Despachos</h1>
       <p>Salida de Mercancía | Yermotos Repuestos C.A.</p>
     </div>
+    <ul class="app-breadcrumb breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="fa fa-home fa-lg"></i></a></li>
+      <li class="breadcrumb-item"><a href="{{ route('despacho.index') }}">Despachos</a></li>
+      <li class="breadcrumb-item"><a href="#">Nuevo</a></li>
+    </ul>
   </div>
 
   <form action="{{ route('despacho.store') }}" method="POST" id="form-despacho">
@@ -23,24 +38,33 @@
             </div>
 
             <div class="form-group">
-			    <label><b>Origen (Donde sale)</b> <b class="text-danger">*</b></label>
-			    <select name="id_local_origen" id="id_local_origen" class="form-control select2" required>
-			        <option value="">Seleccione origen...</option>
-			        @foreach($locales as $local)
-			            <option value="{{ $local->id }}">{{ $local->nombre }} ({{ $local->tipo }})</option>
-			        @endforeach
-			    </select>
-			</div>
+              <label><b>Origen (Donde sale)</b> <b class="text-danger">*</b></label>
+              {{-- APLICACIÓN DE LA NUEVA GATE DE ALCANCE --}}
+              @can('seleccionar-cualquier-origen')
+                <select name="id_local_origen" id="id_local_origen" class="form-control select2" required>
+                    <option value="">Seleccione origen...</option>
+                    @foreach($locales as $local)
+                        <option value="{{ $local->id }}">{{ $local->nombre }} ({{ $local->tipo }})</option>
+                    @endforeach
+                </select>
+              @else
+                @php $miLocal = auth()->user()->localActual(); @endphp
+                <select class="form-control" disabled>
+                    <option value="{{ $miLocal->id ?? '' }}">{{ $miLocal->nombre ?? 'Sin Local Asignado' }}</option>
+                </select>
+                <input type="hidden" name="id_local_origen" id="id_local_origen" value="{{ $miLocal->id ?? '' }}">
+              @endcan
+            </div>
 
             <div class="form-group">
-			    <label><b>Destino (A donde va)</b> <b class="text-danger">*</b></label>
-			    <select name="id_local_destino" id="id_local_destino" class="form-control select2" required>
-			        <option value="">Seleccione destino...</option>
-			        @foreach($locales as $local)
-			            <option value="{{ $local->id }}">{{ $local->nombre }}</option>
-			        @endforeach
-			    </select>
-			</div>
+              <label><b>Destino (A donde va)</b> <b class="text-danger">*</b></label>
+              <select name="id_local_destino" id="id_local_destino" class="form-control select2" required>
+                <option value="">Seleccione destino...</option>
+                @foreach($locales as $local)
+                  <option value="{{ $local->id }}">{{ $local->nombre }}</option>
+                @endforeach
+              </select>
+            </div>
 
             <div class="form-group">
               <label><b>Transportado por:</b> <b class="text-danger">*</b></label>
@@ -109,29 +133,27 @@
             <button class="btn btn-primary" type="submit" id="btn-guardar" disabled>
               <i class="fa fa-fw fa-lg fa-check-circle"></i> Procesar Despacho
             </button>
+            &nbsp;&nbsp;&nbsp;
+            <a class="btn btn-secondary" href="{{ route('despacho.index') }}">
+                <i class="fa fa-fw fa-lg fa-times-circle"></i> Cancelar
+            </a>
           </div>
         </div>
       </div>
     </div>
   </form>
+  @endcannot
 </main>
 @endsection
 
 @section('scripts')
 <script>
-    /** * MANEJO DE LA VARIABLE ITEMS
-     * Usamos 'var' y verificamos existencia para evitar el error:
-     * "Identifier 'items' has already been declared"
-     */
     if (typeof items === 'undefined') {
-        var items = 0; // Lo usamos como contador para los índices de las filas
+        var items = 0; 
     } else {
         items = 0; 
     }
 
-    /**
-     * FUNCIÓN PARA AGREGAR PRODUCTOS
-     */
     function agregarProducto() {
         let insumo_id = $('#select_insumo').val();
         let insumo_text = $('#select_insumo option:selected').text();
@@ -142,7 +164,6 @@
             return;
         }
 
-        // Validar duplicados en la tabla
         let existe = false;
         $('input[name="id_insumo[]"]').each(function() {
             if ($(this).val() == insumo_id) existe = true;
@@ -153,7 +174,6 @@
             return;
         }
 
-        // Crear la fila usando el contador 'items' para el ID único
         let fila = `
             <tr id="fila_${items}">
                 <td>
@@ -172,10 +192,9 @@
         `;
 
         $('#detalles_despacho').append(fila);
-        items++; // Incrementamos el contador global
+        items++; 
         verificarBoton();
         
-        // Resetear select e input
         $('#select_insumo').val(null).trigger('change');
         $('#input_cantidad').val(1);
     }
@@ -186,22 +205,15 @@
     }
 
     function verificarBoton() {
-        // Habilitar botón solo si hay filas en la tabla
         let totalFilas = $('#detalles_despacho tr').length;
         $('#btn-guardar').prop('disabled', totalFilas === 0);
     }
 
     $(document).ready(function() {
-        // Inicializar Select2
         $('.select2').select2({ width: '100%' });
 
-        /**
-         * INTERCEPTAR EL ENVÍO DEL FORMULARIO
-         * Para mostrar el mensaje de carga y confirmación
-         */
         $('#form-despacho').on('submit', function(e) {
-            e.preventDefault(); // Detener el envío tradicional
-            
+            e.preventDefault();
             let form = this;
 
             Swal.fire({
@@ -216,23 +228,17 @@
                 reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Mostrar pantalla de carga
                     Swal.fire({
                         title: 'Generando Despacho',
                         text: 'Por favor espere...',
                         allowOutsideClick: false,
                         didOpen: () => { Swal.showLoading() }
                     });
-                    
-                    // Enviar formulario al servidor
                     form.submit();
                 }
             });
         });
 
-        /**
-         * LÓGICA ORIGEN != DESTINO
-         */
         $('#id_local_origen').on('change', function() {
             let origenId = $(this).val();
             let destinoSelect = $('#id_local_destino');

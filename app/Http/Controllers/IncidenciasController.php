@@ -8,11 +8,13 @@ use App\Models\InsumosC; // Este representa a insumos_has_cantidades
 use App\Models\HistorialIncidencias;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class IncidenciasController extends Controller
 {
     public function index()
     {
+        Gate::authorize('ver-logistica');
         // Usamos Join para traer los datos del producto y del local en una sola consulta
         $incidencias = DB::table('incidencias')
             ->join('insumos', 'incidencias.id_insumo', '=', 'insumos.id')
@@ -33,6 +35,7 @@ class IncidenciasController extends Controller
 
     public function create()
     {
+        Gate::authorize('registrar-incidencia');
         // Traemos los insumos con su ubicación y stock actual
         $insumos = DB::table('insumos_has_cantidades')
             ->join('insumos', 'insumos_has_cantidades.id_insumo', '=', 'insumos.id')
@@ -53,6 +56,7 @@ class IncidenciasController extends Controller
 
     public function store(Request $request)
     {
+        Gate::authorize('registrar-incidencia');
         $request->validate([
             'id_insumoc' => 'required|exists:insumos_has_cantidades,id',
             'cantidad' => 'required|numeric|min:1',
@@ -103,6 +107,7 @@ class IncidenciasController extends Controller
     }
     public function edit($id)
     {
+        Gate::authorize('gestionar-insumos');
         $incidencia = Incidencias::findOrFail($id);
         
         // Obtenemos los insumos con su ubicación para el select
@@ -122,6 +127,7 @@ class IncidenciasController extends Controller
     }
     public function update(Request $request, $id)
     {
+        Gate::authorize('gestionar-insumos');
         $request->validate([
             'cantidad' => 'required|numeric|min:1',
             'tipo' => 'required',
@@ -181,6 +187,7 @@ class IncidenciasController extends Controller
 
     public function destroy(Request $request)
     {
+        Gate::authorize('anular-historial');
         return DB::transaction(function () use ($request) {
             $incidencia = Incidencias::with('insumo')->findOrFail($request->id_incidencia);
 
@@ -230,6 +237,7 @@ class IncidenciasController extends Controller
     
     public function detalles_historial($id)
     {
+        Gate::authorize('ver-logistica');
         try {
             // Buscamos la incidencia con sus relaciones
             $detalles = DB::table('incidencias')
@@ -258,6 +266,7 @@ class IncidenciasController extends Controller
 
 public function deshacer_incidencia(Request $request)
 {
+    Gate::authorize('anular-historial');
     $registro = HistorialIncidencias::where('codigo', $request->codigo)
                 ->where('accion', '!=', 'anulacion')
                 ->first();
@@ -330,6 +339,7 @@ public function deshacer_incidencia(Request $request)
 
     public function historial()
     {
+        Gate::authorize('ver-historial-total');
         // Consulta simplificada: El historial manda.
         $historial = HistorialIncidencias::with('usuario')
             ->orderBy('created_at', 'desc')

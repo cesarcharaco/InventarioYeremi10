@@ -88,7 +88,58 @@
                     </ul>
                 </li>
                 @endif
+                {{-- NUEVO: MÓDULO CLIENTES (Visible para Admin, Encargado y Vendedor) --}}
+                @can('gestionar-clientes')
+                <li class="nav-item has-treeview {{ Request::is('clientes*') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link {{ Request::is('clientes*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-address-book"></i>
+                        <p>Cartera de Clientes <i class="right fas fa-angle-left"></i></p>
+                    </a>
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('clientes.index') }}" class="nav-link {{ Request::is('clientes') ? 'active' : '' }}">
+                                <i class="fas fa-list nav-icon"></i>
+                                <p>Listado General</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('clientes.create') }}" class="nav-link {{ Request::is('clientes/create') ? 'active' : '' }}">
+                                <i class="fas fa-user-plus nav-icon text-success"></i>
+                                <p>Nuevo Cliente</p>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                @endcan
+                
+                <li class="nav-header">OPERACIONES DE VENTA</li>
 
+                {{-- Solo quienes pueden operar la caja ven este menú --}}
+                @can('operar-caja')
+                    <li class="nav-item">
+                        <a href="{{ route('cajas.create') }}" class="nav-link {{ request()->is('cajas*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-cash-register text-info"></i>
+                            <p>Caja / Jornada</p>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a href="{{ route('ventas.create') }}" class="nav-link {{ request()->is('ventas/create') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-shopping-cart text-success"></i>
+                            <p>Realizar Venta</p>
+                        </a>
+                    </li>
+                @endcan
+
+                {{-- Solo Admin o Encargados ven el historial total o auditan cajas --}}
+                @can('auditar-cajas')
+                    <li class="nav-item">
+                        <a href="{{ route('ventas.index') }}" class="nav-link {{ request()->is('ventas') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-history text-warning"></i>
+                            <p>Historial de Ventas</p>
+                        </a>
+                    </li>
+                @endcan
                 {{-- REPORTES Y GRÁFICAS: Exclusivo SuperAdmin --}}
                 @if(auth()->user()->esAdmin())
                 <li class="nav-header">REPORTES GERENCIALES</li>
@@ -123,6 +174,21 @@
                                 <p>Categorías</p>
                             </a>
                         </li>
+                        @can('gestionar-usuarios')
+                        <li class="nav-item">
+                            <a href="{{ route('usuarios.index') }}" class="nav-link {{ Request::is('usuarios*') ? 'active' : '' }}">
+                                <i class="fas fa-users-cog nav-icon"></i>
+                                <p>Usuarios</p>
+                            </a>
+                        </li>
+                        {{-- Modelos de Venta (RESTAURADO) --}}
+                        <li class="nav-item">
+                            <a href="{{ route('modelos-venta.index') }}" class="nav-link {{ Request::is('modelos-venta*') ? 'active' : '' }}">
+                                <i class="fas fa-tags nav-icon"></i>
+                                <p>Modelos de Venta</p>
+                            </a>
+                        </li>
+                        @endcan
                     </ul>
                 </li>
                 @endif

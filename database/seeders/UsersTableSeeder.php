@@ -33,7 +33,7 @@ class UsersTableSeeder extends Seeder
             'telefono' => '04122222222',
             'email'    => 'encargado@sayer.com',
             'password' => Hash::make('tienda123'),
-            'role'     => User::ROLE_ADMIN, // Usando tu constante
+            'role'     => User::ROLE_ENCARGADO, // Usando tu constante
             'activo'   => true,
         ]);
 
