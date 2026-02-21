@@ -25,7 +25,8 @@ return new class extends Migration
             $table->decimal('pago_punto_bs', 12, 2)->default(0);
             $table->decimal('pago_pagomovil_bs', 12, 2)->default(0);
             
-            $table->string('referencia')->nullable();
+            $table->string('detalles')->nullable();
+            $table->enum('estado', ['Realizado', 'Anulado'])->default('Realizado');
             $table->timestamps();
         });
     }

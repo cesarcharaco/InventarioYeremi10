@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AbonoCredito extends Model
 {
     use HasFactory;
@@ -25,6 +25,7 @@ class AbonoCredito extends Model
         
         // Campo flexible para detalles del abono
         'detalles', // <--- Aquí reemplazamos 'referencia'
+        'estado',
     ];
 
     // Dentro de class AbonoCredito extends Model

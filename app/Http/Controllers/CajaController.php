@@ -163,7 +163,9 @@ class CajaController extends Controller
      */
     private function calcularTotalesCaja($caja)
     {
-        $ventas = Venta::where('id_caja', $caja->id)->where('estado', 'completada')
+        // 1. Sumamos los pagos de VENTAS realizadas con esta caja abierta
+        $ventas = Venta::where('id_caja', $caja->id)
+            ->where('estado', 'completada')
             ->select(
                 DB::raw('SUM(pago_usd_efectivo) as usd_e'),
                 DB::raw('SUM(pago_bs_efectivo) as bs_e'),
@@ -173,7 +175,9 @@ class CajaController extends Controller
                 DB::raw('SUM(pago_transferencia_bs) as bs_tr')
             )->first();
 
+        // 2. Sumamos los ABONOS de créditos recibidos con esta caja abierta
         $abonos = AbonoCredito::where('id_caja', $caja->id)
+            ->where('estado', 'Realizado')
             ->select(
                 DB::raw('SUM(pago_usd_efectivo) as usd_e'),
                 DB::raw('SUM(pago_bs_efectivo) as bs_e'),
@@ -181,17 +185,24 @@ class CajaController extends Controller
                 DB::raw('SUM(pago_pagomovil_bs) as bs_pm')
             )->first();
 
+        // 3. Consolidación de totales por método de pago
         $totales = [
-            'efectivo_usd' => ($ventas->usd_e ?? 0) + ($abonos->usd_e ?? 0),
-            'efectivo_bs'  => ($ventas->bs_e ?? 0) + ($abonos->bs_e ?? 0),
+            // Efectivo ingresado (Ventas + Abonos)
+            'efectivo_usd_ingreso' => ($ventas->usd_e ?? 0) + ($abonos->usd_e ?? 0),
+            'efectivo_bs_ingreso'  => ($ventas->bs_e ?? 0) + ($abonos->bs_e ?? 0),
+            
+            // Dinero digital (Punto de venta y Biopago suelen ir a la misma cuenta)
             'punto_bs'     => ($ventas->bs_p ?? 0) + ($ventas->bs_bio ?? 0) + ($abonos->bs_p ?? 0),
+            
+            // Pagomovil y Transferencias
             'pagomovil_bs' => ($ventas->bs_pm ?? 0) + ($ventas->bs_tr ?? 0) + ($abonos->bs_pm ?? 0),
         ];
 
+        // 4. Cálculo del ESPERADO (Apertura + Ingresos)
         return [
             'totales' => $totales,
-            'esperado_usd_efectivo' => $totales['efectivo_usd'] + $caja->monto_apertura_usd,
-            'esperado_bs_efectivo'  => $totales['efectivo_bs'] + $caja->monto_apertura_bs
+            'esperado_usd_efectivo' => $totales['efectivo_usd_ingreso'] + $caja->monto_apertura_usd,
+            'esperado_bs_efectivo'  => $totales['efectivo_bs_ingreso'] + $caja->monto_apertura_bs
         ];
     }
 

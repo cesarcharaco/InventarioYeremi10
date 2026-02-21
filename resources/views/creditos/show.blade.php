@@ -41,11 +41,13 @@
                                 <th>Monto ($)</th>
                                 <th>Forma de Pago</th>
                                 <th>Detalles</th>
+                                <th>Estado</th> {{-- Nueva Columna --}}
+                                @can('anular-abono') <th>Acción</th> @endcan {{-- Nueva Columna --}}
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($credito->abonos as $abono)
-                            <tr>
+                            <tr style="{{ $abono->estado === 'Anulado' ? 'opacity: 0.6; text-decoration: line-through;' : '' }}">
                                 <td>{{ $abono->created_at->format('d/m/Y h:i A') }}</td>
                                 <td>{{ $abono->usuario->name }}</td>
                                 <td class="font-weight-bold">${{ number_format($abono->monto_pagado_usd, 2) }}</td>
@@ -56,9 +58,28 @@
                                     @if($abono->pago_pagomovil_bs > 0) <small class="badge badge-light">P.Móvil</small> @endif
                                 </td>
                                 <td><small>{{ $abono->detalles ?? 'N/A' }}</small></td>
+                                {{-- Badge de Estado --}}
+                                <td>
+                                    <span class="badge badge-{{ $abono->estado === 'Realizado' ? 'success' : 'danger' }}">
+                                        {{ $abono->estado }}
+                                    </span>
+                                </td>
+                                {{-- Botón para Anular (Solo Admin y si está Realizado) --}}
+                                @can('anular-abono')
+                                <td>
+                                    @if($abono->estado === 'Realizado')
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger" 
+                                                onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($abono->monto_pagado_usd, 2) }}')"
+                                                title="Anular Abono">
+                                            <i class="fa fa-ban"></i>
+                                        </button>
+                                    @endif
+                                </td>
+                                @endcan
                             </tr>
                             @empty
-                            <tr><td colspan="5" class="text-center">No hay abonos registrados para este crédito.</td></tr>
+                            <tr><td colspan="7" class="text-center">No hay abonos registrados para este crédito.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -67,5 +88,45 @@
         </div>
     </div>
 </main>
+<div class="modal fade" id="modalAnularAbono" tabindex="-1" role="dialog" aria-labelledby="modalAnularLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalAnularLabel"><i class="fa fa-exclamation-triangle"></i> Confirmar Anulación</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="formAnularAbono" method="POST">
+                @csrf
+                <div class="modal-body text-center">
+                    <p class="h5">¿Estás seguro de que deseas anular este pago?</p>
+                    <p class="text-muted">Esta acción restaurará el monto de <strong id="montoAbonoText"></strong> al saldo pendiente del cliente y marcará el abono como anulado en la caja.</p>
+                    <div class="alert alert-warning">
+                        <i class="fa fa-info-circle"></i> Esta operación es irreversible.
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Confirmar Anulación</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @include('creditos.modals.abono_modal')
+@endsection
+@section('scripts')
+<script>
+    function confirmarAnulacion(url, monto) {
+        // 1. Actualizamos la acción del formulario con la URL del abono específico
+        $('#formAnularAbono').attr('action', url);
+        
+        // 2. Mostramos el monto en el texto del modal para mayor seguridad
+        $('#montoAbonoText').text('$' + monto);
+        
+        // 3. Abrimos el modal
+        $('#modalAnularAbono').modal('show');
+    }
+</script>
 @endsection

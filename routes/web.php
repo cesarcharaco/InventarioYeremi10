@@ -188,6 +188,7 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
         Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
         Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
+        Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
     });
 Route::get('generar_reporte', [ReportesController::class, 'store']);
 Route::get('generar_reporte', [ReportesController::class, 'store'])->name('generar_reporte');
