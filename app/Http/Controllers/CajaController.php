@@ -1,21 +1,36 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\Caja;
 use App\Models\Venta;
+use App\Models\AbonoCredito;
 use App\Models\Local;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class CajaController extends Controller
 {
-    /**
-     * Vista de apertura de caja
-     */
+    public function index(Request $request) // Añadido el $request que faltaba
+    {
+        if (Gate::denies('auditar-cajas')) {
+            return redirect()->back()->with('error', 'Acceso denegado.');
+        }
+
+        $query = Caja::with(['user', 'local']);
+        
+        if ($request->filled('fecha_desde') && $request->filled('fecha_hasta')) {
+            $desde = Carbon::parse($request->fecha_desde)->startOfDay();
+            $hasta = Carbon::parse($request->fecha_hasta)->endOfDay();
+            $query->whereBetween('fecha_apertura', [$desde, $hasta]);
+        }
+
+        $cajas = $query->orderBy('id', 'desc')->get();
+        return view('cajas.index', compact('cajas'));
+    }
+
     public function create()
     {
         if (Gate::denies('operar-caja')) {
@@ -23,143 +38,186 @@ class CajaController extends Controller
         }
 
         $user = Auth::user();
-        
-        // 1. Verificación de duplicidad
+        // Comprobar si ya tiene una caja abierta
         $cajaAbierta = Caja::where('id_user', $user->id)->where('estado', 'abierta')->first();
+
         if ($cajaAbierta) {
-            return redirect()->route('ventas.create')->with('info', 'Ya tienes una jornada activa.');
+            // USAMOS EL HELPER PROFESIONAL QUE SUMA TODO
+            $arqueo = $this->calcularTotalesCaja($cajaAbierta);
+
+            return view('cajas.close', [
+                'cajaAbierta' => $cajaAbierta,
+                'totales' => (object)$arqueo['totales'], // Lo pasamos como objeto para tu vista
+                'esperado_usd' => $arqueo['esperado_usd_efectivo'],
+                'esperado_bs'  => $arqueo['esperado_bs_efectivo']
+            ]);
         }
 
-        // 2. Lógica según el Rol
-        if ($user->hasRole('admin')) { // Usando tu constante ROLE_SUPERADMIN
+        // Selección de locales según rol
+        if ($user->role === 'admin') { 
             $locales = Local::where('estado', 'activo')->get();
         } else {
-            // Obtenemos el local desde la tabla pivote usando tu helper
-            $miLocal = $user->localActual();
-            
+            $miLocal = $user->localActual(); // Tu helper de la tabla pivote
             if (!$miLocal) {
-                return redirect()->route('home')->with('error', 'Tu usuario no tiene una sede activa asignada. Contacta al administrador.');
+                return redirect()->route('home')->with('error', 'No tienes sede asignada.');
             }
-
-            // Convertimos a colección para que la vista no rompa al usar @foreach o ->first()
             $locales = collect([$miLocal]);
         }
         
         return view('cajas.create', compact('locales'));
     }
 
-    /**
-     * Procesar la apertura
-     */
     public function store(Request $request)
     {
-        // 1. Doble validación de Seguridad
         if (Gate::denies('operar-caja')) {
-            return redirect()->back()->with('error', 'No tienes permiso para abrir cajas.');
+            return redirect()->back()->with('error', 'Permiso denegado.');
         }
 
         $user = Auth::user();
 
-        // Si es vendedor, forzamos el ID de su local activo
-        if (!$user->hasRole('admin')) {
+        if ($user->role !== 'admin') {
             $local = $user->localActual();
-            if($local) {
-                $request->merge(['id_local' => $local->id]);
-            }
+            if ($local) $request->merge(['id_local' => $local->id]);
         }
 
         $request->validate([
-            'monto_apertura_usd' => 'required|numeric|min:0',
-            'id_local' => 'required|exists:local,id'
+            'id_local' => 'required|exists:local,id',
+            'monto_apertura_usd' => 'required|numeric|min:0|max:999999',
+            'monto_apertura_bs'  => 'required|numeric|min:0|max:999999',
         ]);
 
         Caja::create([
             'id_user' => $user->id,
             'id_local' => $request->id_local,
             'monto_apertura_usd' => $request->monto_apertura_usd,
+            'monto_apertura_bs'  => $request->monto_apertura_bs,
             'fecha_apertura' => now(),
             'estado' => 'abierta'
         ]);
 
-        return redirect()->route('ventas.create')->with('success', 'Caja abierta con éxito.');
+        return redirect()->route('ventas.create')->with('success', 'Caja abierta. ¡Buenas ventas!');
     }
 
-    /**
-     * Vista de Cierre de Caja
-     */
     public function edit($id)
     {
         $caja = Caja::findOrFail($id);
-        // Seguridad: Solo el dueño o auditores
+        
         if (Auth::id() !== $caja->id_user && Gate::denies('auditar-cajas')) {
-            return redirect()->back()->with('error', 'Acceso denegado: No puedes cerrar una caja que no te pertenece.');
+            return redirect()->back()->with('error', 'No puedes gestionar esta caja.');
         }
+
         if ($caja->estado == 'cerrada') {
-            return redirect()->route('home')->with('error', 'Esta caja ya fue cerrada.');
+            return redirect()->route('cajas.index')->with('error', 'Esta caja ya está cerrada.');
         }
 
-        // CALCULAMOS EL "DEBERÍA HABER" (Basado en la tabla Ventas)
-        $totales = Venta::where('id_caja', $caja->id)
-            ->where('estado', 'completada')
-            ->select(
-                DB::raw('SUM(pago_usd_efectivo) as efectivo_usd'),
-                DB::raw('SUM(pago_bs_efectivo) as efectivo_bs'),
-                DB::raw('SUM(pago_punto_bs) as punto_bs'),
-                DB::raw('SUM(pago_pagomovil_bs) as pagomovil_bs')
-            )->first();
+        // --- CÁLCULO PROFESIONAL DE ARQUEO (Ventas + Abonos) ---
+        $arqueo = $this->calcularTotalesCaja($caja);
 
-        // El esperado en efectivo USD incluye el monto de apertura
-        $esperado_usd = ($totales->efectivo_usd ?? 0) + $caja->monto_apertura_usd;
-
-        return view('cajas.edit', compact('caja', 'totales', 'esperado_usd'));
+        return view('cajas.edit', [
+            'caja' => $caja,
+            'totales' => $arqueo['totales'],
+            'esperado_usd' => $arqueo['esperado_usd_efectivo'],
+            'esperado_bs'  => $arqueo['esperado_bs_efectivo']
+        ]);
     }
 
-    /**
-     * Procesar el Cierre
-     */
     public function update(Request $request, $id)
     {
         $caja = Caja::findOrFail($id);
-        // Seguridad: Blindaje del proceso de guardado
-        if (Auth::id() !== $caja->id_user && Gate::denies('auditar-cajas')) {
-            return redirect()->back()->with('error', 'Acceso denegado: No tienes permiso para procesar este cierre.');
-        }
+
         $request->validate([
-            'reportado_usd_efectivo' => 'required|numeric',
-            'reportado_bs_efectivo'  => 'required|numeric',
-            'reportado_punto_bs'     => 'required|numeric',
-            'reportado_pagomovil_bs' => 'required|numeric',
+            'reportado_usd_efectivo' => 'required|numeric|min:0|max:999999',
+            'reportado_bs_efectivo'  => 'required|numeric|min:0|max:999999',
+            'reportado_punto_bs'     => 'required|numeric|min:0|max:999999',
+            'reportado_biopago_bs'   => 'required|numeric|min:0|max:999999',
         ]);
 
-        // Capturamos lo que el sistema dice antes de cerrar (Snapshot de seguridad)
-        $totales = Venta::where('id_caja', $caja->id)
-            ->where('estado', 'completada')
-            ->select(
-                DB::raw('SUM(pago_usd_efectivo) as efectivo_usd'),
-                DB::raw('SUM(pago_bs_efectivo) as efectivo_bs'),
-                DB::raw('SUM(pago_punto_bs) as punto_bs'),
-                DB::raw('SUM(pago_pagomovil_bs) as pagomovil_bs')
-            )->first();
+        $arqueo = $this->calcularTotalesCaja($caja);
 
-        DB::transaction(function () use ($request, $caja, $totales) {
+        DB::transaction(function () use ($request, $caja, $arqueo) {
             $caja->update([
-                // Lo que el vendedor contó
-                'reportado_usd_efectivo' => $request->reportado_usd_efectivo,
-                'reportado_bs_efectivo'  => $request->reportado_bs_efectivo,
-                'reportado_punto_bs'     => $request->reportado_punto_bs,
-                'reportado_pagomovil_bs' => $request->reportado_pagomovil_bs,
+                // CORRECCIÓN: Nombres según tu $fillable del modelo
+                'reportado_cierre_usd_efectivo' => $request->reportado_usd_efectivo,
+                'reportado_cierre_bs_efectivo'  => $request->reportado_bs_efectivo,
+                'reportado_cierre_punto'        => $request->reportado_punto_bs,
+                // Nota: Tu modelo no tiene 'reportado_cierre_pagomovil' en el fillable, 
+                // pero si lo tienes en la tabla, deberías agregarlo al modelo.
+                
+                // Snapshot del sistema
+                'monto_cierre_usd_efectivo' => $arqueo['esperado_usd_efectivo'],
+                'monto_cierre_bs_efectivo'  => $arqueo['esperado_bs_efectivo'],
+                'monto_cierre_punto'        => $arqueo['totales']['punto_bs'],
+                'monto_cierre_pagomovil'    => $arqueo['totales']['pagomovil_bs'],
 
-                // Lo que el sistema calculó (para la posteridad)
-                'esperado_usd_efectivo' => ($totales->efectivo_usd ?? 0) + $caja->monto_apertura_usd,
-                'esperado_bs_efectivo'  => $totales->efectivo_bs ?? 0,
-                'esperado_punto_bs'     => $totales->punto_bs ?? 0,
-                'esperado_pagomovil_bs' => $totales->pagomovil_bs ?? 0,
-
-                'fecha_cierre' => Carbon::now(),
+                'fecha_cierre' => now(),
                 'estado' => 'cerrada'
             ]);
         });
 
-        return redirect()->route('home')->with('success', 'Caja cerrada y conciliada correctamente.');
+        return redirect()->route('cajas.index')->with('success', 'Caja cerrada y conciliada.');
+    }
+
+    /**
+     * Helper privado para centralizar el cálculo de arqueo
+     * Evita duplicar lógica en edit y update
+     */
+    private function calcularTotalesCaja($caja)
+    {
+        $ventas = Venta::where('id_caja', $caja->id)->where('estado', 'completada')
+            ->select(
+                DB::raw('SUM(pago_usd_efectivo) as usd_e'),
+                DB::raw('SUM(pago_bs_efectivo) as bs_e'),
+                DB::raw('SUM(pago_punto_bs) as bs_p'),
+                DB::raw('SUM(pago_biopago_bs) as bs_bio'),
+                DB::raw('SUM(pago_pagomovil_bs) as bs_pm'),
+                DB::raw('SUM(pago_transferencia_bs) as bs_tr')
+            )->first();
+
+        $abonos = AbonoCredito::where('id_caja', $caja->id)
+            ->select(
+                DB::raw('SUM(pago_usd_efectivo) as usd_e'),
+                DB::raw('SUM(pago_bs_efectivo) as bs_e'),
+                DB::raw('SUM(pago_punto_bs) as bs_p'),
+                DB::raw('SUM(pago_pagomovil_bs) as bs_pm')
+            )->first();
+
+        $totales = [
+            'efectivo_usd' => ($ventas->usd_e ?? 0) + ($abonos->usd_e ?? 0),
+            'efectivo_bs'  => ($ventas->bs_e ?? 0) + ($abonos->bs_e ?? 0),
+            'punto_bs'     => ($ventas->bs_p ?? 0) + ($ventas->bs_bio ?? 0) + ($abonos->bs_p ?? 0),
+            'pagomovil_bs' => ($ventas->bs_pm ?? 0) + ($ventas->bs_tr ?? 0) + ($abonos->bs_pm ?? 0),
+        ];
+
+        return [
+            'totales' => $totales,
+            'esperado_usd_efectivo' => $totales['efectivo_usd'] + $caja->monto_apertura_usd,
+            'esperado_bs_efectivo'  => $totales['efectivo_bs'] + $caja->monto_apertura_bs
+        ];
+    }
+
+    public function anular($id)
+    {
+        if (Gate::denies('auditar-cajas')) {
+            return response()->json(['success' => false, 'message' => 'No autorizado'], 403);
+        }
+
+        try {
+            $caja = Caja::findOrFail($id);
+            
+            if ($caja->estado === 'anulada') {
+                return response()->json(['success' => false, 'message' => 'La caja ya estaba anulada.']);
+            }
+
+            $caja->update(['estado' => 'anulada']);
+
+            // Respondemos al AJAX
+            return response()->json([
+                'success' => true, 
+                'message' => 'La jornada ha sido anulada correctamente.'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error al anular: ' . $e->getMessage()], 500);
+        }
     }
 }

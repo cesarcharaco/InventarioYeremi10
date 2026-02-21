@@ -18,8 +18,7 @@ return new class extends Migration
             $table->foreignId('id_caja')->constrained('cajas'); // <--- CRÍTICO: Entra a la jornada actual
             
             $table->decimal('monto_pagado_usd', 12, 2);
-            $table->decimal('tasa_pago_dia', 12, 2); // Tasa al momento de pagar
-            
+                    
             // Desglose de cómo pagó el cliente (Efectivo, Bs, Pago Móvil, etc)
             $table->decimal('pago_usd_efectivo', 12, 2)->default(0);
             $table->decimal('pago_bs_efectivo', 12, 2)->default(0);

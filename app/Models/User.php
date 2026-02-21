@@ -45,11 +45,17 @@ class User extends Authenticatable
 
     public function localActual()
     {
-        return $this->local()->wherePivot('status', 'Activo')->first();
+        return $this->local()->wherePivot('status', 'activo')->first();
     }
 
     public function esAdmin(): bool
     {
-        return $this->role === self::ROLE_SUPERADMIN;
+        //return $this->role === self::ROLE_SUPERADMIN;
+        return $this->role === 'admin';
+    }
+
+    public function abonosRecibidos(): HasMany
+    {
+        return $this->hasMany(AbonoCredito::class, 'id_user');
     }
 }

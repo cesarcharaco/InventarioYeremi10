@@ -16,15 +16,12 @@ class Venta extends Model
         'id_user',
         'id_local',
         'id_caja',
-        'total_usd',
-        'tasa_dia',
         'pago_usd_efectivo',
         'pago_bs_efectivo',
-        'pago_punto_bs',
-        'pago_pagomovil_bs',
+        'pago_punto_bs',      // Incluye: Puntos y Biopagos
+        'pago_pagomovil_bs',  // Incluye: Pago móvil y Transferencias
         'monto_credito_usd',
-        'ref_punto',
-        'ref_pagomovil',
+        'total_usd',
         'estado'
     ];
 
@@ -68,5 +65,10 @@ class Venta extends Model
     public function caja(): BelongsTo
     {
         return $this->belongsTo(Caja::class, 'id_caja');
+    }
+
+    public function credito()
+    {
+        return $this->hasOne(Credito::class, 'id_venta');
     }
 }

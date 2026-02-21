@@ -4,7 +4,6 @@
 
 @section('content')
 <main class="app-content">
-  {{-- Verificación de permiso --}}
   @cannot('operar-caja')
     <div class="tile text-center">
         <h1 class="text-danger"><i class="fa fa-lock"></i> Acceso Restringido</h1>
@@ -21,7 +20,6 @@
         <div class="basic-tb-hd text-center">            
             @include('layouts.partials.flash-messages')
             
-            {{-- Errores de validación --}}
             @if ($errors->any())
                 <div class="alert alert-danger">
                     <ul style="margin-bottom: 0;">
@@ -47,53 +45,51 @@
               <div class="row">
                 <div class="col-md-12">                  
                   <div class="form-group">
-				    <label class="control-label font-weight-bold">Sede / Local <b style="color: red;">*</b></label>
-				    
-				    @if(auth()->user()->hasRole('admin'))
-				        {{-- ADMIN: Elige entre todos los locales --}}
-				        <select name="id_local" id="id_local" class="form-control select2 @error('id_local') is-invalid @enderror" required>
-				            @foreach($locales as $local)
-				                <option value="{{ $local->id }}" {{ (auth()->user()->localActual() && auth()->user()->localActual()->id == $local->id) ? 'selected' : '' }}>
-				                    {{ $local->nombre }}
-				                </option>
-				            @endforeach
-				        </select>
-				    @else
-				        {{-- VENDEDOR: Solo ve su local actual activo --}}
-				        @php $miLocal = $locales->first(); @endphp
-				        
-				        <input type="text" class="form-control" value="{{ $miLocal->nombre }}" readonly>
-				        {{-- Enviamos el ID del local obtenido de la tabla pivote --}}
-				        <input type="hidden" name="id_local" value="{{ $miLocal->id }}">
-				        
-				        <small class="text-primary font-italic">Sede asignada por sistema según sucursal activa.</small>
-				    @endif
+                    <label class="control-label font-weight-bold">Sede / Local <b style="color: red;">*</b></label>
+                    
+                    @if(auth()->user()->hasRole('admin'))
+                        <select name="id_local" id="id_local" class="form-control select2 @error('id_local') is-invalid @enderror" required>
+                            @foreach($locales as $local)
+                                <option value="{{ $local->id }}" {{ (auth()->user()->localActual() && auth()->user()->localActual()->id == $local->id) ? 'selected' : '' }}>
+                                    {{ $local->nombre }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @else
+                        @php $miLocal = $locales->first(); @endphp
+                        <input type="text" class="form-control" value="{{ $miLocal->nombre }}" readonly>
+                        <input type="hidden" name="id_local" value="{{ $miLocal->id }}">
+                        <small class="text-primary font-italic">Sede asignada por sistema según sucursal activa.</small>
+                    @endif
 
-				    @error('id_local')
-				        <span class="invalid-feedback d-block" role="alert"><strong>{{ $message }}</strong></span>
-				    @enderror
-				</div>
+                    @error('id_local')
+                        <span class="invalid-feedback d-block" role="alert"><strong>{{ $message }}</strong></span>
+                    @enderror
+                  </div>
 
                   <div class="form-group">
-                    <label class="control-label font-weight-bold">Monto Inicial en Caja (USD Efectivo) <b style="color: red;">*</b></label>
+                    <label class="control-label font-weight-bold">Monto Inicial (USD Efectivo) <b style="color: red;">*</b></label>
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text bg-success text-white"><b>$</b></span>
                         </div>
                         <input class="form-control form-control-lg @error('monto_apertura_usd') is-invalid @enderror" 
-                               type="number" 
-                               step="0.01" 
-                               placeholder="0.00" 
-                               name="monto_apertura_usd" 
-                               id="monto_apertura_usd" 
-                               required="required" 
-                               value="{{ old('monto_apertura_usd', '0.00') }}">
+                               type="number" step="0.01" name="monto_apertura_usd" id="monto_apertura_usd" 
+                               required value="{{ old('monto_apertura_usd', '0.00') }}">
                     </div>
-                    <small class="text-muted">Ingrese el efectivo base con el que inicia su turno.</small>
+                  </div>
 
-                    @error('monto_apertura_usd')
-                        <span class="invalid-feedback" role="alert"><strong>{{ $message }}</strong></span>
-                    @enderror
+                  <div class="form-group">
+                    <label class="control-label font-weight-bold">Monto Inicial (Bs Efectivo) <b style="color: red;">*</b></label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-info text-white"><b>Bs</b></span>
+                        </div>
+                        <input class="form-control form-control-lg @error('monto_apertura_bs') is-invalid @enderror" 
+                               type="number" step="0.01" name="monto_apertura_bs" id="monto_apertura_bs" 
+                               required value="{{ old('monto_apertura_bs', '0.00') }}">
+                    </div>
+                    <small class="text-muted">Ingrese el efectivo base (USD y Bs) con el que inicia su turno.</small>
                   </div>
                 </div>
               </div>

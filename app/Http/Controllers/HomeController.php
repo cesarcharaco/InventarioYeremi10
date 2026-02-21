@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Insumos;
 use App\Models\Local;
 use App\Models\Incidencias;
+use App\Models\AutorizacionPin;
 use Illuminate\Support\Facades\Http;
 class HomeController extends Controller
 {
@@ -82,5 +83,33 @@ class HomeController extends Controller
 
         return view('home', compact('i', 'in', 'tasa_bcv', 'tasa_binance'));
     
+    }
+    
+    public function getPinesAjax()
+    {
+        // Opcional: Seguridad extra por código
+        if (!auth()->user()->hasRole('admin')) { // Ajusta según tu sistema de roles
+            return response()->json([], 403);
+        }
+
+        $pines = AutorizacionPin::with('local')
+            ->where('estado', 'activo')
+            ->where('updated_at', '>=', now()->subMinutes(15))
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        $data = $pines->map(function($auth) {
+            return [
+                'id'           => $auth->id,
+                'local_nombre' => $auth->local->nombre,
+                'pin'          => $auth->pin,
+                'vendedor'     => $auth->vendedor,
+                'monto'        => number_format($auth->monto, 2),
+                'cliente'      => $auth->cliente,
+                'hace_cuanto'  => $auth->updated_at->diffForHumans()
+            ];
+        });
+
+        return response()->json($data);
     }
 }

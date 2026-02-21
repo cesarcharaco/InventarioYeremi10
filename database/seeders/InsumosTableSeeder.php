@@ -6,11 +6,19 @@ use Illuminate\Database\Seeder;
 use App\Models\Insumos;
 use App\Models\InsumosC;
 use App\Models\Local;
-
+use Illuminate\Support\Facades\Http;
 class InsumosTableSeeder extends Seeder
 {
     public function run()
     {
+        $responseBcv = Http::withOptions(['verify' => false])->get('https://www.bcv.org.ve/');
+            if ($responseBcv->successful()) {
+                preg_match('/id="dolar".*?<strong>\s*(.*?)\s*<\/strong>/s', $responseBcv->body(), $matches);
+                $tasa_bcv = isset($matches[1]) ? (float) str_replace(',', '.', trim($matches[1])) : 0;
+            }else{
+                $tasa_bcv=0;
+            }
+
         $locales = Local::all();
         
         // Selección de 50 productos extraídos de tus hojas de Excel
@@ -68,7 +76,7 @@ class InsumosTableSeeder extends Seeder
                 // Precios de venta se calculan en el controlador al crear, 
                 // pero para el seeder pondremos un valor base estimado:
                 'precio_venta_usd'  => $data['costo'] * 1.30, 
-                'precio_venta_bs'   => $data['costo'] * 1.30 * 36, // Asumiendo tasa 36
+                'precio_venta_bs'   => $data['costo'] * 1.30 * $tasa_bcv, // Asumiendo tasa 36
                 'precio_venta_usdt' => $data['costo'] * 1.30,
             ]);
 

@@ -32,6 +32,20 @@
         </div>
         
         <div class="tile-body">
+          <form action="{{ route('ventas.index') }}" method="GET" class="row mb-4">
+              <div class="col-md-4">
+                  <label>Desde:</label>
+                  <input type="date" name="fecha_desde" class="form-control" value="{{ request('fecha_desde') }}">
+              </div>
+              <div class="col-md-4">
+                  <label>Hasta:</label>
+                  <input type="date" name="fecha_hasta" class="form-control" value="{{ request('fecha_hasta') }}">
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                  <button type="submit" class="btn btn-primary mr-2"><i class="fa fa-filter"></i> Filtrar</button>
+                  <a href="{{ route('ventas.index') }}" class="btn btn-secondary"><i class="fa fa-eraser"></i> Limpiar</a>
+              </div>
+          </form>
           <div class="table-responsive">
             <table class="table table-hover table-bordered" id="tabla-ventas">
               <thead>

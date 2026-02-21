@@ -20,6 +20,7 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\CreditoController;
 use App\Http\Controllers\CajaController;
 use App\Http\Controllers\VentaController;
+use App\Models\AutorizacionPin;
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -39,6 +40,8 @@ Auth::routes();
 // Forzar el nombre si algo lo está pisando
 //Route::get('login', [App\Http\Controllers\Auth\LoginController::class, 'showLoginForm'])->name('login');
 Route::middleware(['auth'])->group(function () {
+   
+    Route::get('/pines-activos-ajax', [HomeController::class, 'getPinesAjax'])->name('admin.pines_activos');
     // Rutas de Usuarios
 // Rutas de Perfil Personal
     Route::get('/perfil', [PerfilController::class, 'edit'])->name('perfil.edit');
@@ -139,36 +142,37 @@ Route::resource('local', LocalController::class);
 Route::resource('categorias', CategoriaController::class);
 Route::resource('modelos-venta', ModeloVentaController::class);
 // Ruta extra que necesitaremos para el cálculo "instantáneo" más adelante
-Route::get('api/modelo-datos/{id}', [App\Http\Controllers\ModeloVentaController::class, 'getDatos']);
+Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
 
 // --- MÓDULO DE CLIENTES ---
-    // Incluye: index, create, store, show, edit, update, destroy
-    Route::resource('clientes', ClienteController::class);
+    Route::post('/clientes-ajax', [ClienteController::class, 'storeAjax'])->name('clientes.store_ajax');
     
     // Ruta adicional para el registro rápido desde el modal de ventas (AJAX)
     Route::post('clientes/store-rapido', [ClienteController::class, 'storeRapido'])->name('clientes.storeRapido');
 
+    // Incluye: index, create, store, show, edit, update, destroy
+    Route::resource('clientes', ClienteController::class);
     // ==========================================
     // GESTIÓN DE CAJA (Apertura y Cierre)
     // ==========================================
-    // No están en el grupo de 'caja.abierta' porque el usuario 
-    // debe poder entrar aquí precisamente para abrirla.
     Route::resource('cajas', CajaController::class)->only(['create', 'store', 'edit', 'update']);
-    Route::get('cajas/historial', [CajaController::class, 'index'])->name('cajas.index'); // Para auditoría
-
+    Route::get('cajas/historial', [CajaController::class, 'index'])->name('cajas.index'); 
+    
+    // ESTA RUTA VA AQUÍ AFUERA (Para que el admin siempre pueda anular)
+    // Cambiada a POST para el AJAX del SweetAlert
+    Route::post('cajas/anular/{id}', [CajaController::class, 'anular'])
+        ->name('cajas.anular')
+        ->middleware('can:auditar-cajas'); 
 
     // ==========================================
-    // MÓDULO DE VENTAS (Protegido por Caja)
+    // MÓDULO DE VENTAS (Protegido por Caja Abierta)
     // ==========================================
     Route::middleware(['caja.abierta'])->group(function () {
-        
-        Route::resource('ventas', VentaController::class);
-        
-        // Ruta para imprimir factura (útil para el post-venta)
         Route::get('ventas/{id}/ticket', [VentaController::class, 'imprimirTicket'])->name('ventas.ticket');
-        
-        // Ruta AJAX para obtener el precio actual de un insumo al vender
         Route::get('api/insumos/{id}/precio', [VentaController::class, 'getPrecioInsumo']);
+        Route::post('/ventas/solicitar-pin', [VentaController::class, 'solicitarPin'])->name('ventas.solicitar_pin');
+        Route::post('/ventas/verificar-pin', [VentaController::class, 'verificarPin'])->name('ventas.verificar_pin');
+        Route::resource('ventas', VentaController::class);
     });
     // --- MÓDULO DE CRÉDITOS ---
     // Incluye: index (lista de deudores), show (detalle de deuda), etc.

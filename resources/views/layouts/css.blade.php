@@ -43,4 +43,5 @@
     input[type=number] {
         -moz-appearance: number-input !important;
     }
+    
 </style>

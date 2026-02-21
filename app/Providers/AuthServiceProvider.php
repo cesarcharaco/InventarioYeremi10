@@ -101,11 +101,6 @@ class AuthServiceProvider extends ServiceProvider
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
         });
 
-        // Solo el SuperAdmin puede anular registros del historial
-        Gate::define('anular-historial', function ($user) {
-            return $user->role === User::ROLE_SUPERADMIN;
-        });
-
         // Crear nuevas tiendas o depositos
         Gate::define('gestionar-locales', function ($user) {
             return $user->role === User::ROLE_SUPERADMIN;
@@ -190,11 +185,9 @@ class AuthServiceProvider extends ServiceProvider
 
         // 1. Quién puede abrir y operar una caja (Día a día)
         Gate::define('operar-caja', function (User $user) {
-            return in_array($user->role, [
-                User::ROLE_VENDEDOR, 
-                User::ROLE_ENCARGADO, 
-                User::ROLE_SUPERADMIN
-            ]);
+            // Forzamos minúsculas para comparar
+            $role = strtolower($user->role);
+            return in_array($role, ['vendedor', 'encargado', 'admin']);
         });
 
         // 2. Quién puede ver reportes de cajas de otros (Auditoría)
@@ -210,5 +203,53 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('reabrir-caja', function (User $user) {
             return $user->role === User::ROLE_SUPERADMIN;
         });
+
+        Gate::define('ver-historial-ventas', function (User $user) {
+            $role = strtolower($user->role);
+            return in_array($role, ['vendedor', 'encargado', 'admin']);
+        });
+
+        // Registrar pagos de deudas (abonos a crédito)
+        Gate::define('gestionar-abonos', function (User $user) {
+            $role = strtolower($user->role);
+            return in_array($role, ['vendedor', 'encargado', 'admin']);
+        });
+
+        Gate::define('ver-ganancia-detalle', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+        });
+
+        Gate::define('ver-autorizaciones', function ($user) {
+            // Ajusta esto según tu lógica (ej: si es rol 'admin' o un ID específico)
+            return $user->role === 'admin'; 
+        });
+
+    // --- MÓDULO DE CRÉDITOS ---
+
+    // 1. Quién puede ver la lista de deudores y entrar al detalle
+    Gate::define('ver-creditos', function (User $user) {
+        $role = strtolower($user->role);
+        return in_array($role, ['admin', 'encargado', 'vendedor']);
+    });
+
+    // 2. Quién puede registrar un abono (cobrar)
+    Gate::define('registrar-abono', function (User $user) {
+        $role = strtolower($user->role);
+        // Permitimos a los tres roles operativos
+        return in_array($role, ['admin', 'encargado', 'vendedor']);
+    });
+
+    // 3. Revalorizar deuda (Ajustar por inflación/tasa de cambio)
+    // Acción sensible: Solo Admin y Encargado
+    Gate::define('revalorizar-credito', function (User $user) {
+        $role = strtolower($user->role);
+        return in_array($role, ['admin', 'encargado']);
+    });
+
+    // 4. Eliminar o anular un abono mal cargado
+    // Acción crítica: Solo Admin (Dueño)
+    Gate::define('anular-abono', function (User $user) {
+        return strtolower($user->role) === 'admin';
+    });
     }
 }

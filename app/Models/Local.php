@@ -46,4 +46,10 @@ class Local extends Model
     {
         return $this->hasMany(Incidencias::class, 'id_local');
     }
+
+    public function autorizacionPin()
+    {
+        // Usamos hasOne porque definimos que es un solo registro por local (Opción B)
+        return $this->hasOne(AutorizacionPin::class, 'id_local');
+    }
 }

@@ -6,7 +6,7 @@ use App\Models\Cliente;
 use App\Models\Local;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-
+use Illuminate\Support\Facades\DB;
 class ClienteController extends Controller
 {
     /**
@@ -142,4 +142,82 @@ class ClienteController extends Controller
         return redirect()->route('clientes.index')
             ->with('info', 'Cliente eliminado del sistema.');
     }
+
+    /*public function storeAjax(Request $request) {
+        try {
+            $request->validate([
+                'identificacion' => 'required|unique:clientes,identificacion',
+                'nombre'         => 'required|string|max:255',
+                'id_local'       => 'required|exists:local,id' // Validación del local
+            ]);
+
+            $cliente = Cliente::create([
+                'identificacion' => $request->identificacion,
+                'nombre'         => $request->nombre,
+                'telefono'       => $request->telefono,
+                'limite_credito' => $request->limite_credito ?? 0,
+                'id_local'       => $request->id_local, 
+                'estado'         => 1
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'cliente' => $cliente
+            ],200);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e.getMessage()], 422);
+        }
+    }*/
+
+    public function storeAjax(Request $request)
+{
+    
+
+    $validator = \Validator::make($request->all(), [
+        'identificacion' => 'required|unique:clientes,identificacion',
+        'nombre'         => 'required|string|max:255',
+        'id_local'       => 'required|exists:local,id',
+    ]);
+
+    if ($validator->fails()) {
+        
+
+        return response()->json([
+            'success' => false,
+            'message' => 'El cliente ya existe o los datos son inválidos.',
+            'errors'  => $validator->errors(),
+        ], 422);
+    }
+
+    
+
+    try {
+        $cliente = DB::transaction(function () use ($request) {
+         
+
+            return Cliente::create([
+                'identificacion' => trim($request->identificacion),
+                'nombre'         => trim($request->nombre),
+                'telefono'       => $request->telefono,
+                'limite_credito' => $request->limite_credito ?? 0,
+                'id_local'       => $request->id_local,
+                'activo'         => true,
+            ]);
+        });
+
+        return response()->json([
+            'success' => true,
+            'cliente' => $cliente,
+        ], 200);
+
+    } catch (\Exception $e) {
+        
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al guardar: ' . $e->getMessage(),
+        ], 500);
+    }
+}
+
 }

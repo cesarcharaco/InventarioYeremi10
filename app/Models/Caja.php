@@ -16,11 +16,15 @@ class Caja extends Model
         'id_user',
         'id_local',
         'monto_apertura_usd',
+        'monto_apertura_bs',
         'fecha_apertura',
         'monto_cierre_usd_efectivo',
         'monto_cierre_bs_efectivo',
         'monto_cierre_punto',
         'monto_cierre_pagomovil',
+        'reportado_cierre_usd_efectivo',
+        'reportado_cierre_bs_efectivo',
+        'reportado_cierre_punto',
         'fecha_cierre',
         'estado'
     ];
@@ -65,4 +69,5 @@ class Caja extends Model
     {
         return $this->hasMany(AbonoCredito::class, 'id_caja');
     }
+
 }

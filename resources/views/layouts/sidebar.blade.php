@@ -104,41 +104,72 @@
                         </li>
                         <li class="nav-item">
                             <a href="{{ route('clientes.create') }}" class="nav-link {{ Request::is('clientes/create') ? 'active' : '' }}">
-                                <i class="fas fa-user-plus nav-icon text-success"></i>
+                                <i class="fas fa-plus-circle nav-icon text-success"></i>
                                 <p>Nuevo Cliente</p>
                             </a>
                         </li>
                     </ul>
                 </li>
                 @endcan
-                
+                {{-- MÓDULO CRÉDITOS: Visible para Admin, Encargado y Vendedor --}}
+                @can('ver-creditos')
+                <li class="nav-item has-treeview {{ Request::is('creditos*') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link {{ Request::is('creditos*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-university text-success"></i>
+                        <p>
+                            Cuentas por Cobrar
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('creditos.index') }}" class="nav-link {{ Request::is('creditos') ? 'active' : '' }}">
+                                <i class="fas fa-hand-holding-usd nav-icon"></i>
+                                <p>Deudores y Abonos</p>
+                            </a>
+                        </li>
+                        {{-- Aquí podrías agregar reportes de cobranza en el futuro --}}
+                    </ul>
+                </li>
+                @endcan
                 <li class="nav-header">OPERACIONES DE VENTA</li>
 
-                {{-- Solo quienes pueden operar la caja ven este menú --}}
+                {{-- Caja operativa: Abrir/Cerrar mi propio turno --}}
                 @can('operar-caja')
-                    <li class="nav-item">
-                        <a href="{{ route('cajas.create') }}" class="nav-link {{ request()->is('cajas*') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-cash-register text-info"></i>
-                            <p>Caja / Jornada</p>
-                        </a>
-                    </li>
+                <li class="nav-item">
+                    <a href="{{ route('cajas.create') }}" class="nav-link {{ request()->is('cajas*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-cash-register text-info"></i>
+                        <p>Mi Jornada (Abrir/Cerrar)</p>
+                    </a>
+                </li>
 
-                    <li class="nav-item">
-                        <a href="{{ route('ventas.create') }}" class="nav-link {{ request()->is('ventas/create') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-shopping-cart text-success"></i>
-                            <p>Realizar Venta</p>
-                        </a>
-                    </li>
+                <li class="nav-item">
+                    <a href="{{ route('ventas.create') }}" class="nav-link {{ request()->is('ventas/create') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-shopping-cart text-success"></i>
+                        <p>Realizar Venta</p>
+                    </a>
+                </li>
                 @endcan
 
-                {{-- Solo Admin o Encargados ven el historial total o auditan cajas --}}
+                {{-- Historial Operativo: ¿Qué se vendió? --}}
+                @can('ver-historial-ventas')
+                <li class="nav-item">
+                    <a href="{{ route('ventas.index') }}" class="nav-link {{ request()->is('ventas') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-list text-white"></i>
+                        <p>Historial de Ventas</p>
+                    </a>
+                </li>
+                @endcan
+
+                {{-- SECCIÓN DE AUDITORÍA: ¿Cuanto dinero entró realmente? --}}
                 @can('auditar-cajas')
-                    <li class="nav-item">
-                        <a href="{{ route('ventas.index') }}" class="nav-link {{ request()->is('ventas') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-history text-warning"></i>
-                            <p>Historial de Ventas</p>
-                        </a>
-                    </li>
+                <li class="nav-header">CONTABILIDAD Y CIERRES</li>
+                <li class="nav-item">
+                    <a href="{{ route('cajas.index') }}" class="nav-link {{ request()->is('cajas/historial*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-vault text-warning"></i>
+                        <p>Auditoría de Cajas</p>
+                    </a>
+                </li>
                 @endcan
                 {{-- REPORTES Y GRÁFICAS: Exclusivo SuperAdmin --}}
                 @if(auth()->user()->esAdmin())
