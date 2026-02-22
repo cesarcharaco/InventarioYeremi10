@@ -170,9 +170,7 @@ class CajaController extends Controller
                 DB::raw('SUM(pago_usd_efectivo) as usd_e'),
                 DB::raw('SUM(pago_bs_efectivo) as bs_e'),
                 DB::raw('SUM(pago_punto_bs) as bs_p'),
-                DB::raw('SUM(pago_biopago_bs) as bs_bio'),
-                DB::raw('SUM(pago_pagomovil_bs) as bs_pm'),
-                DB::raw('SUM(pago_transferencia_bs) as bs_tr')
+                DB::raw('SUM(pago_pagomovil_bs) as bs_pm')
             )->first();
 
         // 2. Sumamos los ABONOS de créditos recibidos con esta caja abierta

@@ -43,5 +43,12 @@
     input[type=number] {
         -moz-appearance: number-input !important;
     }
-    
+    @media (max-width: 768px) {
+        .modal-dialog {
+            margin: 0.5rem;
+        }
+        .h5 {
+            font-size: 1.1rem;
+        }
+    }
 </style>
