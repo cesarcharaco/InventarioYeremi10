@@ -63,15 +63,18 @@
                                 <p>Nuevo Proveedor</p>
                             </a>
                         </li>
-                        {{-- Futuro link para Carga de Inventario / Ordenes de Entrega --}}
-                        {{-- 
                         <li class="nav-item">
-                            <a href="#" class="nav-link">
+                            <a href="{{ route('entradas.index') }}" class="nav-link {{ Request::is('entradas') ? 'active' : '' }}">
                                 <i class="fas fa-file-import nav-icon"></i>
-                                <p>Entradas Almacén</p>
+                                <p>Historial de Entradas</p>
                             </a>
-                        </li> 
-                        --}}
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('entradas.create') }}" class="nav-link {{ Request::is('entradas/crear') ? 'active' : '' }}">
+                                <i class="fas fa-cart-plus nav-icon text-success"></i>
+                                <p>Nueva Entrada (Carga)</p>
+                            </a>
+                        </li>
                     </ul>
                 </li>
                 @endcan

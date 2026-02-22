@@ -256,5 +256,10 @@ class AuthServiceProvider extends ServiceProvider
     Gate::define('gestionar-proveedores', function (User $user) {
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
     });
+
+    // Registro de Compras / Entradas de Almacén
+    Gate::define('gestionar-entradas', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
+    });
     }
 }

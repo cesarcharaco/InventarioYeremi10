@@ -22,6 +22,7 @@ use App\Http\Controllers\CajaController;
 use App\Http\Controllers\VentaController;
 use App\Models\AutorizacionPin;
 use App\Http\Controllers\ProveedorController;
+use App\Http\Controllers\EntradaController;
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -200,6 +201,14 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::get('/{id}/editar', [ProveedorController::class, 'edit'])->name('proveedores.edit');
         Route::post('/{id}/actualizar', [ProveedorController::class, 'update'])->name('proveedores.update');
         Route::delete('/{id}/eliminar', [ProveedorController::class, 'destroy'])->name('proveedores.destroy');
+    });
+    //ENTRADAS
+    Route::prefix('entradas')->group(function () {
+        Route::get('/', [EntradaController::class, 'index'])->name('entradas.index');
+        Route::get('/crear', [EntradaController::class, 'create'])->name('entradas.create');
+        Route::post('/guardar', [EntradaController::class, 'store'])->name('entradas.store');
+        Route::get('/{id}', [EntradaController::class, 'show'])->name('entradas.show');
+        Route::delete('/{id}/anular', [EntradaController::class, 'destroy'])->name('entradas.anular');
     });
 Route::get('generar_reporte', [ReportesController::class, 'store']);
 Route::get('generar_reporte', [ReportesController::class, 'store'])->name('generar_reporte');
