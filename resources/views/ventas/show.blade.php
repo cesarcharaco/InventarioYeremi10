@@ -4,7 +4,7 @@
 @section('css')
 <style>
     @media (max-width: 768px) {
-        /* Evita que el contenedor principal genere scroll horizontal */
+        /* Evita que el contenedor principal genere scroll horizontal, intentando ajustar la vista*/
         .content-wrapper, .app-content {
             padding: 10px !important;
             overflow-x: hidden !important;
