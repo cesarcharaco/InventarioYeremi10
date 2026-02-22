@@ -21,6 +21,7 @@ use App\Http\Controllers\CreditoController;
 use App\Http\Controllers\CajaController;
 use App\Http\Controllers\VentaController;
 use App\Models\AutorizacionPin;
+use App\Http\Controllers\ProveedorController;
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -189,6 +190,16 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
         Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
         Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
+    });
+
+    // MÓDULO DE PROVEEDORES
+    Route::prefix('proveedores')->group(function () {
+        Route::get('/', [ProveedorController::class, 'index'])->name('proveedores.index');
+        Route::get('/crear', [ProveedorController::class, 'create'])->name('proveedores.create');
+        Route::post('/guardar', [ProveedorController::class, 'store'])->name('proveedores.store');
+        Route::get('/{id}/editar', [ProveedorController::class, 'edit'])->name('proveedores.edit');
+        Route::post('/{id}/actualizar', [ProveedorController::class, 'update'])->name('proveedores.update');
+        Route::delete('/{id}/eliminar', [ProveedorController::class, 'destroy'])->name('proveedores.destroy');
     });
 Route::get('generar_reporte', [ReportesController::class, 'store']);
 Route::get('generar_reporte', [ReportesController::class, 'store'])->name('generar_reporte');

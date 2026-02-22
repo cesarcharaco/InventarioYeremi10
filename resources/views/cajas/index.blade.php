@@ -3,6 +3,7 @@
 @section('title') Auditoría de Cajas @endsection
 
 @section('content')
+@include('layouts.partials.flash-messages')
 <main class="app-content">
   <div class="app-title">
     <div>

@@ -40,7 +40,41 @@
                         @endif
                     </ul>
                 </li>
-
+                {{-- MÓDULO ABASTECIMIENTO: Solo Admin y Almacenista --}}
+                @can('gestionar-proveedores')
+                <li class="nav-item has-treeview {{ Request::is('proveedores*') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link {{ Request::is('proveedores*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-truck-loading text-info"></i>
+                        <p>
+                            Abastecimiento
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('proveedores.index') }}" class="nav-link {{ Request::is('proveedores') ? 'active' : '' }}">
+                                <i class="fas fa-address-card nav-icon"></i>
+                                <p>Proveedores</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('proveedores.create') }}" class="nav-link {{ Request::is('proveedores/crear') ? 'active' : '' }}">
+                                <i class="fas fa-user-plus nav-icon"></i>
+                                <p>Nuevo Proveedor</p>
+                            </a>
+                        </li>
+                        {{-- Futuro link para Carga de Inventario / Ordenes de Entrega --}}
+                        {{-- 
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <i class="fas fa-file-import nav-icon"></i>
+                                <p>Entradas Almacén</p>
+                            </a>
+                        </li> 
+                        --}}
+                    </ul>
+                </li>
+                @endcan
                 {{-- INCIDENCIAS: Todos registran, pero solo Admin ve el historial completo --}}
                 <li class="nav-item has-treeview {{ Request::is('incidencias*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('incidencias*') ? 'active' : '' }}">

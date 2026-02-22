@@ -251,5 +251,10 @@ class AuthServiceProvider extends ServiceProvider
     Gate::define('anular-abono', function (User $user) {
         return strtolower($user->role) === 'admin';
     });
+
+    // Gestión de Proveedores: Solo Admin y Almacenista
+    Gate::define('gestionar-proveedores', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
+    });
     }
 }

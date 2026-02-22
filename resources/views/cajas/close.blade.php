@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+@include('layouts.partials.flash-messages')
 <main class="app-content">
     <div class="row justify-content-center">
         <div class="col-md-10">

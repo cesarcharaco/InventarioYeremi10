@@ -3,6 +3,7 @@
 @section('title') Registro de Categoría @endsection
 
 @section('content')
+@include('layouts.partials.flash-messages')
 <main class="app-content">
   {{-- Verificación de permiso para crear --}}
   @cannot('crear-configuracion')

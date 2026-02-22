@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title') Categorías @endsection
 @section('content')
+@include('layouts.partials.flash-messages')
 <main class="app-content">
   <div class="app-title">
     <div>

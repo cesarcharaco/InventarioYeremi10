@@ -3,6 +3,7 @@
 @section('title') Editar Categoría @endsection
 
 @section('content')
+
 <main class="app-content">
   {{-- Verificación de permiso para editar --}}
   @cannot('editar-configuracion')

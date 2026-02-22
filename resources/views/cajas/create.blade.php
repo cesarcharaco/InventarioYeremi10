@@ -3,6 +3,7 @@
 @section('title') Apertura de Caja @endsection
 
 @section('content')
+
 <main class="app-content">
   @cannot('operar-caja')
     <div class="tile text-center">
