@@ -1,45 +1,61 @@
 @extends('layouts.app')
 
 @section('title') Detalle de Venta #{{ $venta->codigo_factura }} @endsection
+
 @section('css')
 <style>
+    /* Estilos generales para asegurar que nada se desborde */
+    .table-responsive {
+        border: none !important;
+    }
+
     @media (max-width: 768px) {
-        /* Evita que el contenedor principal genere scroll horizontal, intentando ajustar la vista*/
         .content-wrapper, .app-content {
-            padding: 10px !important;
+            padding: 5px !important;
             overflow-x: hidden !important;
         }
 
-        /* Ajusta el tamaño de la fuente de la factura */
         .invoice {
             margin: 0 !important;
-            padding: 15px !important;
+            padding: 10px !important;
             width: 100% !important;
         }
 
-        /* Fuerza a que las palabras largas se rompan y no estiren la tabla */
-        table {
-            table-layout: fixed;
-            width: 100% !important;
+        /* Forzamos a que los números no se rompan en varias líneas */
+        .text-right, .font-weight-bold {
+            white-space: nowrap !important;
         }
 
-        td, th {
-            word-wrap: break-word;
-            white-space: normal !important;
+        /* Reducción de fuentes para ganar espacio en móvil */
+        .page-header {
+            font-size: 1.1rem !important;
         }
 
-        /* Ajuste específico para las columnas de la tabla de productos */
+        /* Ocultar columnas no vitales en móvil mediante CSS como respaldo */
+        .table thead th:nth-child(3), 
+        .table tbody td:nth-child(3),
+        .table thead th:nth-child(4),
+        .table tbody td:nth-child(4) {
+            display: none !important;
+        }
+
+        /* Ajuste de anchos para que el total se vea claro */
         .table thead th:nth-child(1) { width: 15%; } /* Cantidad */
-        .table thead th:nth-child(2) { width: 45%; } /* Producto */
-        .table thead th:nth-child(3) { display: none; } /* Ocultar Descripción en móvil */
-        .table thead th:nth-child(4) { width: 20%; } /* Precio */
-        .table thead th:nth-child(5) { width: 20%; } /* Subtotal */
+        .table thead th:nth-child(2) { width: 50%; } /* Producto */
+        .table thead th:nth-child(5) { width: 35%; } /* Subtotal */
+
+        .invoice-info .col-12 {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
     }
 </style>
 @endsection
+
 @section('content')
 <main class="app-content">
-    <div class="app-title">
+    <div class="app-title d-none d-md-flex"> {{-- Oculto en móvil para ahorrar espacio --}}
         <div>
             <h1><i class="fa fa-file-text-o"></i> Detalle de Factura</h1>
             <p>Comprobante de transacción interna</p>
@@ -55,21 +71,23 @@
         <div class="col-md-12">
             <div class="tile">
                 <section class="invoice">
+                    {{-- Encabezado --}}
                     <div class="row mb-4">
-                        <div class="col-6">
-                            <h2 class="page-header"><i class="fa fa-motorcycle"></i> YERMOTOS REPUESTOS</h2>
+                        <div class="col-8 col-md-6">
+                            <h2 class="page-header"><i class="fa fa-motorcycle"></i> YERMOTOS</h2>
                         </div>
-                        <div class="col-6">
-                            <h5 class="text-right">Fecha: {{ $venta->created_at->format('d/m/Y') }}</h5>
+                        <div class="col-4 col-md-6">
+                            <h5 class="text-right" style="font-size: 0.9rem;">{{ $venta->created_at->format('d/m/Y') }}</h5>
                         </div>
                     </div>
                     
+                    {{-- Información de Factura --}}
                     <div class="row invoice-info">
-                        <div class="col-12 col-md-4 mb-3">De:
+                        <div class="col-12 col-md-4 mb-3">
+                            <strong>De:</strong>
                             <address>
                                 <strong>Sede: {{ $venta->local->nombre }}</strong><br>
                                 Vendedor: {{ $venta->usuario->name }}<br>
-                                Estado: 
                                 @if($venta->estado == 'completada')
                                     <span class="badge badge-success">COMPLETADA</span>
                                 @else
@@ -77,7 +95,8 @@
                                 @endif
                             </address>
                         </div>
-                        <div class="col-12 col-md-4 mb-3">Para:
+                        <div class="col-12 col-md-4 mb-3">
+                            <strong>Para:</strong>
                             <address>
                                 <strong>{{ $venta->cliente->nombre }}</strong><br>
                                 ID: {{ $venta->cliente->identificacion }}<br>
@@ -86,22 +105,22 @@
                         </div>
                         <div class="col-12 col-md-4 mb-3">
                             <b>Factura #{{ $venta->codigo_factura }}</b><br>
-                            <br>
                             <b>Tipo:</b> {{ $venta->monto_credito_usd > 0 ? 'Crédito' : 'Contado' }}<br>
                             <b>ID Venta:</b> {{ $venta->id }}
                         </div>
                     </div>
 
+                    {{-- Tabla de Productos --}}
                     <div class="row">
-                        <div class="col-md-12 p-0">
+                        <div class="col-12 p-0">
                             <div class="table-responsive">
                                 <table class="table table-striped table-sm">
                                     <thead>
                                         <tr>
-                                            <th>Cantidad</th>
+                                            <th>Cant.</th>
                                             <th>Producto</th>
-                                            <th>Descripción</th>
-                                            <th class="text-right">Precio Unit. ($)</th>
+                                            <th class="d-none d-md-table-cell">Descripción</th>
+                                            <th class="d-none d-md-table-cell text-right">Precio ($)</th>
                                             <th class="text-right">Subtotal ($)</th>
                                         </tr>
                                     </thead>
@@ -110,9 +129,9 @@
                                         <tr>
                                             <td>{{ $detalle->cantidad }}</td>
                                             <td>{{ $detalle->insumo->producto }}</td>
-                                            <td>{{ $detalle->insumo->descripcion }}</td>
-                                            <td class="text-right">${{ number_format($detalle->precio_unitario, 2) }}</td>
-                                            <td class="text-right">${{ number_format($detalle->cantidad * $detalle->precio_unitario, 2) }}</td>
+                                            <td class="d-none d-md-table-cell">{{ $detalle->insumo->descripcion }}</td>
+                                            <td class="d-none d-md-table-cell text-right">${{ number_format($detalle->precio_unitario, 2) }}</td>
+                                            <td class="text-right"><strong>${{ number_format($detalle->cantidad * $detalle->precio_unitario, 2) }}</strong></td>
                                         </tr>
                                         @endforeach
                                     </tbody>
@@ -121,61 +140,65 @@
                         </div>
                     </div>
 
+                    {{-- Pagos y Total --}}
                     <div class="row mt-3">
-                        {{-- DESGLOSE DE PAGOS --}}
-                        <div class="col-6 col-md-6 mb-3">
+                        <div class="col-12 col-md-6 mb-3">
                             <p class="lead font-weight-bold">Métodos de Pago:</p>
-                                <div class="table-responsive">
-                                    <table class="table table-sm border">
-                                        <tbody>
-                                            @if($venta->pago_usd_efectivo > 0)
-                                                <tr>
-                                                    <th>Efectivo USD:</th>
-                                                    <td>${{ number_format($venta->pago_usd_efectivo, 2) }}</td>
-                                                </tr>
-                                            @endif
-                                            @if($venta->pago_bs_efectivo > 0)
-                                                <tr>
-                                                    <th>Efectivo Bs:</th>
-                                                    <td>{{ number_format($venta->pago_bs_efectivo, 2) }} Bs</td>
-                                                </tr>
-                                            @endif
-                                            @if($venta->pago_punto_bs > 0)
-                                                <tr>
-                                                    <th>Punto / Biopago:</th>
-                                                    <td>{{ number_format($venta->pago_punto_bs, 2) }} Bs</td>
-                                                </tr>
-                                            @endif
-                                            @if($venta->pago_pagomovil_bs > 0)
-                                                <tr>
-                                                    <th>Pago Móvil:</th>
-                                                    <td>{{ number_format($venta->pago_pagomovil_bs, 2) }} Bs</td>
-                                                </tr>
-                                            @endif
-                                            @if($venta->monto_credito_usd > 0)
-                                                <tr class="table-warning">
-                                                    <th>Monto a Crédito:</th>
-                                                    <td><strong>${{ number_format($venta->monto_credito_usd, 2) }}</strong></td>
-                                                </tr>
-                                            @endif
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm border">
+                                    <tbody>
+                                        @if($venta->pago_usd_efectivo > 0)
+                                            <tr>
+                                                <th>Efectivo USD:</th>
+                                                <td class="text-right">${{ number_format($venta->pago_usd_efectivo, 2) }}</td>
+                                            </tr>
+                                        @endif
+                                        @if($venta->pago_bs_efectivo > 0)
+                                            <tr>
+                                                <th>Efectivo Bs:</th>
+                                                <td class="text-right">{{ number_format($venta->pago_bs_efectivo, 2) }} Bs</td>
+                                            </tr>
+                                        @endif
+                                        @if($venta->pago_punto_bs > 0)
+                                            <tr>
+                                                <th>Punto / Bio:</th>
+                                                <td class="text-right">{{ number_format($venta->pago_punto_bs, 2) }} Bs</td>
+                                            </tr>
+                                        @endif
+                                        @if($venta->pago_pagomovil_bs > 0)
+                                            <tr>
+                                                <th>Pago Móvil:</th>
+                                                <td class="text-right">{{ number_format($venta->pago_pagomovil_bs, 2) }} Bs</td>
+                                            </tr>
+                                        @endif
+                                        @if($venta->monto_credito_usd > 0)
+                                            <tr class="table-warning">
+                                                <th>Monto a Crédito:</th>
+                                                <td class="text-right"><strong>${{ number_format($venta->monto_credito_usd, 2) }}</strong></td>
+                                            </tr>
+                                        @endif
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         
-                        {{-- TOTAL FINAL --}}
                         <div class="col-12 col-md-6 text-center text-md-right">
-                            <div class="p-3 bg-light border rounded">
-                                <h4 class="text-muted">TOTAL FACTURADO</h4>
+                            <div class="p-3 bg-light border rounded shadow-sm">
+                                <h4 class="text-muted" style="font-size: 1rem;">TOTAL FACTURADO</h4>
                                 <h2 class="text-primary font-weight-bold">${{ number_format($venta->total_usd, 2) }}</h2>
                             </div>
                         </div>
                     </div>
 
+                    {{-- Botones --}}
                     <div class="row no-print mt-4">
                         <div class="col-12 text-right">
-                            <button class="btn btn-secondary" onclick="window.print();"><i class="fa fa-print"></i> Imprimir</button>
-                            <a href="{{ route('ventas.index') }}" class="btn btn-primary"><i class="fa fa-list"></i> Volver al listado</a>
+                            <button class="btn btn-secondary btn-block d-md-inline-block mb-2" style="max-width: 200px;" onclick="window.print();">
+                                <i class="fa fa-print"></i> Imprimir
+                            </button>
+                            <a href="{{ route('ventas.index') }}" class="btn btn-primary btn-block d-md-inline-block mb-2" style="max-width: 200px;">
+                                <i class="fa fa-list"></i> Volver al listado
+                            </a>
                         </div>
                     </div>
                 </section>
