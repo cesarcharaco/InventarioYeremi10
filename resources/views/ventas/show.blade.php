@@ -1,7 +1,28 @@
 @extends('layouts.app')
 
 @section('title') Detalle de Venta #{{ $venta->codigo_factura }} @endsection
-
+@section('css')
+<style>
+    @media (max-width: 767px) {
+        .invoice {
+            padding: 10px !important;
+            margin: 0 !important;
+        }
+        .page-header {
+            font-size: 1.2rem;
+        }
+        .invoice-info .col-4 {
+            flex: 0 0 100%;
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+        /* Esto evita que la tabla rompa el layout */
+        .table-responsive {
+            border: 0;
+        }
+    }
+</style>
+@endsection
 @section('content')
 <main class="app-content">
     <div class="app-title">
@@ -84,49 +105,51 @@
                         </div>
                     </div>
 
-                    <div class="row">
+                    <div class="row mt-3">
                         {{-- DESGLOSE DE PAGOS --}}
-                        <div class="col-6">
-                            <p class="lead">Métodos de Pago:</p>
-                            <table class="table table-sm">
-                                <tbody>
-                                    @if($venta->pago_usd_efectivo > 0)
-                                        <tr>
-                                            <th>Efectivo USD:</th>
-                                            <td>${{ number_format($venta->pago_usd_efectivo, 2) }}</td>
-                                        </tr>
-                                    @endif
-                                    @if($venta->pago_bs_efectivo > 0)
-                                        <tr>
-                                            <th>Efectivo Bs:</th>
-                                            <td>{{ number_format($venta->pago_bs_efectivo, 2) }} Bs</td>
-                                        </tr>
-                                    @endif
-                                    @if($venta->pago_punto_bs > 0)
-                                        <tr>
-                                            <th>Punto / Biopago:</th>
-                                            <td>{{ number_format($venta->pago_punto_bs, 2) }} Bs</td>
-                                        </tr>
-                                    @endif
-                                    @if($venta->pago_pagomovil_bs > 0)
-                                        <tr>
-                                            <th>Pago Móvil:</th>
-                                            <td>{{ number_format($venta->pago_pagomovil_bs, 2) }} Bs</td>
-                                        </tr>
-                                    @endif
-                                    @if($venta->monto_credito_usd > 0)
-                                        <tr class="table-warning">
-                                            <th>Monto a Crédito:</th>
-                                            <td><strong>${{ number_format($venta->monto_credito_usd, 2) }}</strong></td>
-                                        </tr>
-                                    @endif
-                                </tbody>
-                            </table>
+                        <div class="col-6 col-md-6 mb-3">
+                            <p class="lead font-weight-bold">Métodos de Pago:</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm border">
+                                        <tbody>
+                                            @if($venta->pago_usd_efectivo > 0)
+                                                <tr>
+                                                    <th>Efectivo USD:</th>
+                                                    <td>${{ number_format($venta->pago_usd_efectivo, 2) }}</td>
+                                                </tr>
+                                            @endif
+                                            @if($venta->pago_bs_efectivo > 0)
+                                                <tr>
+                                                    <th>Efectivo Bs:</th>
+                                                    <td>{{ number_format($venta->pago_bs_efectivo, 2) }} Bs</td>
+                                                </tr>
+                                            @endif
+                                            @if($venta->pago_punto_bs > 0)
+                                                <tr>
+                                                    <th>Punto / Biopago:</th>
+                                                    <td>{{ number_format($venta->pago_punto_bs, 2) }} Bs</td>
+                                                </tr>
+                                            @endif
+                                            @if($venta->pago_pagomovil_bs > 0)
+                                                <tr>
+                                                    <th>Pago Móvil:</th>
+                                                    <td>{{ number_format($venta->pago_pagomovil_bs, 2) }} Bs</td>
+                                                </tr>
+                                            @endif
+                                            @if($venta->monto_credito_usd > 0)
+                                                <tr class="table-warning">
+                                                    <th>Monto a Crédito:</th>
+                                                    <td><strong>${{ number_format($venta->monto_credito_usd, 2) }}</strong></td>
+                                                </tr>
+                                            @endif
+                                        </tbody>
+                                    </table>
+                                </div>
                         </div>
                         
                         {{-- TOTAL FINAL --}}
-                        <div class="col-6 text-right">
-                            <div class="p-3 bg-light">
+                        <div class="col-12 col-md-6 text-center text-md-right">
+                            <div class="p-3 bg-light border rounded">
                                 <h4 class="text-muted">TOTAL FACTURADO</h4>
                                 <h2 class="text-primary font-weight-bold">${{ number_format($venta->total_usd, 2) }}</h2>
                             </div>
