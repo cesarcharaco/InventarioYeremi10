@@ -3,23 +3,37 @@
 @section('title') Detalle de Venta #{{ $venta->codigo_factura }} @endsection
 @section('css')
 <style>
-    @media (max-width: 767px) {
-        .invoice {
+    @media (max-width: 768px) {
+        /* Evita que el contenedor principal genere scroll horizontal */
+        .content-wrapper, .app-content {
             padding: 10px !important;
+            overflow-x: hidden !important;
+        }
+
+        /* Ajusta el tamaño de la fuente de la factura */
+        .invoice {
             margin: 0 !important;
+            padding: 15px !important;
+            width: 100% !important;
         }
-        .page-header {
-            font-size: 1.2rem;
+
+        /* Fuerza a que las palabras largas se rompan y no estiren la tabla */
+        table {
+            table-layout: fixed;
+            width: 100% !important;
         }
-        .invoice-info .col-4 {
-            flex: 0 0 100%;
-            max-width: 100%;
-            margin-bottom: 20px;
+
+        td, th {
+            word-wrap: break-word;
+            white-space: normal !important;
         }
-        /* Esto evita que la tabla rompa el layout */
-        .table-responsive {
-            border: 0;
-        }
+
+        /* Ajuste específico para las columnas de la tabla de productos */
+        .table thead th:nth-child(1) { width: 15%; } /* Cantidad */
+        .table thead th:nth-child(2) { width: 45%; } /* Producto */
+        .table thead th:nth-child(3) { display: none; } /* Ocultar Descripción en móvil */
+        .table thead th:nth-child(4) { width: 20%; } /* Precio */
+        .table thead th:nth-child(5) { width: 20%; } /* Subtotal */
     }
 </style>
 @endsection
@@ -51,7 +65,7 @@
                     </div>
                     
                     <div class="row invoice-info">
-                        <div class="col-4">De:
+                        <div class="col-12 col-md-4 mb-3">De:
                             <address>
                                 <strong>Sede: {{ $venta->local->nombre }}</strong><br>
                                 Vendedor: {{ $venta->usuario->name }}<br>
@@ -63,14 +77,14 @@
                                 @endif
                             </address>
                         </div>
-                        <div class="col-4">Para:
+                        <div class="col-12 col-md-4 mb-3">Para:
                             <address>
                                 <strong>{{ $venta->cliente->nombre }}</strong><br>
                                 ID: {{ $venta->cliente->identificacion }}<br>
                                 Tel: {{ $venta->cliente->telefono ?? 'N/A' }}
                             </address>
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-md-4 mb-3">
                             <b>Factura #{{ $venta->codigo_factura }}</b><br>
                             <br>
                             <b>Tipo:</b> {{ $venta->monto_credito_usd > 0 ? 'Crédito' : 'Contado' }}<br>
@@ -79,29 +93,31 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-12 table-responsive" style="width: 100%; -webkit-overflow-scrolling: touch;">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Cantidad</th>
-                                        <th>Producto</th>
-                                        <th>Descripción</th>
-                                        <th class="text-right">Precio Unit. ($)</th>
-                                        <th class="text-right">Subtotal ($)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($venta->detalles as $detalle)
-                                    <tr>
-                                        <td>{{ $detalle->cantidad }}</td>
-                                        <td>{{ $detalle->insumo->producto }}</td>
-                                        <td>{{ $detalle->insumo->descripcion }}</td>
-                                        <td class="text-right">${{ number_format($detalle->precio_unitario, 2) }}</td>
-                                        <td class="text-right">${{ number_format($detalle->cantidad * $detalle->precio_unitario, 2) }}</td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        <div class="col-md-12 p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Cantidad</th>
+                                            <th>Producto</th>
+                                            <th>Descripción</th>
+                                            <th class="text-right">Precio Unit. ($)</th>
+                                            <th class="text-right">Subtotal ($)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($venta->detalles as $detalle)
+                                        <tr>
+                                            <td>{{ $detalle->cantidad }}</td>
+                                            <td>{{ $detalle->insumo->producto }}</td>
+                                            <td>{{ $detalle->insumo->descripcion }}</td>
+                                            <td class="text-right">${{ number_format($detalle->precio_unitario, 2) }}</td>
+                                            <td class="text-right">${{ number_format($detalle->cantidad * $detalle->precio_unitario, 2) }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
