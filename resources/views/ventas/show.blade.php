@@ -58,7 +58,7 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-12 table-responsive">
+                        <div class="col-md-12 table-responsive" style="width: 100%; -webkit-overflow-scrolling: touch;">
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
