@@ -12,24 +12,36 @@ class CheckCajaAbierta
 {
     /**
      * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // 1. Buscamos si el usuario tiene una caja abierta
-        $caja = Caja::where('id_user', Auth::id())
+        $user = Auth::user();
+        
+        // 1. Obtenemos el local actual del usuario (Admin, Encargado o Vendedor)
+        $local = $user->localActual();
+
+        if (!$local) {
+            return redirect()->route('home')
+                ->with('error', 'No tienes un local activo asignado.');
+        }
+
+        // 2. CAMBIO CLAVE: Buscamos si el LOCAL tiene una caja abierta
+        // Ya no filtramos por id_user, sino por id_local
+        $caja = Caja::where('id_local', $local->id)
                     ->where('estado', 'abierta')
                     ->first();
 
         if (!$caja) {
-            // Si no tiene caja abierta, lo mandamos a la vista de apertura con un aviso
+            // Si el local no tiene caja abierta, redirigimos
             return redirect()->route('cajas.create')
-                ->with('error', 'Debes abrir una jornada de caja para poder facturar.');
+                ->with('error', 'No hay ninguna caja abierta en este local. Debe iniciar jornada.');
         }
 
-        // Si tiene caja, guardamos el ID en la sesión para usarlo en las ventas
-        session(['id_caja_activa' => $caja->id]);
+        // 3. Guardamos los datos en la sesión para que el VentaController los use fácilmente
+        session([
+            'id_caja_activa' => $caja->id,
+            'id_local_activo' => $local->id
+        ]);
 
         return $next($request);
     }

@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Caja;
+use App\Models\User;
 use App\Models\Venta;
 use App\Models\AbonoCredito;
 use App\Models\Local;
@@ -31,41 +32,75 @@ class CajaController extends Controller
         return view('cajas.index', compact('cajas'));
     }
 
+    // ... dentro de CajaController
+
     public function create()
-    {
-        if (Gate::denies('operar-caja')) {
-            return redirect()->back()->with('error', 'Acceso denegado.');
-        }
-
-        $user = Auth::user();
-        // Comprobar si ya tiene una caja abierta
-        $cajaAbierta = Caja::where('id_user', $user->id)->where('estado', 'abierta')->first();
-
-        if ($cajaAbierta) {
-            // USAMOS EL HELPER PROFESIONAL QUE SUMA TODO
-            $arqueo = $this->calcularTotalesCaja($cajaAbierta);
-
-            return view('cajas.close', [
-                'cajaAbierta' => $cajaAbierta,
-                'totales' => (object)$arqueo['totales'], // Lo pasamos como objeto para tu vista
-                'esperado_usd' => $arqueo['esperado_usd_efectivo'],
-                'esperado_bs'  => $arqueo['esperado_bs_efectivo']
-            ]);
-        }
-
-        // Selección de locales según rol
-        if ($user->role === 'admin') { 
-            $locales = Local::where('estado', 'activo')->get();
-        } else {
-            $miLocal = $user->localActual(); // Tu helper de la tabla pivote
-            if (!$miLocal) {
-                return redirect()->route('home')->with('error', 'No tienes sede asignada.');
-            }
-            $locales = collect([$miLocal]);
-        }
-        
-        return view('cajas.create', compact('locales'));
+{
+    if (Gate::denies('operar-caja')) {
+        return redirect()->back()->with('error', 'Acceso denegado.');
     }
+
+    $user = Auth::user();
+    
+    // 1. Buscamos si ya existe una caja abierta en el local del usuario
+    // Si es admin, id_local_busqueda será null y traerá la primera que encuentre (o puedes ajustar esto si el admin debe ver todas)
+    $id_local_busqueda = ($user->role === 'admin') ? null : $user->localActual()->id;
+
+    $queryCaja = Caja::where('estado', 'abierta');
+    if ($id_local_busqueda) {
+        $queryCaja->where('id_local', $id_local_busqueda);
+    }
+    $cajaAbierta = $queryCaja->first();
+
+    // Si hay caja abierta, mandamos a la vista de cierre
+    if ($cajaAbierta) {
+        $arqueo = $this->calcularTotalesCaja($cajaAbierta);
+        return view('cajas.close', [
+            'cajaAbierta' => $cajaAbierta,
+            'totales' => (object)$arqueo['totales'],
+            'esperado_usd' => $arqueo['esperado_usd_efectivo'],
+            'esperado_bs'  => $arqueo['esperado_bs_efectivo']
+        ]);
+    }
+
+    // 2. Lógica de selección para apertura nueva
+    if ($user->role === 'admin') { 
+        // Admin: Solo locales tipo 'LOCAL' y usuarios con rol 'vendedor'
+        $locales = Local::where('estado', 'Activo')
+                        ->where('tipo', 'LOCAL') 
+                        ->get();
+        
+        $vendedores = User::where('role', 'vendedor')
+                          ->where('activo', true)
+                          ->get();
+
+    } elseif ($user->role === 'encargado') {
+        $miLocal = $user->localActual();
+        
+        // El encargado solo ve su local si es tipo 'LOCAL'
+        $locales = ($miLocal && $miLocal->tipo === 'LOCAL') ? collect([$miLocal]) : collect([]);
+        
+        // Vendedores asociados a ese local específico
+        $vendedores = User::whereHas('local', function($q) use ($miLocal) {
+            $q->where('id_local', $miLocal->id);
+        })->where('role', 'vendedor')
+          ->where('activo', true)
+          ->get();
+
+    } else {
+        // Vendedor: Solo su propio local si es tipo 'LOCAL'
+        $miLocal = $user->localActual();
+        $locales = ($miLocal && $miLocal->tipo === 'LOCAL') ? collect([$miLocal]) : collect([]);
+        $vendedores = collect([$user]);
+    }
+    
+    // Validación de seguridad: Si no hay local tipo 'LOCAL', no se puede abrir caja
+    if ($locales->isEmpty()) {
+        return redirect()->route('home')->with('error', 'Su ubicación actual no permite apertura de cajas (Área de Depósito/Administración).');
+    }
+
+    return view('cajas.create', compact('locales', 'vendedores'));
+}
 
     public function store(Request $request)
     {
@@ -75,19 +110,21 @@ class CajaController extends Controller
 
         $user = Auth::user();
 
-        if ($user->role !== 'admin') {
-            $local = $user->localActual();
-            if ($local) $request->merge(['id_local' => $local->id]);
-        }
-
+        // Validaciones ajustadas para incluir al responsable elegido
         $request->validate([
             'id_local' => 'required|exists:local,id',
-            'monto_apertura_usd' => 'required|numeric|min:0|max:999999',
-            'monto_apertura_bs'  => 'required|numeric|min:0|max:999999',
+            'id_user'  => 'required|exists:users,id', // El responsable elegido
+            'monto_apertura_usd' => 'required|numeric|min:0',
+            'monto_apertura_bs'  => 'required|numeric|min:0',
         ]);
 
+        // Verificación de seguridad: No abrir dos cajas en el mismo local
+        $existe = Caja::where('id_local', $request->id_local)->where('estado', 'abierta')->exists();
+        if($existe) return redirect()->back()->with('error', 'Ya existe una caja abierta para este local.');
+
         Caja::create([
-            'id_user' => $user->id,
+            'id_user'  => $request->id_user, // Responsable
+            'id_aperturador' => $request->id_user,   // Quién la abrió (Asegúrate de tener este campo en la tabla/modelo)
             'id_local' => $request->id_local,
             'monto_apertura_usd' => $request->monto_apertura_usd,
             'monto_apertura_bs'  => $request->monto_apertura_bs,
@@ -95,7 +132,7 @@ class CajaController extends Controller
             'estado' => 'abierta'
         ]);
 
-        return redirect()->route('ventas.create')->with('success', 'Caja abierta. ¡Buenas ventas!');
+        return redirect()->route('ventas.create')->with('success', 'Caja abierta correctamente.');
     }
 
     public function edit($id)
@@ -228,5 +265,17 @@ class CajaController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error al anular: ' . $e->getMessage()], 500);
         }
+    }
+
+    public function getVendedoresPorLocal($id)
+    {
+        // Buscamos los usuarios que tienen este local asociado y tienen rol vendedor
+        $vendedores = User::whereHas('local', function($q) use ($id) {
+            $q->where('id_local', $id);
+        })->where('role', 'vendedor')
+          ->where('activo', true)
+          ->get(['id', 'name']); // Solo traemos lo necesario
+
+        return response()->json($vendedores);
     }
 }

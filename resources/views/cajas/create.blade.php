@@ -50,7 +50,7 @@
                     
                     @if(auth()->user()->hasRole('admin'))
                         <select name="id_local" id="id_local" class="form-control select2 @error('id_local') is-invalid @enderror" required>
-                            @foreach($locales as $local)
+                            @foreach($locales as $local)        
                                 <option value="{{ $local->id }}" {{ (auth()->user()->localActual() && auth()->user()->localActual()->id == $local->id) ? 'selected' : '' }}>
                                     {{ $local->nombre }}
                                 </option>
@@ -66,9 +66,33 @@
                     @error('id_local')
                         <span class="invalid-feedback d-block" role="alert"><strong>{{ $message }}</strong></span>
                     @enderror
-                  </div>
+                    </div>
+                  {{-- BLOQUE DE RESPONSABLE: Usamos el campo id_user existente en tu DB --}}
+                    <div class="form-group">
+                        <label class="control-label font-weight-bold">Asignar Responsable de Caja <b style="color: red;">*</b></label>
+                        
+                        @if(auth()->user()->role === 'admin' || auth()->user()->role === 'encargado')
+                            {{-- Si es Admin o Encargado, puede elegir a qué vendedor le abre la caja --}}
+                            <select name="id_user" id="id_user" class="form-control select2 @error('id_user') is-invalid @enderror" required>
+                                <option value="">-- Seleccione el Vendedor --</option>
+                                @foreach($vendedores as $vendedor)
+                                    <option value="{{ $vendedor->id }}" {{ old('id_user') == $vendedor->id ? 'selected' : '' }}>
+                                        {{ $vendedor->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @else
+                            {{-- Si es un vendedor abriendo su propia caja, el valor se pone automático --}}
+                            <input type="text" class="form-control" value="{{ auth()->user()->name }}" readonly>
+                            <input type="hidden" name="id_user" value="{{ auth()->user()->id }}">
+                        @endif
 
-                  <div class="form-group">
+                        @error('id_user')
+                            <span class="invalid-feedback d-block" role="alert"><strong>{{ $message }}</strong></span>
+                        @enderror
+                        <small class="text-muted">El usuario seleccionado será el titular de los ingresos de esta jornada.</small>
+                    </div>
+                    <div class="form-group">
                     <label class="control-label font-weight-bold">Monto Inicial (USD Efectivo) <b style="color: red;">*</b></label>
                     <div class="input-group">
                         <div class="input-group-prepend">
@@ -113,10 +137,52 @@
   @endcannot
 </main>
 @endsection
-@section('js')
+@section('scripts')
 <script>
     $(document).ready(function() {
+        // Inicializar Select2
+          
+
         $('.select2').select2({ theme: 'bootstrap4' });
+
+        // Evento para el cambio de local
+        $('#id_local').on('change', function() {
+            var localId = $(this).val();
+            var selectVendedor = $('#id_user');
+
+            // Si el usuario no es admin/encargado, id_user no es un select, así que no hacemos nada
+            if (!selectVendedor.is('select')) return;
+
+            if (localId) {
+                // Bloqueamos el select y mostramos estado de carga
+                selectVendedor.prop('disabled', true);
+                
+                $.ajax({
+                    url: '/locales/' + localId + '/vendedores',
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // Limpiar opciones actuales
+                        selectVendedor.empty();
+                        selectVendedor.append('<option value="">-- Seleccione el Vendedor --</option>');
+                        
+                        // Llenar con los datos recibidos
+                        $.each(data, function(key, vendedor) {
+                            selectVendedor.append('<option value="' + vendedor.id + '">' + vendedor.name + '</option>');
+                        });
+                        
+                        selectVendedor.prop('disabled', false);
+                        
+                        // IMPORTANTE: Refrescar Select2 para que muestre los nuevos datos
+                        selectVendedor.trigger('change.select2'); 
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'No se pudieron cargar los vendedores de este local.', 'error');
+                        selectVendedor.prop('disabled', false);
+                    }
+                });
+            }
+        });
     });
 </script>
-@stop
+@endsection

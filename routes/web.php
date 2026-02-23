@@ -140,7 +140,7 @@ Route::get('/salidas/{id_local}/createl', [SalidaController::class, 'create3'])-
 Route::resource('salidas', SalidaController::class);
 Route::post('local/cambiar_status', [LocalController::class, 'cambiar_estado'])->name('local.cambiar_estado');
 Route::resource('local', LocalController::class);
-
+Route::get('/locales/{id}/vendedores', [CajaController::class, 'getVendedoresPorLocal'])->name('locales.vendedores');
 Route::resource('categorias', CategoriaController::class);
 Route::resource('modelos-venta', ModeloVentaController::class);
 // Ruta extra que necesitaremos para el cálculo "instantáneo" más adelante

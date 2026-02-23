@@ -43,6 +43,10 @@ class HomeController extends Controller
             if ($responseBcv->successful()) {
                 preg_match('/id="dolar".*?<strong>\s*(.*?)\s*<\/strong>/s', $responseBcv->body(), $matches);
                 $tasa_bcv = isset($matches[1]) ? (float) str_replace(',', '.', trim($matches[1])) : 0;
+
+                if ($tasa_bcv > 0) {
+                    cache(['tasa_bcv' => $tasa_bcv], now()->addMinutes(120));
+                }
             }
 
             // 2. Obtener Binance (API P2P con Headers)

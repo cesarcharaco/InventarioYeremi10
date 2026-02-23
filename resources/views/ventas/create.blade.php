@@ -30,7 +30,7 @@
     <div class="app-title">
         <div>
             <h1><i class="fa fa-shopping-cart"></i> SAYER - Punto de Venta| TASA BCV:<strong> <span class="badge badge-warning">{{number_format($tasa_bcv, 2, '.', ',')}} Bs.</span></strong></p></h1>
-            <p>Sede: <strong>{{ $local->nombre }}</strong> | Caja: <span class="badge badge-success">ACTIVA</span> </p>
+            <p>Sede: <strong>{{ $local->nombre }}</strong> | Caja: <span class="badge badge-success">ACTIVA</span> Responsable: <strong>{{ $caja->user->name }}</strong> {{-- Añadimos el responsable asignado --}}</p>
         </div>
     </div>
 
