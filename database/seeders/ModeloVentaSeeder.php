@@ -46,6 +46,22 @@ class ModeloVentaSeeder extends Seeder
             'factor_usdt' => null,
             'porcentaje_extra' => 0.10, // El 10% que mencionaste
         ],
+        [
+            'modelo' => 'BICICLETA',
+            'tasa_binance' => 600.00,
+            'tasa_bcv' => 360.00,
+            'factor_bcv' => 0.8,
+            'factor_usdt' => 0.6,
+            'porcentaje_extra' => null,
+        ],
+        [
+            'modelo' => 'CARROS',
+            'tasa_binance' => 600.00,
+            'tasa_bcv' => 360.00,
+            'factor_bcv' => 0.6,
+            'factor_usdt' => 0.6,
+            'porcentaje_extra' => null,
+        ],
     ];
 
     foreach ($modelos as $item) {
