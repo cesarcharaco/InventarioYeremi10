@@ -135,3 +135,19 @@ WHATSAPP_BOSS_PHONE=584140863107
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+
+mostrar buscador en index de insumos.
+mostrar descripcion de la tabla de insumos
+
+modulo de cuentas con proveedores
+
+descuentos en bolivares por venta en dolares en porcentajes 10,15,20,25, 30, 35, 40, 45, 50
+
+verificar cuentas por cobrar
+
+si el cliente compra y tiene credito se verifica y se agrega como abono
+
+acomodar tabla de detalles de venta
+
+en la venta hay que agregar las referencias de los pagomoviles y transferencias
