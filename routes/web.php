@@ -54,7 +54,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/usuarios/{id}/editar', [UserController::class, 'edit'])->name('usuarios.edit');
     Route::put('/usuarios/{id}/actualizar', [UserController::class, 'update'])->name('usuarios.update');
     Route::delete('/usuarios/{id}/eliminar', [UserController::class, 'destroy'])->name('usuarios.destroy');
-    Route::delete('/usuarios/{id}/show', [UserController::class, 'show'])->name('usuarios.show');
+    Route::get('/usuarios/{id}/show', [UserController::class, 'show'])->name('usuarios.show');
 
     Route::get('/home', [HomeController::class, 'index'])->name('home');
 
