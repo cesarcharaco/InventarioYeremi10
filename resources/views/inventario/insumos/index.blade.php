@@ -79,89 +79,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  @foreach($insumos as $key)
-                <tr>
-                    <td><span class="badge badge-secondary">{{ $key->serial }}</span></td>
-                    <td><strong>{{ $key->producto }}</strong></td>
-                    <td><small>{{ $key->descripcion }}</small></td>
-                    {{-- COLUMNA: ESTADO GENERAL (GLOBAL) --}}
-                    <td class="text-center">
-                        @can('gestionar-estado-global')
-                            {{-- MODO EDICIÓN: El Admin ve el dropdown --}}
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-dark dropdown-toggle" type="button" data-toggle="dropdown">
-                                    <i class="fas fa-globe"></i> {{ $key->estado }}
-                                </button>
-                                <div class="dropdown-menu">
-                                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'En Venta', {{ $key->id_local }}, 'global')">En Venta</a>
-                                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'Suspendido', {{ $key->id_local }}, 'global')">Suspendido</a>
-                                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'No Disponible', {{ $key->id_local }}, 'global')">No Disponible</a>
-                                </div>
-                            </div>
-                        @else
-                            {{-- MODO LECTURA: El Encargado solo ve la información --}}
-                            <span class="badge {{ $key->estado === 'En Venta' ? 'badge-success' : 'badge-dark' }}" title="Solo el administrador puede cambiar este estado">
-                                <i class="fas fa-eye"></i> {{ $key->estado }}
-                            </span>
-                        @endcan
-                    </td>
-
-                    {{-- COLUMNA: ESTADO LOCAL (ESPECÍFICO) --}}
-                    <td class="text-center">
-                        @can('gestionar-estado-local', $key->id_local)
-                            {{-- MODO EDICIÓN: El encargado de ESTE local o el Admin pueden editar --}}
-                            <div class="dropdown">
-                                <button class="btn btn-sm {{ $key->estado_local === 'Disponible' ? 'btn-success' : 'btn-danger' }} dropdown-toggle" type="button" data-toggle="dropdown">
-                                    <i class="fas fa-store"></i> {{ $key->estado_local }}
-                                </button>
-                                <div class="dropdown-menu">
-                                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'Disponible', {{ $key->id_local }}, 'local')">Disponible</a>
-                                    <a class="dropdown-item" href="#" onclick="updateInsumoEstado({{ $key->id }}, 'Suspendido', {{ $key->id_local }}, 'local')">Suspendido</a>
-                                </div>
-                            </div>
-                        @else
-                            {{-- MODO LECTURA: Ve el estado del local, pero no puede cambiarlo porque no es el suyo --}}
-                            <span class="badge badge-secondary" style="opacity: 0.7;" title="No tienes permisos para este local">
-                                <i class="fas fa-lock"></i> {{ $key->estado_local }}
-                            </span>
-                        @endcan
-                    </td>
-                    {{-- Stock Min/Max ahora vienen directamente del objeto insumo --}}
-                    <td class="text-center"><span class="badge badge-warning">{{ $key->stock_min }}</span></td>
-                    <td class="text-center"><span class="badge badge-dark">{{ $key->stock_max }}</span></td>
-                    {{-- Mostramos la cantidad única de la tabla pivot --}}
-                    <td class="text-center text-primary font-weight-bold" style="font-size: 1.1em;">
-                        {{ $key->cantidad }}
-                    </td>
-                    <td>
-                        <i class="fa fa-map-marker-alt text-danger"></i> 
-                        {{ $key->nombre_local }}
-                    </td>
-                    
-                    <td class="text-center">
-                        <div class="btn-group">
-                          @can('gestionar-insumos')
-                            {{-- Ajustamos la ruta de edición a la estándar del resource --}}
-                            <a href="{{ route('insumos.edit', $key->id) }}" class="btn btn-info btn-sm">
-                                <i class="fa fa-edit"></i>
-                            </a>
-                          @endcan
-                            <button class="btn btn-success btn-sm" 
-                                onclick="detalles('{{ $key->producto }}','{{ $key->descripcion }}','{{ $key->serial }}','{{ $key->stock_min }}','{{ $key->stock_max }}','{{ $key->cantidad }}','{{ $key->nombre_local }}')" 
-                                data-toggle="modal" data-target="#detalles">
-                                <i class="fa fa-eye"></i>
-                            </button>
-                          @if(auth()->user()->esAdmin() || auth()->user()->hasRole('encargado'))
-                            {{-- Botón eliminar --}}
-                            <button class="btn btn-danger btn-sm" onclick="eliminar('{{ $key->id }}')" data-toggle="modal" data-target="#eliminar_insumo">
-                                <i class="fa fa-trash"></i>
-                            </button>
-                          @endif      
-                        </div>
-                    </td>
-                    
-                </tr>
-                @endforeach
+                  
                 </tbody>
               </table>
             </div>
@@ -243,6 +161,8 @@
 @section('scripts')
 <script type="text/javascript">
   $(document).ready(function () {
+    
+    // 1. Definición del lenguaje (Faltaba en tu bloque anterior)
     var lenguajeEspanol = {
         "decimal": "",
         "emptyTable": "No hay información",
@@ -264,27 +184,40 @@
         }
     };
 
-    // MANTENEMOS TU LÓGICA DE DATATABLE INTACTA PARA EVITAR EL ERROR DE PARSEO
-    var tabla;
-    try {
-        tabla = $('#tabla-insumos').DataTable({
-            "responsive": true,
-            "autoWidth": false,
-            "language": lenguajeEspanol,
-            "retrieve": true,
-            "paging": true,
-            "searching": true
-        });
-    } catch (e) {
-        console.log("Error en DataTable: ", e);
-    }
- });
-   
+    // 2. Inicialización de DataTable
+    $('#tabla-insumos').DataTable({
+        "processing": true,
+        "serverSide": true,
+        "ajax": {
+            "url": "{{ route('insumos.data') }}",
+            "type": "GET"
+        },
+        "columns": [
+            { "data": "serial" },
+            { "data": "producto" },
+            { "data": "descripcion" },
+            { "data": "estado_global", "className": "text-center" },
+            { "data": "estado_local", "className": "text-center" },
+            { "data": "stock_min", "className": "text-center" },
+            { "data": "stock_max", "className": "text-center" },
+            { "data": "cantidad", "className": "text-center" },
+            { "data": "nombre_local" },
+            { "data": "acciones", "orderable": false, "searchable": false }
+        ],
+        "language": lenguajeEspanol,
+        "responsive": true,
+        "autoWidth": false,
+        "pageLength": 10,
+        "searchDelay": 500,
+        "order": [[1, 'asc']] // Ordenar por Producto por defecto
+    });
+  });
+
+  // Funciones auxiliares (Eliminar, Detalles, Estados)
   function eliminar(id) {
     $("#id_insumo").val(id);
   }
 
-  // Ajustado para recibir la nueva estructura de parámetros
   function detalles(prod, desc, seri, smin, smax, cant, nom) {
     $("#det_producto").text(prod);
     $("#det_descripcion").text(desc);
@@ -294,12 +227,15 @@
     $("#det_cantidad").text(cant);
     $("#det_nombre").text(nom);
   }
+
   function updateInsumoEstado(idInsumo, nuevoEstado, idLocal, tipoAccion) {
     Swal.fire({
         title: '¿Confirmar cambio?',
         text: `Vas a cambiar el estado ${tipoAccion} a: ${nuevoEstado}`,
         icon: 'warning',
         showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
         confirmButtonText: 'Sí, cambiar',
         cancelButtonText: 'Cancelar'
     }).then((result) => {
@@ -310,16 +246,22 @@
                 data: {
                     id: idInsumo,
                     estado: nuevoEstado,
-                    tipo: tipoAccion, // 'global' o 'local'
+                    tipo: tipoAccion, 
                     id_local: idLocal,
                     _token: '{{ csrf_token() }}'
                 },
                 success: function(response) {
-                    Swal.fire('¡Éxito!', response.message, 'success').then(() => location.reload());
+                    Swal.fire('¡Éxito!', response.message, 'success').then(() => {
+                        // En lugar de recargar la página completa, recargamos solo la tabla
+                        $('#tabla-insumos').DataTable().ajax.reload(null, false);
+                    });
+                },
+                error: function() {
+                    Swal.fire('Error', 'No se pudo actualizar el estado', 'error');
                 }
             });
         }
     });
-}
+  }
 </script>
 @endsection

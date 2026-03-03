@@ -52,4 +52,17 @@ class Local extends Model
         // Usamos hasOne porque definimos que es un solo registro por local (Opción B)
         return $this->hasOne(AutorizacionPin::class, 'id_local');
     }
+
+    public function ofertas(): HasMany
+    {
+        return $this->hasMany(ConfigOfertas::class, 'id_local');
+    }
+
+    /**
+     * Un local puede tener una oferta activa en un momento dado
+     */
+    public function ofertaActiva()
+    {
+        return $this->ofertas()->where('estado', true)->first();
+    }
 }

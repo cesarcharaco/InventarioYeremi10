@@ -70,4 +70,10 @@ class Caja extends Model
         return $this->hasMany(AbonoCredito::class, 'id_caja');
     }
 
+    public function ofertasIniciadas()
+    {
+        // Una caja puede ser el "punto de partida" de varias ofertas (si se crean y cierran en el mismo turno)
+        return $this->hasMany(ConfigOfertas::class, 'id_caja_origen');
+    }
+
 }

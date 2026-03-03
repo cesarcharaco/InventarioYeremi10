@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Venta extends Model
 {
@@ -18,8 +19,6 @@ class Venta extends Model
         'id_caja',
         'pago_usd_efectivo',
         'pago_bs_efectivo',
-        'pago_punto_bs',      // Incluye: Puntos y Biopagos
-        'pago_pagomovil_bs',  // Incluye: Pago móvil y Transferencias
         'monto_credito_usd',
         'total_usd',
         'estado'
@@ -70,5 +69,15 @@ class Venta extends Model
     public function credito()
     {
         return $this->hasOne(Credito::class, 'id_venta');
+    }
+
+    public function infoAdicional(): HasOne
+    {
+        return $this->hasOne(VentaInformacion::class, 'id_venta');
+    }
+
+    public function referencias(): HasMany
+    {
+        return $this->hasMany(PagoReferencia::class, 'id_venta'); // o el nombre de tu modelo
     }
 }

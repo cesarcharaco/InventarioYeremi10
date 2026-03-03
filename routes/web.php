@@ -23,6 +23,7 @@ use App\Http\Controllers\VentaController;
 use App\Models\AutorizacionPin;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\EntradaController;
+use App\Http\Controllers\ConfigOfertaController;
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -42,7 +43,11 @@ Auth::routes();
 // Forzar el nombre si algo lo está pisando
 //Route::get('login', [App\Http\Controllers\Auth\LoginController::class, 'showLoginForm'])->name('login');
 Route::middleware(['auth'])->group(function () {
-   
+    Route::prefix('config-ofertas')->group(function () {
+        Route::get('/', [ConfigOfertaController::class, 'index'])->name('config-ofertas.index');
+        Route::post('/store', [ConfigOfertaController::class, 'store'])->name('config-ofertas.store');
+        Route::patch('/{id}/desactivar', [ConfigOfertaController::class, 'desactivar'])->name('config-ofertas.desactivar');
+    });
     Route::get('/pines-activos-ajax', [HomeController::class, 'getPinesAjax'])->name('admin.pines_activos');
     // Rutas de Usuarios
 // Rutas de Perfil Personal
@@ -63,6 +68,7 @@ Route::post('/login', [LoginController::class, 'login'])->middleware('guest');*/
 
 // 1. Rutas específicas y de utilidad para Insumos (Agrupadas para mayor orden)
 Route::prefix('inventario/insumos')->group(function () {
+    Route::get('data', [InsumosController::class, 'getInsumosData'])->name('insumos.data');
     Route::get('precios', [InsumosController::class, 'precios'])->name('insumos.precios');
     Route::post('actualizar-costo', [InsumosController::class, 'actualizarCosto'])->name('insumos.actualizarCosto');
     Route::post('destroy-manual', [InsumosController::class, 'destroy'])->name('insumos.destroy_manual');
@@ -176,6 +182,15 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::post('/ventas/solicitar-pin', [VentaController::class, 'solicitarPin'])->name('ventas.solicitar_pin');
         Route::post('/ventas/verificar-pin', [VentaController::class, 'verificarPin'])->name('ventas.verificar_pin');
         Route::resource('ventas', VentaController::class);
+            // 1. Obtener deuda del cliente (Disparador de alerta de CxC)
+        // Retorna: { tiene_deuda: true, saldo_total_usd: 150.00, id_credito: 5 }
+        Route::get('/clientes/{id}/verificar-deuda', [ClientesController::class, 'getDeudaPendiente'])
+            ->name('clientes.deuda');
+
+        // 2. Obtener correlativo de Nota de Entrega (Para mostrar en la vista)
+        // Retorna: { correlativo: "0000001" }
+        Route::get('/ventas/proximo-correlativo-nota', [VentasController::class, 'getProximoCorrelativo'])
+            ->name('ventas.correlativo');
     });
     // --- MÓDULO DE CRÉDITOS ---
     // Incluye: index (lista de deudores), show (detalle de deuda), etc.

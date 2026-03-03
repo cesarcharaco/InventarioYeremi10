@@ -21,7 +21,6 @@ class Cliente extends Model
         'nombre',
         'telefono',
         'direccion',
-        'email',
         'limite_credito',
         'id_local',
         'activo'

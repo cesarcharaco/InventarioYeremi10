@@ -252,14 +252,18 @@ class AuthServiceProvider extends ServiceProvider
         return strtolower($user->role) === 'admin';
     });
 
-    // Gestión de Proveedores: Solo Admin y Almacenista
-    Gate::define('gestionar-proveedores', function (User $user) {
-        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
-    });
-
     // Registro de Compras / Entradas de Almacén
     Gate::define('gestionar-entradas', function (User $user) {
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
+    });
+
+    Gate::define('emitir-nota-entrega', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+    });
+
+    Gate::define('gestionar-ofertas', function ($user) {
+        // Retorna true solo si el tipo es admin
+        return in_array($user->role, [User::ROLE_SUPERADMIN]);
     });
     }
 }

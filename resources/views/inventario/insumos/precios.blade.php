@@ -52,10 +52,13 @@
                 data-factor-bcv="{{ $key->factor_bcv }}" 
                 data-factor-usdt="{{ $key->factor_usdt }}">
               
-              <td>
-                <strong>{{ $key->producto }}</strong><br>
-                <small class="text-muted">{{ $key->serial }}</small>
-              </td>
+                <td>
+                    <small class="text-primary font-italic">{{ $key->serial }}:</small>
+                    <span class="font-weight-bold text-dark">{{ $key->producto }}</span>
+                    <small class="text-muted mt-1" style="line-height: 1.2;">
+                        <i class="fa fa-info-circle fa-xs mr-1"></i> {{ $key->descripcion }}
+                    </small>
+                </td>
 
               {{-- CELDA EDITABLE DE COSTO --}}
                 @can('editar-costos')

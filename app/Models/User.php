@@ -58,4 +58,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(AbonoCredito::class, 'id_user');
     }
+
+    public function locales(): BelongsToMany
+    {
+        return $this->belongsToMany(Local::class, 'users_has_local', 'id_user', 'id_local')
+                    ->withPivot('status');
+    }
 }

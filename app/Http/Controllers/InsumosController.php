@@ -13,6 +13,7 @@ use App\Http\Requests\InsumosRequest;
 use App\Http\Requests\InsumosUpdateRequest;
 use Illuminate\Support\Facades\DB; // Añadido al namespace
 use Illuminate\Support\Facades\Gate;
+use Yajra\DataTables\Facades\DataTables;
 
 class InsumosController extends Controller
 {
@@ -21,6 +22,7 @@ class InsumosController extends Controller
      */
     public function index()
     {
+
         Gate::authorize('ver-logistica');
         // Se ajustó para obtener stock_min/max desde la tabla insumos
         // y la cantidad física desde la tabla pivot
@@ -56,6 +58,7 @@ class InsumosController extends Controller
             'insumos.producto',
             'insumos.serial',
             'insumos.costo',
+            'insumos.descripcion',
             'insumos.precio_venta_usd',
             'insumos.precio_venta_bs',
             'insumos.precio_venta_usdt',
@@ -336,4 +339,81 @@ class InsumosController extends Controller
         return response()->json(['success' => false, 'message' => 'Error al procesar el cambio.'], 500);
     }
     }
+
+
+    public function getInsumosData(Request $request)
+{
+    Gate::authorize('ver-logistica');
+
+    $query = DB::table('insumos')
+        ->join('insumos_has_cantidades', 'insumos.id', '=', 'insumos_has_cantidades.id_insumo')
+        ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
+        ->select([
+            'insumos.id',
+            'insumos.serial',
+            'insumos.producto',
+            'insumos.descripcion',
+            'insumos.estado as estado_global',
+            'insumos.stock_min',
+            'insumos.stock_max',
+            'insumos_has_cantidades.cantidad',
+            'insumos_has_cantidades.id_local',
+            'insumos_has_cantidades.estado_local',
+            'local.nombre as nombre_local'
+        ]);
+
+    return DataTables::of($query)
+        // --- MAPEADO DE BÚSQUEDA: ESTO ELIMINA LOS ERRORES DE LAS IMÁGENES ---
+        ->filterColumn('estado_global', function($q, $kw) {
+            $q->whereRaw("insumos.estado LIKE ?", ["%{$kw}%"]);
+        })
+        ->filterColumn('estado_local', function($q, $kw) {
+            $q->whereRaw("insumos_has_cantidades.estado_local LIKE ?", ["%{$kw}%"]);
+        })
+        ->filterColumn('cantidad', function($q, $kw) {
+            $q->whereRaw("insumos_has_cantidades.cantidad LIKE ?", ["%{$kw}%"]);
+        })
+        ->filterColumn('nombre_local', function($q, $kw) {
+            $q->whereRaw("local.nombre LIKE ?", ["%{$kw}%"]);
+        })
+
+        // --- FORMATEO VISUAL: IGUAL A TU IMAGEN ORIGINAL ---
+        ->editColumn('serial', function($row) {
+            return '<span class="badge badge-secondary">' . e($row->serial) . '</span>';
+        })
+        ->editColumn('producto', function($row) {
+            return '<strong>' . e($row->producto) . '</strong>';
+        })
+        ->editColumn('estado_global', function($row) {
+            $class = $row->estado_global === 'En Venta' ? 'success' : 'dark';
+            return '<span class="badge badge-'.$class.'"><i class="fas fa-globe"></i> ' . e($row->estado_global) . '</span>';
+        })
+        ->editColumn('estado_local', function($row) {
+            $class = $row->estado_local === 'Disponible' ? 'success' : 'danger';
+            return '<span class="badge badge-'.$class.'"><i class="fas fa-store"></i> ' . e($row->estado_local) . '</span>';
+        })
+        // Colores de stock amarillos y oscuros como pediste
+        ->editColumn('stock_min', function($row) {
+            return '<span class="badge badge-warning" style="background-color: #ffe066; color: #000;">' . $row->stock_min . '</span>';
+        })
+        ->editColumn('stock_max', function($row) {
+            return '<span class="badge badge-dark">' . $row->stock_max . '</span>';
+        })
+        ->editColumn('cantidad', function($row) {
+            return '<span class="text-primary font-weight-bold" style="font-size: 1.1em;">' . $row->cantidad . '</span>';
+        })
+        ->editColumn('nombre_local', function($row) {
+            return '<i class="fa fa-map-marker-alt text-danger"></i> ' . e($row->nombre_local);
+        })
+        ->addColumn('acciones', function($row) {
+            return '
+            <div class="btn-group">
+                <a href="'.route('insumos.edit', $row->id).'" class="btn btn-info btn-sm"><i class="fa fa-edit"></i></a>
+                <button class="btn btn-success btn-sm" onclick="detalles(\''.$row->producto.'\',\''.addslashes($row->descripcion).'\',\''.$row->serial.'\','.$row->stock_min.','.$row->stock_max.','.$row->cantidad.',\''.$row->nombre_local.'\')" data-toggle="modal" data-target="#detalles"><i class="fa fa-eye"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="eliminar('.$row->id.')" data-toggle="modal" data-target="#eliminar_insumo"><i class="fa fa-trash"></i></button>
+            </div>';
+        })
+        ->rawColumns(['serial', 'producto', 'estado_global', 'estado_local', 'stock_min', 'stock_max', 'cantidad', 'nombre_local', 'acciones'])
+        ->make(true);
+}
 }

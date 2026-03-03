@@ -257,6 +257,14 @@
                             </a>
                         </li>
                         @endcan
+                        @can('gestionar-ofertas')
+                        <li class="nav-item">
+                            <a href="{{ route('config-ofertas.index') }}" class="nav-link {{ Request::is('config-ofertas*') ? 'active' : '' }}">
+                                <i class="fas fa-percentage nav-icon"></i>
+                                <p>Configuración de Ofertas</p>
+                            </a>
+                        </li>
+                        @endcan
                     </ul>
                 </li>
                 @endif

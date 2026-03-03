@@ -21,8 +21,6 @@ return new class extends Migration
             $table->foreignId('id_caja')->constrained('cajas');
             $table->decimal('pago_usd_efectivo', 12, 2)->default(0);
             $table->decimal('pago_bs_efectivo', 12, 2)->default(0);
-            $table->decimal('pago_punto_bs', 12, 2)->default(0);
-            $table->decimal('pago_pagomovil_bs', 12, 2)->default(0);
             $table->decimal('monto_credito_usd', 12, 2)->default(0);
             $table->decimal('total_usd', 12, 2)->default(0);
             $table->enum('estado', ['completada', 'anulada'])->default('completada');

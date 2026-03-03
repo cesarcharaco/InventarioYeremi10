@@ -137,17 +137,103 @@ WHATSAPP_BOSS_PHONE=584140863107
 </IfModule>
 
 
-mostrar buscador en index de insumos.
-mostrar descripcion de la tabla de insumos
 
 modulo de cuentas con proveedores
 
-descuentos en bolivares por venta en dolares en porcentajes 10,15,20,25, 30, 35, 40, 45, 50
+descuentos en bolivares por venta en dolares en porcentajes 10,15,20,25, 30, 35, 40, 45, 50(si el cliente va a pagar con dolares se le hace un descuento y el vendedor elige el monto de esas opciones)
 
-verificar cuentas por cobrar
-
-si el cliente compra y tiene credito se verifica y se agrega como abono
-
-acomodar tabla de detalles de venta
+verificar cuentas por cobrar del cliente:si el cliente compra y tiene credito se verifica y se pregunta si se agrega como abono y se paga de una vez en esa venta
 
 en la venta hay que agregar las referencias de los pagomoviles y transferencias
+
+Desglose de IVA: separar la Base Imponible del Monto del IVA (16%). El SENIAT exige que cada factura detalle cuánto es impuesto. poder imprimir una NOTA DE ENTREGA(0000001)
+si el cliente lo solicita
+
+acomodar tabla de detalles de venta(vista)
+
+reporte de historial de venta con filtros(pdf)
+
+
+Entiendo perfectamente. Estás buscando robustecer el sistema de ventas para cumplir tanto con estrategias comerciales (descuentos) como con normativas legales (IVA/SENIAT) y controles administrativos (cuentas por cobrar).
+
+Antes de tocar una sola línea de código, establezcamos la **lógica de negocio** y el flujo de datos para cada punto:
+
+---
+
+## 1. Lógica de Descuentos por Pago en Divisas
+
+El objetivo es incentivar el pago en efectivo/divisas ofreciendo un descuento que el vendedor aplica manualmente según el margen del producto o el cliente.
+
+* **Condición de Activación:** El descuento solo debe permitirse si el método de pago seleccionado es **Dólares (Efectivo/Zelle)**.
+* **Cálculo:** El descuento se aplica sobre el **Subtotal** de la venta en dólares.
+* **Variables necesarias:**
+* `Monto_Bruto_USD`: Suma de los productos.
+* `Porcentaje_Descuento`: Elegido de la lista (10%, 15%... 50%).
+* `Monto_Descuento`: `Monto_Bruto_USD * (Porcentaje / 100)`.
+* `Total_Final_USD`: `Monto_Bruto_USD - Monto_Descuento`.
+
+
+* **Regla de Negocio:** El sistema debe registrar cuánto se descontó para reportes de pérdida de margen a final de mes.
+
+---
+
+## 2. Verificación de Cuentas por Cobrar (CxC)
+
+Esta es una lógica de **intersección de módulos** (Ventas + Cobranzas).
+
+* **Disparador:** Al seleccionar al cliente en la pantalla de ventas, el sistema debe hacer una consulta rápida a la tabla de `cuentas_por_cobrar`.
+* **Interfaz:** Si el saldo es `> 0`, debe aparecer una alerta visual (ej. un banner amarillo) indicando el "Saldo Pendiente".
+* **Lógica de Abono:**
+1. Si el cliente decide abonar, el vendedor ingresa el monto.
+2. Ese monto **no suma** a los productos de la factura actual, pero sí se suma al **Total a Pagar** de la transacción.
+3. **Resultado en DB:** Se genera un recibo de pago vinculado a la deuda vieja y se procesa la venta nueva simultáneamente.
+
+
+
+---
+
+## 3. Registro de Referencias de Pago
+
+Vital para la conciliación bancaria y evitar fraudes.
+
+* **Campos Requeridos:**
+* `Metodo_Pago`: (Pago Móvil / Transferencia).
+* `Banco_Origen`: (Opcional, pero recomendado).
+* `Referencia`: Los últimos 4 o 6 dígitos (validación de longitud).
+
+
+* **Lógica:** Si el monto total se paga con varios métodos (multimoneda), el sistema debe permitir agregar **múltiples referencias**. Ejemplo: 20$ efectivo + 500 Bs Pago Móvil (Ref: 1234).
+
+---
+
+## 4. Desglose de IVA (16%) y Documentación
+
+Para cumplir con el SENIAT y tener control interno.
+
+### El Cálculo Fiscal:
+
+Aunque el sistema maneje dólares como base, el IVA siempre se calcula y registra sobre el valor en Bolívares a la tasa oficial.
+
+* **Base Imponible:** Total de productos ÷ 1.16.
+* **IVA (16%):** Base Imponible × 0.16.
+* **Total:** Base Imponible + IVA.
+
+### Diferenciación de Documentos:
+
+1. **Nota de Entrega:** Es un documento interno. No tiene validez fiscal absoluta pero sirve para el despacho. Debe llevar un correlativo independiente (ej. `NE-0000001`).
+2. **Factura:** Cumple con providencia administrativa.
+
+* **Lógica de Impresión:** Al finalizar la venta, el sistema debe preguntar: "¿Imprimir Factura o Nota de Entrega?".
+
+---
+
+## Resumen del Flujo Lógico en la Venta:
+
+1. **Selección de Cliente** → *Verificación de Deuda.*
+2. **Carga de Productos** → *Cálculo de Subtotal.*
+3. **Selección de Pago** → *Si es USD, habilitar selector de Descuento (10-50%).*
+4. **Ingreso de Referencias** → *Capturar números de transacción.*
+5. **Cálculo Final** → *Separar Base e IVA (16%).*
+6. **Cierre** → *Elegir formato de impresión (Nota o Factura) y restar inventario.*
+
+**¿Te parece bien esta estructura para empezar a trabajar el código de la base de datos y los controladores, o quieres ajustar algún porcentaje o regla?** Solo dime y procedemos con la implementación en PHP/Laravel.
