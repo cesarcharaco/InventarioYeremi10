@@ -24,6 +24,10 @@ use App\Models\AutorizacionPin;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\EntradaController;
 use App\Http\Controllers\ConfigOfertaController;
+use App\Http\Controllers\MovimientoCajaController;
+use App\Http\Controllers\InsumosMayoresController;
+
+
 /*
 |--------------------------------------------------------------------------  
 | Web Routes
@@ -42,6 +46,8 @@ Route::get('/', function () {
 Auth::routes();
 // Forzar el nombre si algo lo está pisando
 //Route::get('login', [App\Http\Controllers\Auth\LoginController::class, 'showLoginForm'])->name('login');
+Route::get('/registro-cliente', [ClienteController::class, 'create'])->name('clientes.create');
+Route::post('/registro-cliente', [ClienteController::class, 'store'])->name('clientes.store');
 Route::middleware(['auth'])->group(function () {
     Route::prefix('config-ofertas')->group(function () {
         Route::get('/', [ConfigOfertaController::class, 'index'])->name('config-ofertas.index');
@@ -82,6 +88,7 @@ Route::get('insumos/{id_insumo}/buscar_existencia', [PrestamosController::class,
 Route::post('/insumo/cambiar-estado', [InsumosController::class, 'cambiarEstadoInsumo'])->name('insumo.cambiarEstado');
 // 3. Resource estándar de Insumos
 // Al estar al final, no interfiere con 'precios' ni 'actualizar-costo'
+Route::post('insumos/importar-oferta', [InsumosController::class, 'importar'])->name('insumos.importar');
 Route::resource('insumos', InsumosController::class);
 
 // Grupo de rutas para Despachos
@@ -159,14 +166,27 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
     // Ruta adicional para el registro rápido desde el modal de ventas (AJAX)
     Route::post('clientes/store-rapido', [ClienteController::class, 'storeRapido'])->name('clientes.storeRapido');
 
+            // 1. Obtener deuda del cliente (Disparador de alerta de CxC)
+        // Retorna: { tiene_deuda: true, saldo_total_usd: 150.00, id_credito: 5 }
+    Route::get('/clientes/{id}/verificar-deuda', [ClientesController::class, 'getDeudaPendiente'])
+            ->name('clientes.deuda');
+    Route::get('clientes/pendientes', [ClienteController::class, 'listaActivar'])->name('clientes.pendientes');
+    Route::patch('clientes/{id}/activar', [ClienteController::class, 'activar'])->name('clientes.activar');
     // Incluye: index, create, store, show, edit, update, destroy
-    Route::resource('clientes', ClienteController::class);
+    Route::resource('clientes', ClienteController::class)->except(['create', 'store']);
+
     // ==========================================
     // GESTIÓN DE CAJA (Apertura y Cierre)
     // ==========================================
     Route::resource('cajas', CajaController::class)->only(['create', 'store', 'edit', 'update']);
     Route::get('cajas/historial', [CajaController::class, 'index'])->name('cajas.index'); 
-    
+    Route::middleware(['auth'])->prefix('movimientos-caja')->group(function () {
+        Route::get('/', [MovimientoCajaController::class, 'index'])->name('movimientos.index');
+        Route::get('/create', [MovimientoCajaController::class, 'create'])->name('movimientos.create');
+        Route::post('/store', [MovimientoCajaController::class, 'store'])->name('movimientos.store');
+        Route::put('/{id}/update', [MovimientoCajaController::class, 'update'])->name('movimientos.update');
+        Route::delete('/{id}/destroy', [MovimientoCajaController::class, 'destroy'])->name('movimientos.destroy');
+    });
     // ESTA RUTA VA AQUÍ AFUERA (Para que el admin siempre pueda anular)
     // Cambiada a POST para el AJAX del SweetAlert
     Route::post('cajas/anular/{id}', [CajaController::class, 'anular'])
@@ -182,10 +202,6 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::post('/ventas/solicitar-pin', [VentaController::class, 'solicitarPin'])->name('ventas.solicitar_pin');
         Route::post('/ventas/verificar-pin', [VentaController::class, 'verificarPin'])->name('ventas.verificar_pin');
         Route::resource('ventas', VentaController::class);
-            // 1. Obtener deuda del cliente (Disparador de alerta de CxC)
-        // Retorna: { tiene_deuda: true, saldo_total_usd: 150.00, id_credito: 5 }
-        Route::get('/clientes/{id}/verificar-deuda', [ClientesController::class, 'getDeudaPendiente'])
-            ->name('clientes.deuda');
 
         // 2. Obtener correlativo de Nota de Entrega (Para mostrar en la vista)
         // Retorna: { correlativo: "0000001" }
@@ -194,7 +210,6 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
     });
     // --- MÓDULO DE CRÉDITOS ---
     // Incluye: index (lista de deudores), show (detalle de deuda), etc.
-    Route::resource('creditos', CreditoController::class);
 
     // ==========================================
     // MÓDULO DE CRÉDITOS
@@ -207,8 +222,15 @@ Route::get('api/modelo-datos/{id}', [ModeloVentaController::class, 'getDatos']);
         Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
         Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
         Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
+        Route::get('/{id}/modal-interes', [CreditoController::class, 'modalInteres'])->name('creditos.modalInteres');
+        Route::post('/{id}/aplicar-interes', [CreditoController::class, 'aplicarInteres'])->name('creditos.aplicarInteres');
+        Route::post('/interes/{id}/anular', [CreditoController::class, 'anularInteres'])->name('creditos.interes.anular');
+        Route::post('/cliente/{id_cliente}/procesar-reembolso', [CreditoController::class, 'procesarReembolso'])
+         ->name('creditos.procesarReembolso');
+        Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
     });
 
+    Route::resource('creditos', CreditoController::class);
     // MÓDULO DE PROVEEDORES
     Route::prefix('proveedores')->group(function () {
         Route::get('/', [ProveedorController::class, 'index'])->name('proveedores.index');
@@ -233,5 +255,22 @@ Route::resource('reportes', ReportesController::class);
 Route::get('graficas', function () {
     return view('graficas.index');
 });
+
+
+    // Rutas unificadas en InsumosMayoresController
+    Route::prefix('mayorista')->group(function () {
+        Route::get('/', [InsumosMayoresController::class, 'index'])->name('insumos-mayores.index');
+        Route::get('/listas', [InsumosMayoresController::class, 'listarOfertas'])->name('insumos-mayores.listas');
+        Route::get('/items/{id}', [InsumosMayoresController::class, 'verItems'])->name('insumos-mayores.items');
+        Route::get('/cargar-oferta', [InsumosMayoresController::class, 'createImport'])->name('insumos-mayores.formulario');
+        Route::post('/importar-oferta', [InsumosMayoresController::class, 'importar'])->name('insumos-mayores.importar');
+        
+        // Rutas de Pedidos (Añadidas aquí mismo para que no tengas que cambiar tus vistas)
+        Route::post('/pedido/guardar', [InsumosMayoresController::class, 'guardarPedido'])->name('pedidos.store');
+        Route::get('/mis-pedidos', [InsumosMayoresController::class, 'misPedidos'])->name('pedidos.mis_pedidos');
+        Route::get('/pedido/detalle/{id}', [InsumosMayoresController::class, 'show'])->name('pedidos.show');
+    });
+
+
 
 });

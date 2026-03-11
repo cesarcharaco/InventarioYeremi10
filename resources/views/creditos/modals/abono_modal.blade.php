@@ -35,21 +35,24 @@
                         
                         <div class="col-md-6">
                             <label class="font-weight-bold">Desglose de Pago (Entrada a Caja):</label>
+                            <div id="error-desglose" class="alert alert-danger d-none py-1 small">
+                                <i class="fa fa-exclamation-circle"></i> Debe ingresar al menos un valor en el desglose.
+                            </div>
                             <div class="input-group mb-2">
                                 <div class="input-group-prepend"><span class="input-group-text">Efectivo $</span></div>
-                                <input type="number" step="0.01" name="pago_usd_efectivo" class="form-control" value="0">
+                                <input type="number" step="0.01" name="pago_usd_efectivo" class="form-control input-desglose" value="0">
                             </div>
                             <div class="input-group mb-2">
                                 <div class="input-group-prepend"><span class="input-group-text">Efectivo Bs</span></div>
-                                <input type="number" step="0.01" name="pago_bs_efectivo" class="form-control" value="0">
+                                <input type="number" step="0.01" name="pago_bs_efectivo" class="form-control input-desglose" value="0">
                             </div>
                             <div class="input-group mb-2">
                                 <div class="input-group-prepend"><span class="input-group-text">Punto Bs</span></div>
-                                <input type="number" step="0.01" name="pago_punto_bs" class="form-control" value="0">
+                                <input type="number" step="0.01" name="pago_punto_bs" class="form-control input-desglose" value="0">
                             </div>
                             <div class="input-group">
                                 <div class="input-group-prepend"><span class="input-group-text">P. Móvil Bs</span></div>
-                                <input type="number" step="0.01" name="pago_pagomovil_bs" class="form-control" value="0">
+                                <input type="number" step="0.01" name="pago_pagomovil_bs" class="form-control input-desglose" value="0">
                             </div>
                             <p class="mt-2 small text-muted"><i class="fa fa-info-circle"></i> El desglose ayuda a cuadrar la caja diaria sin afectar el monto en dólares de la deuda.</p>
                         </div>

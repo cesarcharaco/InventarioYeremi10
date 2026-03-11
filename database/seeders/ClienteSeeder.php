@@ -42,7 +42,7 @@ class ClienteSeeder extends Seeder
                         'direccion'      => 'Sector ' . rand(1, 10) . ', Av. Principal, Venezuela',
                         'limite_credito' => rand(100, 500), // Límite entre 100$ y 500$
                         'id_local'       => $localId,
-                        'activo'         => true,
+                        'activo'         => 'activo',
                         'created_at'     => now(),
                         'updated_at'     => now(),
                     ]);

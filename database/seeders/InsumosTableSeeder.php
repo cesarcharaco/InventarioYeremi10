@@ -6,18 +6,15 @@ use Illuminate\Database\Seeder;
 use App\Models\Insumos;
 use App\Models\InsumosC;
 use App\Models\Local;
+use App\Services\TasaCambioService;
+use App\Models\Configuracion;
 use Illuminate\Support\Facades\Http;
 class InsumosTableSeeder extends Seeder
 {
     public function run()
     {
-        $responseBcv = Http::withOptions(['verify' => false])->get('https://www.bcv.org.ve/');
-            if ($responseBcv->successful()) {
-                preg_match('/id="dolar".*?<strong>\s*(.*?)\s*<\/strong>/s', $responseBcv->body(), $matches);
-                $tasa_bcv = isset($matches[1]) ? (float) str_replace(',', '.', trim($matches[1])) : 0;
-            }else{
-                $tasa_bcv=0;
-            }
+        
+            $tasa_bcv = Configuracion::getTasa('tasa_bcv', 433.17);
             $tasa_usd=360;
             $tasa_usdt=600;
         $locales = Local::all();

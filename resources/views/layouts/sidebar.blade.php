@@ -7,7 +7,7 @@
     <div class="sidebar">
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-                
+                @auth
                 {{-- INICIO: Visible para todos --}}
                 <li class="nav-item">
                     <a href="{{ url('home') }}" class="nav-link {{ Request::is('home') ? 'active' : '' }}">
@@ -17,6 +17,7 @@
                 </li>
 
                 {{-- MÓDULO INVENTARIO: Visible para todos, pero con lógica interna --}}
+                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
                 <li class="nav-item has-treeview {{ Request::is('insumos*') || Request::is('precios*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('insumos*') || Request::is('precios*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-box"></i>
@@ -40,6 +41,7 @@
                         @endif
                     </ul>
                 </li>
+                @endif
                 {{-- MÓDULO ABASTECIMIENTO: Solo Admin y Almacenista --}}
                 @can('gestionar-proveedores')
                 <li class="nav-item has-treeview {{ Request::is('proveedores*') ? 'menu-open' : '' }}">
@@ -79,6 +81,7 @@
                 </li>
                 @endcan
                 {{-- INCIDENCIAS: Todos registran, pero solo Admin ve el historial completo --}}
+                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
                 <li class="nav-item has-treeview {{ Request::is('incidencias*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('incidencias*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-exclamation-triangle text-warning"></i>
@@ -101,9 +104,9 @@
                         @endcan
                     </ul>
                 </li>
-
+                @endif
                 {{-- LOGÍSTICA: Principalmente para Almacenistas y Admin --}}
-                @if(!auth()->user()->hasRole('vendedor'))
+                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
                 <li class="nav-item has-treeview {{ Request::is('despacho*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('despacho*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-truck"></i>
@@ -143,6 +146,18 @@
                             <a href="{{ route('clientes.create') }}" class="nav-link {{ Request::is('clientes/create') ? 'active' : '' }}">
                                 <i class="fas fa-plus-circle nav-icon text-success"></i>
                                 <p>Nuevo Cliente</p>
+                            </a>
+                        </li>
+                        {{-- NUEVO: Enlace a Clientes por Activar --}}
+                        <li class="nav-item">
+                            <a href="{{ route('clientes.pendientes') }}" class="nav-link {{ Request::is('clientes/pendientes') ? 'active' : '' }}">
+                                <i class="fas fa-user-check nav-icon text-warning"></i>
+                                <p>Por Activar 
+                                    @php $pendientes = \App\Models\Cliente::where('activo', 'pendiente')->count(); @endphp
+                                    @if($pendientes > 0)
+                                        <span class="right badge badge-danger">{{ $pendientes }}</span>
+                                    @endif
+                                </p>
                             </a>
                         </li>
                     </ul>
@@ -218,7 +233,39 @@
                     </a>
                 </li>
                 @endif
-
+                {{-- MAYORISTA: Acceso a gestión de productos al mayor --}}
+                @if(auth()->user()->hasRole('cliente_mayorista'))
+                        {{-- Menú para el cliente mayorista (solo acceso a su área) --}}
+                        <li class="nav-item">
+                            <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-tags"></i>
+                                <p>Productos al Mayor</p>
+                            </a>
+                        </li>
+                        {{-- Aquí iría tu ruta de pedidos, mantén la tuya original --}}
+                    @else
+                        {{-- Menú de gestión para el personal interno (Admin, Encargado, Vendedor) --}}
+                        <li class="nav-item has-treeview {{ Request::is('insumos-mayores*') ? 'menu-open' : '' }}">
+                            <a href="#" class="nav-link {{ Request::is('insumos-mayores*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-tags"></i>
+                                <p>Mayorista <i class="right fas fa-angle-left"></i></p>
+                            </a>
+                            <ul class="nav nav-treeview">
+                                <li class="nav-item">
+                                    <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
+                                        <i class="fas fa-list-ul nav-icon text-info"></i>
+                                        <p>Productos al Mayor</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="{{ route('insumos-mayores.formulario') }}" class="nav-link {{ Request::is('mayorista/cargar-oferta') ? 'active' : '' }}">
+                                        <i class="fas fa-file-upload nav-icon text-success"></i>
+                                        <p>Cargar Ofertas</p>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    @endif
                 {{-- CONFIGURACIONES: Solo Admin y Encargado --}}
                 @if(auth()->user()->esAdmin() || auth()->user()->hasRole('encargado'))
                 <li class="nav-header">SISTEMA</li>
@@ -265,11 +312,38 @@
                             </a>
                         </li>
                         @endcan
+
+                        @can('movimientos_caja')
+                        <li class="nav-item">
+                            <a href="{{ route('movimientos.index') }}" class="nav-link {{ Request::is('movimientos-caja*') ? 'active' : '' }}">
+                                <i class="fas fa-exchange-alt nav-icon"></i> {{-- Icono de intercambio/flujo --}}
+                                <p>Movimientos de Caja</p>
+                            </a>
+                        </li>
+                        @endcan
                     </ul>
                 </li>
                 @endif
+                @endauth
 
+                @guest
+                    {{-- Lo que ve el cliente que se está registrando solo --}}
+                    <li class="nav-header">REGISTRO DE CLIENTE</li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link active">
+                            <i class="nav-icon fas fa-user-edit text-success"></i>
+                            <p>Formulario de Registro</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('login') }}" class="nav-link">
+                            <i class="nav-icon fas fa-sign-in-alt"></i>
+                            <p>Volver al Login</p>
+                        </a>
+                    </li>
+                @endguest
             </ul>
         </nav>
+        <br><br><br>
     </div>
 </aside>

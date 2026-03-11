@@ -5,7 +5,7 @@
 @section('content')
 <main class="app-content">
   {{-- Verificación de permiso para crear clientes (SuperAdmin, Encargado, Vendedor) --}}
-  @cannot('gestionar-clientes')
+ @if(auth()->check() && !auth()->user()->can('gestionar-clientes'))
     <div class="tile text-center">
         <h1 class="text-danger"><i class="fa fa-lock"></i> Acceso Restringido</h1>
         <p>No tienes permisos para registrar nuevos clientes en el sistema.</p>
@@ -28,8 +28,19 @@
     <div class="row">
       <div class="col-lg-12">
         <div class="page-header">
-          <h2 class="mb-3 line-head" id="indicators">Nuevo Cliente</h2>
+          <h2 class="mb-3 line-head" id="indicators">Nuevo Cliente @guest Mayorista @endguest</h2>
         </div><br>
+        @guest
+        <div class="alert alert-warning" role="alert" style="border-left: 5px solid #ffc107;">
+            <h5 class="alert-heading"><i class="fa fa-info-circle"></i> Aviso Importante para Clientes Mayoristas</h5>
+            <p class="mb-0">
+                Para acceder a nuestros precios al mayor y realizar pedidos a través del sistema, es necesario registrarse. 
+                <strong>Por razones de seguridad, tu cuenta quedará en estado "Pendiente" tras completar este formulario.</strong> 
+                Nuestro equipo administrativo validará tus datos y, una vez activado tu usuario, te notificaremos para que puedas comenzar a realizar tus compras. 
+                Gracias por confiar en Yermotors Repuestos C.A.
+            </p>
+        </div>
+        @endguest
         <div class="basic-tb-hd text-center">            
             @include('layouts.partials.flash-messages')
             
@@ -87,7 +98,7 @@
                            value="{{ old('telefono') }}" placeholder="0412-1234567">
                   </div>
                 </div>
-
+                @auth
                 {{-- Límite de Crédito --}}
                 <div class="col-md-4">                  
                   <div class="form-group">
@@ -98,7 +109,7 @@
                     <small class="text-muted">Monto máximo de deuda permitido.</small>
                   </div>
                 </div>
-
+                @endauth
                 {{-- Sede de Registro --}}
                 <div class="col-md-4">                  
                   <div class="form-group">
@@ -124,7 +135,42 @@
                   </div>
                 </div>
               </div>
-
+              @guest
+              {{-- SECCIÓN DE ACCESO AL SISTEMA --}}
+              <div class="tile-body">
+                <h4 class="mb-3">Datos de Acceso al Sistema</h4>
+                <div class="row">
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label class="control-label">Correo Electrónico <b style="color: red;">*</b></label>
+                      <input class="form-control" type="email" name="email" required value="{{ old('email') }}" placeholder="ejemplo@correo.com">
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label class="control-label">Contraseña <b style="color: red;">*</b></label>
+                      <div class="input-group">
+                        <input class="form-control" type="password" name="password" id="password" required>
+                        <div class="input-group-append">
+                          <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')"><i class="fa fa-eye"></i></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label class="control-label">Confirmar Contraseña <b style="color: red;">*</b></label>
+                      <div class="input-group">
+                        <input class="form-control" type="password" name="password_confirmation" id="password_confirmation" required>
+                        <div class="input-group-append">
+                          <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password_confirmation')"><i class="fa fa-eye"></i></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              @endguest
               <div class="tile-footer">
                 <button class="btn btn-primary" type="submit">
                     <i class="fa fa-fw fa-lg fa-check-circle"></i> Registrar Cliente
@@ -142,4 +188,14 @@
   </div>
   @endcannot
 </main>
+@endsection
+@section('scripts')
+<script>
+  function togglePassword(id) {
+    var x = document.getElementById(id);
+    if (x.type === "password") { x.type = "text"; } 
+    else { x.type = "password"; }
+  }
+</script>
+
 @endsection

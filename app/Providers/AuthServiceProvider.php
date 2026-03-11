@@ -265,5 +265,10 @@ class AuthServiceProvider extends ServiceProvider
         // Retorna true solo si el tipo es admin
         return in_array($user->role, [User::ROLE_SUPERADMIN]);
     });
+
+    Gate::define('movimientos_caja', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+    });
+
     }
 }

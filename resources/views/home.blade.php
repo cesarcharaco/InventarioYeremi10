@@ -74,6 +74,17 @@
 </style>
 
 <main class="app-content">
+    @if(auth()->user()->hasRole('cliente_mayorista'))
+    <div class="app-title">
+        <div>
+            <h1><i class="fa fa-dashboard"></i> Mi Panel</h1>
+                <p>Bienvenido, {{ auth()->user()->name }}</p>
+                <p>Sistema Administrativo | Yermotos Repuestos C.A.</p>
+        </div>
+    </div>
+
+    @else
+
   <div class="app-title">
     <div>
       <h1><i class="fa fa-dashboard"></i> Tablero</h1>
@@ -84,6 +95,8 @@
       <li class="breadcrumb-item"><a href="{{ url('home') }}">Tablero</a></li>
     </ul>
   </div>
+
+    @endif
 
   {{-- SECCIÓN DE PINES: Solo visible para administradores --}}
   @can('ver-autorizaciones')
@@ -100,9 +113,9 @@
       </div>
   <hr>
   @endcan
-
+  @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
   <div class="row">
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-lg-3">
       <div class="widget-small info coloured-icon"><i class="icon fa fa-sitemap fa-3x"></i>
         <div class="info">
           <h4><a href="{{ route('insumos.index') }}" style="text-decoration: none">Insumos</a></h4>
@@ -111,7 +124,7 @@
       </div>
     </div>
     
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-lg-3">
       <div class="widget-small danger coloured-icon"><i class="icon fa fa-star fa-3x"></i>
         <div class="info">
           <h4><a href="{{ route('incidencias.index') }}" style="text-decoration: none">Incidencias</a></h4>
@@ -119,8 +132,16 @@
         </div>
       </div>
     </div>
-
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-lg-3">
+      <div class="widget-small primary coloured-icon">
+        <i class="icon fa fa-user-plus fa-3x"></i>
+        <div class="info">
+          <h4><a href="{{ route('clientes.pendientes') }}" style="text-decoration: none">Clientes x Activar</a></h4>
+          <p><b>{{ \App\Models\Cliente::where('activo', 'pendiente')->count() }}</b></p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
       <div class="widget-small warning coloured-icon"><i class="icon fa fa-money fa-3x"></i>
         <div class="info">
           <h4>Tasas del Día</h4>
@@ -134,6 +155,33 @@
       </div>
     </div>
   </div>
+  @elseif(auth()->user()->hasRole('cliente_mayorista'))
+    
+
+        <div class="row">
+            {{-- Caja: Ofertas Activas --}}
+            <div class="col-md-6">
+                <div class="widget-small info coloured-icon">
+                    <i class="icon fa fa-tag fa-3x"></i>
+                    <div class="info">
+                        <h4>Ofertas Activas</h4>
+                        {{-- <p><b>$variable_ofertas</b></p> --}}
+                    </div>
+                </div>
+            </div>
+
+            {{-- Caja: Pedidos por Recibir --}}
+            <div class="col-md-6">
+                <div class="widget-small warning coloured-icon">
+                    <i class="icon fa fa-truck fa-3x"></i>
+                    <div class="info">
+                        <h4>Pedidos por Recibir</h4>
+                        {{-- <p><b>$variable_pedidos</b></p> --}}
+                    </div>
+                </div>
+            </div>
+        </div>
+  @endif
 </main>
 @endsection
 

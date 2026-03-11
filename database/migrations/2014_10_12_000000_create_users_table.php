@@ -23,7 +23,7 @@ class CreateUsersTable extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             // --- NUEVOS CAMPOS ---
-            $table->string('role')->default('vendedor'); // admin, vendedor, almacenista
+            $table->string('role')->default('vendedor'); // admin, vendedor, almacenista, cliente_mayorista
             $table->boolean('activo')->default(true);
             // ---------------------
             $table->rememberToken();

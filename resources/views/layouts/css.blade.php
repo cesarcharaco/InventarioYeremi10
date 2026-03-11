@@ -51,4 +51,19 @@
             font-size: 1.1rem;
         }
     }
+    /* Busca la clase que envuelve el sidebar (ejemplo .main-sidebar o .app-sidebar) */
+    .app-sidebar {
+        height: 100vh;      /* Ocupa todo el alto de la ventana */
+        overflow-y: auto;   /* Activa el scroll vertical solo si es necesario */
+        padding-bottom: 50px; /* Un poco de aire al final para que no pegue con el borde */
+    }
+
+    /* Opcional: Ocultar la barra de scroll en Chrome/Safari */
+    .app-sidebar::-webkit-scrollbar {
+        width: 6px;
+    }
+    .app-sidebar::-webkit-scrollbar-thumb {
+        background-color: rgba(255,255,255,0.2);
+        border-radius: 10px;
+    }
 </style>

@@ -19,7 +19,7 @@ return new class extends Migration
             // El monto inicial es el total de la venta menos lo que haya dado de inicial
             $table->decimal('monto_inicial', 12, 2); 
             $table->decimal('saldo_pendiente', 12, 2); 
-            
+            $table->decimal('saldo_a_favor', 12, 2)->nullable()->default(0); 
             $table->date('fecha_vencimiento');
             $table->enum('estado', ['pendiente', 'pagado', 'vencido', 'revalorizado'])->default('pendiente');
             

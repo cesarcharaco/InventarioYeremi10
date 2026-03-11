@@ -42,6 +42,11 @@ class LocalTableSeeder extends Seeder
                 'tipo'   => 'LOCAL',
                 'estado' => 'Activo'
             ],
+            [
+                'nombre' => 'CENTRAL GUARIBE',
+                'tipo'   => 'OFICINA',
+                'estado' => 'Activo'
+            ],
         ];
 
         foreach ($locales as $l) {

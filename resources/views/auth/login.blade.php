@@ -57,7 +57,14 @@
                 <b>SAYER!</b>
             </a>
         </div>
-        
+        @if (session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert" style="font-size: 0.9rem;">
+                <i class="fas fa-check-circle mr-2"></i> {{ session('success') }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        @endif
         <div class="card shadow-lg border-0">
             <div class="card-body login-card-body">
                 @if (session('error') || session('warning'))
@@ -106,6 +113,12 @@
                         </div>
                     </div>
                 </form>
+            </div>
+            <div class="card-footer text-center bg-light border-0 py-3">
+                <p class="mb-1 text-muted" style="font-size: 0.9rem;">¿No tienes cuenta?</p>
+                <a href="{{ route('clientes.create') }}"class="btn btn-outline-primary btn-block">
+                   <i class="fas fa-user-plus mr-2"></i> Registrarse como Cliente Mayorista
+                </a>
             </div>
         </div>
     </div>

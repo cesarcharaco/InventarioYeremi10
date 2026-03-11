@@ -31,6 +31,14 @@
         <div class="basic-tb-hd text-center">
           @include('layouts.partials.flash-messages')
         </div>
+        <form action="{{ route('insumos.importar') }}" method="POST" enctype="multipart/form-data">
+            @csrf
+            <div class="form-group">
+                <label>Seleccionar Archivo (CSV/Excel)</label>
+                <input type="file" name="archivo" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Procesar Oferta</button>
+        </form>
       </div>
     </div>
 

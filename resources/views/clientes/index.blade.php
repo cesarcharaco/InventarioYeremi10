@@ -48,6 +48,7 @@
                     <th>Teléfono</th>
                     <th>Sede Registro</th>
                     <th>Límite Crédito</th>
+                    <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -60,6 +61,15 @@
                     <td>{{ $cliente->local->nombre ?? 'N/A' }}</td>
                     <td>
                         <strong class="text-success">{{ number_format($cliente->limite_credito, 2) }}$</strong>
+                    </td>
+                    <td>
+                        @if($cliente->activo == 'activo')
+                            <span class="badge badge-success">Activo</span>
+                        @elseif($cliente->activo == 'pendiente')
+                            <span class="badge badge-warning">Pendiente</span>
+                        @else
+                            <span class="badge badge-secondary">{{ ucfirst($cliente->activo) }}</span>
+                        @endif
                     </td>
                     <td>
                       {{-- Botón VER Detalle --}}

@@ -16,7 +16,7 @@ class CreateLocalTable extends Migration
         Schema::create('local', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre');
-            $table->enum('tipo', ['DEPOSITO', 'LOCAL'])->default('LOCAL');
+            $table->enum('tipo', ['DEPOSITO', 'LOCAL','OFICINA'])->default('LOCAL');
             $table->enum('estado',['Activo','Inactivo'])->default('Activo');
             $table->timestamps();
         });

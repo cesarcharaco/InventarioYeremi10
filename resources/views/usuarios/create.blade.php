@@ -126,6 +126,10 @@
 					    <option value="{{ \App\Models\User::ROLE_SUPERADMIN }}" @selected(old('role') == \App\Models\User::ROLE_SUPERADMIN)>
 					        Administrador (Dueño)
 					    </option>
+
+              <option value="{{ \App\Models\User::ROLE_CMAYORISTA }}" @selected(old('role') == \App\Models\User::ROLE_CMAYORISTA)>
+                  Cliente Mayorista
+              </option>
 					</select>
                   </div>
                 </div>

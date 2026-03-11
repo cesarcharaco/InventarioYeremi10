@@ -25,7 +25,7 @@ return new class extends Migration
             // Saber en qué sede se registró inicialmente
             $table->foreignId('id_local')->constrained('local'); 
             
-            $table->boolean('activo')->default(true);
+            $table->enum('activo',['activo','pendiente','suspendido'])->default('activo');
             $table->timestamps();
         });
     }

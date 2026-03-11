@@ -58,15 +58,17 @@
                     <td>{{ $user->cedula }}</td>
                     <td>{{ $user->email }}</td>
                     <td>
-                      @if($user->role === \App\Models\User::ROLE_SUPERADMIN)
-                        <span class="badge badge-danger">ADMINISTRADOR</span>
-                      @elseif($user->role === \App\Models\User::ROLE_ENCARGADO)
-                        <span class="badge badge-warning">ENCARGADO</span>
-                      @elseif($user->role === \App\Models\User::ROLE_ALMACENISTA)
-                        <span class="badge badge-primary">ALMACENISTA</span>
-                      @else
-                        <span class="badge badge-info">VENDEDOR</span>
-                      @endif
+                        @if($user->role === \App\Models\User::ROLE_SUPERADMIN)
+                            <span class="badge badge-danger">ADMINISTRADOR</span>
+                        @elseif($user->role === \App\Models\User::ROLE_ENCARGADO)
+                            <span class="badge badge-warning">ENCARGADO</span>
+                        @elseif($user->role === \App\Models\User::ROLE_ALMACENISTA)
+                            <span class="badge badge-primary">ALMACENISTA</span>
+                        @elseif($user->role === \App\Models\User::ROLE_CMAYORISTA)
+                            <span class="badge badge-success">CLIENTE MAYORISTA</span>
+                        @else
+                            <span class="badge badge-info">VENDEDOR</span>
+                        @endif
                     </td>
                     <td>
                       @if($user->localActual())

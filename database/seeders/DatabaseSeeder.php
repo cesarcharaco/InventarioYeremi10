@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-
+use App\Models\Configuracion;
 class DatabaseSeeder extends Seeder
 {
     /**
@@ -13,6 +13,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run()
     {
+        Configuracion::updateOrCreate(
+                ['clave' => 'tasa_bcv'], 
+                ['valor' => 433.17] // Valor de respaldo inicial
+            );
         $this->call(LocalTableSeeder::class);
         $this->call(UsersTableSeeder::class);
         $this->call(CategoriaSeeder::class);

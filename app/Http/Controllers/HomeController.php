@@ -6,8 +6,10 @@ use Illuminate\Http\Request;
 use App\Models\Insumos;
 use App\Models\Local;
 use App\Models\Incidencias;
+use App\Models\Configuracion;
 use App\Models\AutorizacionPin;
 use Illuminate\Support\Facades\Http;
+use App\Services\TasaCambioService;
 class HomeController extends Controller
 {
     /**
@@ -38,16 +40,7 @@ class HomeController extends Controller
 
         try {
             // 1. Obtener BCV (Scraping simple)
-            // Desactivamos verificación SSL porque a veces el certificado del BCV da problemas
-            $responseBcv = Http::withOptions(['verify' => false])->get('https://www.bcv.org.ve/');
-            if ($responseBcv->successful()) {
-                preg_match('/id="dolar".*?<strong>\s*(.*?)\s*<\/strong>/s', $responseBcv->body(), $matches);
-                $tasa_bcv = isset($matches[1]) ? (float) str_replace(',', '.', trim($matches[1])) : 0;
-
-                if ($tasa_bcv > 0) {
-                    cache(['tasa_bcv' => $tasa_bcv], now()->addMinutes(120));
-                }
-            }
+             $tasa_bcv = Configuracion::getTasa('tasa_bcv', $default = 433.17);
 
             // 2. Obtener Binance (API P2P con Headers)
                 $responseBinance = Http::withOptions([
@@ -79,6 +72,10 @@ class HomeController extends Controller
                         
                         // Calculamos el promedio de los primeros anuncios para ser más exactos
                         $tasa_binance = array_sum($precios) / count($precios);
+                        Configuracion::updateOrCreate(
+                                ['clave' => 'tasa_usdt'], 
+                                ['valor' => $tasa_binance] // Valor de respaldo inicial
+                            );
                     }
                 }
         } catch (\Exception $e) {

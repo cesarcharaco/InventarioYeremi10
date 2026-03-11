@@ -30,7 +30,6 @@ class Cliente extends Model
      * Atributos que deben ser convertidos a tipos nativos.
      */
     protected $casts = [
-        'activo' => 'boolean',
         'limite_credito' => 'decimal:2',
     ];
 
@@ -58,7 +57,7 @@ class Cliente extends Model
 
     public function scopeActivos($query)
     {
-        return $query->where('activo', true);
+        return $query->where('activo', 'activo');
     }
 
     public function scopeByIdentificacion($query, $id)

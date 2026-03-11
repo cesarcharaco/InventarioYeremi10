@@ -76,4 +76,8 @@ class Caja extends Model
         return $this->hasMany(ConfigOfertas::class, 'id_caja_origen');
     }
 
+    public function movimientos() {
+        return $this->hasMany(CajaMovimiento::class, 'id_caja');
+    }
+
 }

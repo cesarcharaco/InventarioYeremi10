@@ -129,15 +129,11 @@ class VentaController extends Controller
         $q->where('id_local', $local->id)->where('cantidad', '>', 0);
     })->get();
     
-    $clientes = Cliente::where('activo', true)
-        ->with(['creditos' => function($q) {
+    $clientes = Cliente::where('activo', 'activo')
+        ->withSum(['creditos as saldo_pendiente_total' => function($q) {
             $q->where('estado', 'pendiente');
-        }])
-        ->get()
-        ->map(function($cliente) {
-            $cliente->saldo_pendiente = $cliente->creditos->sum('saldo_pendiente');
-            return $cliente;
-        });
+        }], 'saldo_pendiente')
+        ->get();
     
     return view('ventas.create', compact(
         'productos', 
@@ -230,8 +226,9 @@ class VentaController extends Controller
             'monto_descuento_usd'  => $request->monto_descuento_usd ?? 0,
             'base_imponible_bs'    => $request->base_imponible_bs ?? 0,
             'iva_bs'               => $request->iva_bs ?? 0,
-            'aplica_abono'         => $request->has('aplica_abono')
+            'aplica_abono' => $request->has('pago_excedente_abono')
         ]);
+
 
         // 4. Referencias Bancarias (Tabla: pago_referencias)
         if ($request->has('referencias')) {
@@ -283,7 +280,7 @@ class VentaController extends Controller
                     'pago_usd_efectivo' => $request->exc_usd_efectivo ?? 0,
                     'pago_bs_efectivo'  => $request->exc_bs_efectivo ?? 0,
                     'detalles'          => "Abono automático desde Venta: " . $codigo,
-                    'estado'            => 'completado'
+                    'estado'            => 'Realizado'
                 ]);
 
                 // Bajamos el saldo pendiente

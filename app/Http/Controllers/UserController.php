@@ -36,7 +36,7 @@ class UserController extends Controller
             'cedula' => 'required|unique:users,cedula',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
-            'role' => 'required|in:admin,almacenista,encargado,vendedor',
+            'role' => 'required|in:admin,almacenista,encargado,vendedor,cliente_mayorista',
             'id_local' => 'required|exists:local,id'
         ]);
 

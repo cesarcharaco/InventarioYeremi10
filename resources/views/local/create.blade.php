@@ -50,6 +50,7 @@
                     <select name="tipo" id="tipo" class="form-control" required="required">
                         <option value="LOCAL">TIENDA (LOCAL)</option>
                         <option value="DEPOSITO">DEPÓSITO</option>
+                        <option value="OFICINA  ">OFICINA</option>
                     </select>
                     <small class="text-muted">Define si es punto de venta o almacenamiento.</small>
                   </div>

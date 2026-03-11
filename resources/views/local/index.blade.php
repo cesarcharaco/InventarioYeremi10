@@ -42,11 +42,19 @@
             <tr>
               <td><strong>{{ $key->nombre }}</strong></td>
               <td>
-                @if($key->tipo == 'DEPOSITO')
-                  <span class="badge badge-primary"><i class="fa fa-database"></i> DEPOSITO</span>
-                @else
-                  <span class="badge badge-info"><i class="fa fa-shopping-cart"></i> TIENDA LOCAL</span>
-                @endif
+                  @if($key->tipo == 'DEPOSITO')
+                      <span class="badge badge-primary">
+                          <i class="fa fa-database"></i> DEPÓSITO
+                      </span>
+                  @elseif($key->tipo == 'OFICINA')
+                      <span class="badge badge-warning text-dark">
+                          <i class="fa fa-building"></i> OFICINA
+                      </span>
+                  @else
+                      <span class="badge badge-info">
+                          <i class="fa fa-shopping-cart"></i> TIENDA LOCAL
+                      </span>
+                  @endif
               </td>
               <td class="text-center">
                 @if($key->estado == "Activo")

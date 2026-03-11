@@ -296,19 +296,32 @@
                         </div>
 
                         {{-- PUNTO 2: Sección de Abono Dinámica --}}
-                        <div id="seccion_abono_deuda" style="display: none;" class="alert alert-info border-info py-2">
+                        <!-- <div id="seccion_abono_deuda" style="display: none;" class="alert alert-info border-info py-2">
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="aplicar_abono" name="aplicar_abono">
                                 <label class="custom-control-label small font-weight-bold" for="aplicar_abono">
                                     ¿Abonar <span id="monto_abono_texto">$0.00</span> a la deuda?
                                 </label>
                             </div>
+                        </div> -->
+                        {{-- PUNTO 2: Sección de Abono Dinámica --}}
+                        <div id="seccion_abono_excedente" class="form-group mt-3 p-3 bg-light rounded border" style="display: none;">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="pago_excedente_abono" name="pago_excedente_abono">
+                                <label class="custom-control-label font-weight-bold text-info" for="pago_excedente_abono">
+                                    <i class="fa fa-hand-holding-usd"></i> 
+                                    ¿Desea abonar el excedente a la deuda del cliente?
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                El excedente de $<span id="monto_a_abonar">0.00</span> se aplicará como abono.
+                            </small>
                         </div>
 
                         <div class="toggle-flip mt-2">
                             <label>
                                 <input type="checkbox" id="switchCredito" name="es_credito">
-                                <span class="flip-indictor" data-toggle-on="CRÉDITO" data-toggle-off="CONTADO"></span>
+                                <span class="flip-indictor" data-toggle-on="CRÉDITO" data-toggle-off="CONTADO">A Crédito</span>
                             </label>
                         </div>
                         
@@ -839,19 +852,41 @@ $(document).ready(function() {
             $('#display_excedente_usd').text(`$ ${excesoUSD.toFixed(2)}`);
 
             if (deudaCliente > 0) {
-                $('#seccion_abono_excedente').fadeIn();
-                $('#monto_a_abonar').text(excesoUSD.toFixed(2));
-                
-                if (checkboxAbono.is(':checked')) {
-                    $('#btn-finalizar')
-                        .prop('disabled', false)
-                        .html('<i class="fa fa-check-circle"></i> FINALIZAR (+ ABONO)');
-                } else {
-                    $('#btn-finalizar')
-                        .prop('disabled', true)
-                        .html('<i class="fa fa-hand-paper"></i> ¿ES ABONO?');
-                }
+                // NUEVO: Validar si excedente supera la deuda
+        if (excesoUSD > deudaCliente) {
+            // Excedente mayor que deuda - BLOQUEAR
+            $('#seccion_abono_excedente').hide();
+            $('#btn-finalizar')
+                .prop('disabled', true)
+                .html('<i class="fa fa-ban"></i> EXCEDENTE SOBRE DEUDA');
+            
+            // Opcional: Mostrar alerta visual
+            Swal.fire({
+                icon: 'warning',
+                title: 'Excedente inválido',
+                text: `El excedente ($${excesoUSD.toFixed(2)}) supera la deuda ($${deudaCliente.toFixed(2)})`,
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
+            });
+        } else {
+            // Excedente menor o igual a deuda - PERMITIR ABONO
+            $('#seccion_abono_excedente').fadeIn();
+            $('#monto_a_abonar').text(excesoUSD.toFixed(2));
+            
+            if (checkboxAbono.is(':checked')) {
+                $('#btn-finalizar')
+                    .prop('disabled', false)
+                    .html('<i class="fa fa-check-circle"></i> FINALIZAR (+ ABONO)');
             } else {
+                $('#btn-finalizar')
+                    .prop('disabled', true)
+                    .html('<i class="fa fa-hand-paper"></i> ¿ES ABONO?');
+            }
+        }
+            } else {
+                // sin deuda no hay abono
                 $('#btn-finalizar')
                     .prop('disabled', true)
                     .html('<i class="fa fa-exclamation-triangle"></i> EXCESO');
@@ -1067,6 +1102,25 @@ $(document).ready(function() {
             $('#venta-form').append('<input type="hidden" name="tipo_documento" id="tipo_documento">');
         }
         $('#tipo_documento').val($('input[name="tipo_documento"]:checked').val());
+
+        // Monto abono (si aplica)
+        if ($('#pago_excedente_abono').is(':checked')) {
+            let montoAbono = parseFloat($('#confirm_monto_abono').text().replace('$ ', '')) || 0;
+            
+            if ($('#monto_excedente').length === 0) {
+                $('#venta-form').append('<input type="hidden" name="monto_excedente" id="monto_excedente">');
+            }
+            $('#monto_excedente').val(montoAbono.toFixed(2));
+            
+            // Para info_adicional
+            if ($('#aplica_abono').length === 0) {
+                $('#venta-form').append('<input type="hidden" name="aplica_abono" id="aplica_abono" value="1">');
+            }
+        } else {
+            // Remover si existe para no enviar basura
+            $('#monto_excedente').remove();
+            $('#aplica_abono').remove();
+        }
         // Mostrar el Modal
         $('#modalConfirmarVenta').modal('show');
     });
@@ -1385,6 +1439,10 @@ function resetBotonEstado(metodo, $boton, config) {
             }
             
             $('#info_cliente').show();
+        });
+
+        $(document).on('change', '#pago_excedente_abono', function() {
+            actualizarCalculoPagos();
         });
 });
 </script>

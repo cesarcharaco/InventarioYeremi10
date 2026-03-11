@@ -16,7 +16,7 @@ class User extends Authenticatable
     const ROLE_ALMACENISTA = 'almacenista';// El que mueve mercancía global
     const ROLE_ENCARGADO = 'encargado';     // El jefe de UNA tienda específica
     const ROLE_VENDEDOR = 'vendedor';       // Solo ventas
-
+    const ROLE_CMAYORISTA= 'cliente_mayorista'; // cliente mayorista
     protected $fillable = [
         'name', 'cedula', 'telefono', 'email', 'password', 'role', 'activo', 'foto'
     ];
@@ -63,5 +63,19 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Local::class, 'users_has_local', 'id_user', 'id_local')
                     ->withPivot('status');
+    }
+
+    public function interesesAplicados()
+    {
+        return $this->hasMany(CreditoInteres::class, 'id_user');
+    }
+
+    public function movimientosCaja() {
+        return $this->hasMany(CajaMovimiento::class, 'id_user');
+    }
+
+    public function pedidos()
+    {
+        return $this->hasMany(Pedido::class, 'user_id');
     }
 }
