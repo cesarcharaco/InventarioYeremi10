@@ -242,6 +242,12 @@
                                 <p>Productos al Mayor</p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="{{ route('pedidos.mis_pedidos') }}" class="nav-link {{ Request::is('mayorista/mis-pedidos*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-shopping-bag"></i>
+                                <p>Mis Pedidos</p>
+                            </a>
+                        </li>
                         {{-- Aquí iría tu ruta de pedidos, mantén la tuya original --}}
                     @else
                         {{-- Menú de gestión para el personal interno (Admin, Encargado, Vendedor) --}}
@@ -255,6 +261,12 @@
                                     <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
                                         <i class="fas fa-list-ul nav-icon text-info"></i>
                                         <p>Productos al Mayor</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="{{ route('insumos-mayores.gestion') }}" class="nav-link {{ Request::is('ofertas/gestion') ? 'active' : '' }}">
+                                        <i class="fas fa-cogs nav-icon text-warning"></i>
+                                        <p>Gestionar Ofertas</p>
                                     </a>
                                 </li>
                                 <li class="nav-item">

@@ -262,15 +262,33 @@ Route::get('graficas', function () {
         Route::get('/', [InsumosMayoresController::class, 'index'])->name('insumos-mayores.index');
         Route::get('/listas', [InsumosMayoresController::class, 'listarOfertas'])->name('insumos-mayores.listas');
         Route::get('/items/{id}', [InsumosMayoresController::class, 'verItems'])->name('insumos-mayores.items');
-        Route::get('/cargar-oferta', [InsumosMayoresController::class, 'createImport'])->name('insumos-mayores.formulario');
-        Route::post('/importar-oferta', [InsumosMayoresController::class, 'importar'])->name('insumos-mayores.importar');
         
         // Rutas de Pedidos (Añadidas aquí mismo para que no tengas que cambiar tus vistas)
         Route::post('/pedido/guardar', [InsumosMayoresController::class, 'guardarPedido'])->name('pedidos.store');
         Route::get('/mis-pedidos', [InsumosMayoresController::class, 'misPedidos'])->name('pedidos.mis_pedidos');
         Route::get('/pedido/detalle/{id}', [InsumosMayoresController::class, 'show'])->name('pedidos.show');
+        // Ruta para cargar el formulario de edición
+        Route::get('/pedido/{id}/editar', [InsumosMayoresController::class, 'editarPedido'])
+            ->name('pedidos.editar');
+        Route::get('/cargar-oferta', [InsumosMayoresController::class, 'createImport'])->name('insumos-mayores.formulario');
+        Route::post('/ofertas/importar', [InsumosMayoresController::class, 'importar'])->name('insumos-mayores.importar');
+        // Ruta para procesar la actualización
+        Route::put('/pedido/{id}/actualizar', [InsumosMayoresController::class, 'actualizarPedido'])
+            ->name('pedidos.actualizar');
+        Route::patch('/pedido/{id}/cancelar', [InsumosMayoresController::class, 'cancelarPedidoCliente'])
+        ->name('pedidos.cancelar.cliente');
     });
 
+    // --- GRUPO ADMIN (Aún dentro de auth, pero con protección extra) ---
+        Route::prefix('admin')->middleware(['admin'])->group(function () {
+            // Esta ruta SÓLO la verá el Admin, aunque esté en el mismo archivo
+            Route::patch('/pedido/{id}/cancelar-admin', [InsumosMayoresController::class, 'cancelarPedidoAdmin'])
+                ->name('pedidos.cancelar.admin');
+                Route::get('/ofertas/gestion', [InsumosMayoresController::class, 'gestionOfertas'])->name('insumos-mayores.gestion');
+            Route::get('/ofertas/{id}/editar', [InsumosMayoresController::class, 'editarLista'])->name('insumos-mayores.editar');
+            Route::put('/ofertas/{id}/actualizar', [InsumosMayoresController::class, 'actualizarLista'])->name('insumos-mayores.actualizar');
+            Route::delete('/ofertas/{id}/anular', [InsumosMayoresController::class, 'anularOferta'])->name('insumos-mayores.anular');
+        });
 
 
 });

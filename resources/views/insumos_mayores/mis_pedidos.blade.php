@@ -8,6 +8,24 @@
             <h1><i class="fa fa-briefcase"></i> Mi Historial de Pedidos</h1>
             <p>Seguimiento de tus compras al mayor en Yermotos</p>
         </div>
+        {{-- Bloque para mensajes de éxito o error --}}
+            @if (session('success'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fa fa-check-circle"></i> {{ session('success') }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            @endif
+
+            @if (session('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="fa fa-exclamation-triangle"></i> {{ session('error') }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            @endif
     </div>
 
     <div class="row">
@@ -49,6 +67,29 @@
                                     <a href="{{ route('pedidos.show', $pedido->id) }}" class="btn btn-info btn-sm">
                                         <i class="fa fa-eye"></i> Ver Detalle
                                     </a>
+                                    
+                                    {{-- Botón de Editar --}}
+                                    @if(in_array($pedido->estado, ['PENDIENTE', 'APROBADO']))
+                                        <a href="{{ route('pedidos.editar', $pedido->id) }}" 
+                                           class="btn btn-warning btn-sm" 
+                                           title="Editar cantidades de este pedido">
+                                            <i class="fa fa-edit"></i> Editar
+                                        </a>
+                                    @else
+                                        <button class="btn btn-secondary btn-sm" disabled 
+                                                title="Este pedido ya no puede ser editado (Estado: {{ $pedido->estado }})">
+                                            <i class="fa fa-lock"></i> Editar
+                                        </button>
+                                    @endif
+
+                                    @if(in_array($pedido->estado, ['PENDIENTE', 'APROBADO']))
+                                        <form action="{{ route('pedidos.cancelar.cliente', $pedido->id) }}" method="POST">
+                                            @csrf @method('PATCH')
+                                            <button type="submit" class="btn btn-danger btn-sm">Cancelar Pedido</button>
+                                        </form>
+                                    @else
+                                        <span class="badge badge-secondary">No cancelable</span>
+                                    @endif
                                 </td>
                             </tr>
                             @empty

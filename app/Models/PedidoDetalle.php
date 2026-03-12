@@ -10,7 +10,7 @@ class PedidoDetalle extends Model
 
     protected $fillable = [
         'pedido_id', 
-        'insumos_mayor_id', 
+        'insumos_mayores_id', 
         'cantidad_solicitada', 
         'cantidad_despachada', 
         'precio_unitario'
@@ -22,7 +22,7 @@ class PedidoDetalle extends Model
     }
 
     public function producto() {
-        return $this->belongsTo(InsumosMayor::class, 'insumos_mayor_id');
+        return $this->belongsTo(InsumosMayor::class, 'insumos_mayores_id');
     }
 
     /**
@@ -37,4 +37,6 @@ class PedidoDetalle extends Model
 
         return $cantidad * $this->precio_unitario;
     }
+
+    
 }

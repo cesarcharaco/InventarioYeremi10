@@ -14,11 +14,28 @@
             <h1><i class="fa fa-cart-plus"></i> Lista de Productos al Mayor</h1>
             <p>Monto mínimo requerido: <strong id="montoMinimoLabel">{{ number_format($lista->monto_minimo, 2) }}</strong> $</p>
         </div>
+        @if (session('error'))
+            <div class="alert alert-danger">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-danger">
+                <ul>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
     </div>
 
     {{-- Formulario General --}}
-    <form action="{{ route('pedidos.store') }}" method="POST" id="formPedido">
+    <form action="{{ route('pedidos.actualizar', $pedido->id) }}" method="POST" id="formPedido">
         @csrf
+        @method('PUT') {{-- Fundamental para que Laravel entienda que es una actualización --}}
+        
         <input type="hidden" name="lista_id" value="{{ $lista->id }}">
 
         {{-- Barra de Total fija en la parte superior al hacer scroll (Sticky) --}}
@@ -62,36 +79,38 @@
                     </thead>
                     <tbody>
                         @foreach($items as $item)
-                        @php
-                            // Buscamos si este producto específico ya está en el borrador
-                            $cantidadPrevia = 0;
-                            if ($pedidoExistente) {
-                                $detalle = $pedidoExistente->detalles->where('insumos_mayor_id', $item->id)->first();
-                                $cantidadPrevia = $detalle ? $detalle->cantidad_solicitada : 0;
-                            }
-                        @endphp
-                        <tr class="item-row" 
-                            data-codigo="{{ strtolower($item->codigo) }}" 
-                            data-descripcion="{{ strtolower($item->descripcion) }}">
-                            <td class="col-codigo"><strong>{{ $item->codigo }}</strong></td>
-                            <td class="col-descripcion">{{ $item->descripcion }}</td>
-                            <td class="text-right precio-unitario" data-precio="{{ $item->venta_usd }}">
-                                {{ number_format($item->venta_usd, 2) }} $
-                            </td>
-                            <td>
-                                {{-- select() al hacer foco para facilitar la edición rápida --}}
-                                <input type="number" 
-                                   name="cantidades[{{ $item->id }}]" 
-                                   class="form-control input-cantidad text-center" 
-                                   value="{{ $cantidadPrevia }}" 
-                                   min="0" 
-                                   onfocus="this.select()"
-                                   style="border: 2px solid #ddd;">
-                            </td>
-                            <td class="text-right font-weight-bold subtotal-display">0.00 $</td>
-                            {{-- Campo oculto para cálculo numérico preciso --}}
-                            <input type="hidden" class="subtotal-raw" value="0">
-                        </tr>
+                            @php
+                                // Buscamos usando el nombre de columna correcto de tu base de datos
+                                $cantidadPrevia = 0;
+                                if (isset($pedido)) {
+                                    // Usamos 'insumos_mayores_id' (plural) tal como está en tu esquema
+                                    $detalle = $pedido->detalles->where('insumos_mayores_id', $item->id)->first();
+                                    $cantidadPrevia = $detalle ? $detalle->cantidad_solicitada : 0;
+                                }
+                            @endphp
+                            
+                            <tr class="item-row" 
+                                data-codigo="{{ strtolower($item->codigo) }}" 
+                                data-descripcion="{{ strtolower($item->descripcion) }}">
+                                
+                                <td class="col-codigo"><strong>{{ $item->codigo }}</strong></td>
+                                <td class="col-descripcion">{{ $item->descripcion }}</td>
+                                <td class="text-right precio-unitario" data-precio="{{ $item->venta_usd }}">
+                                    {{ number_format($item->venta_usd, 2) }} $
+                                </td>
+                                <td>
+                                    {{-- La clave del array debe coincidir con el ID del producto --}}
+                                    <input type="number" 
+                                           name="cantidades[{{ $item->id }}]" 
+                                           class="form-control input-cantidad text-center" 
+                                           value="{{ $cantidadPrevia }}" 
+                                           min="0" 
+                                           onfocus="this.select()"
+                                           style="border: 2px solid #ddd;">
+                                </td>
+                                <td class="text-right font-weight-bold subtotal-display">0.00 $</td>
+                                <input type="hidden" class="subtotal-raw" value="0">
+                            </tr>
                         @endforeach
                     </tbody>
                 </table>

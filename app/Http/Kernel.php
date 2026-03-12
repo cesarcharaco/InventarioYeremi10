@@ -71,5 +71,6 @@ class Kernel extends HttpKernel
         // ...
        'guest' => \Illuminate\Auth\Middleware\RedirectIfAuthenticated::class,
        'caja.abierta' => \App\Http\Middleware\CheckCajaAbierta::class,
+       'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
     ];
 }

@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('monto_minimo', 10, 2)->default(0); 
             $table->decimal('incremento', 10, 2)->default(0); 
             // Estado para controlar la visibilidad rápidamente
-            $table->enum('estado', ['activo', 'caducado'])->default('activo');
+            $table->enum('estado', ['activo', 'caducado', 'ANULADA'])->default('activo');
             $table->timestamps();
         });
     }

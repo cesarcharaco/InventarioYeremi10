@@ -20,8 +20,9 @@ class Pedido extends Model
     ];
 
     // Relaciones
-    public function detalles() {
-        return $this->hasMany(PedidoDetalle::class);
+    public function detalles()
+    {
+        return $this->hasMany(PedidoDetalle::class, 'pedido_id');
     }
     
     public function cliente() {

@@ -65,6 +65,20 @@
                           <a href="{{ route('insumos-mayores.items', $lista->id) }}" class="btn btn-info btn-sm">
                               <i class="fa fa-eye"></i> Ver Productos
                           </a>
+                          {{-- Lógica: ¿Tiene pedidos activos? --}}
+                            @php
+                                $tienePedidosActivos = $lista->pedidos()->whereIn('estado', ['PENDIENTE', 'APROBADO'])->exists();
+                            @endphp
+
+                            @if(!$tienePedidosActivos && $lista->estado === 'ACTIVA')
+                                <a href="{{ route('insumos-mayores.editar', $lista->id) }}" class="btn btn-warning btn-sm">
+                                    <i class="fa fa-edit"></i> Editar
+                                </a>
+                            @else
+                                <button class="btn btn-secondary btn-sm" disabled title="No editable: Existen pedidos activos o la lista no está activa">
+                                    <i class="fa fa-lock"></i> Bloqueado
+                                </button>
+                            @endif
                       </td>
                   </tr>
                   @endforeach
