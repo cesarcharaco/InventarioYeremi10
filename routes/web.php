@@ -26,6 +26,7 @@ use App\Http\Controllers\EntradaController;
 use App\Http\Controllers\ConfigOfertaController;
 use App\Http\Controllers\MovimientoCajaController;
 use App\Http\Controllers\InsumosMayoresController;
+use App\Http\Controllers\NotificationController;
 
 
 /*
@@ -290,5 +291,14 @@ Route::get('graficas', function () {
             Route::delete('/ofertas/{id}/anular', [InsumosMayoresController::class, 'anularOferta'])->name('insumos-mayores.anular');
         });
 
+    //NOTIFICACIONES
+        // Marcar una sola notificación como leída (al hacer clic en ella)
+        Route::get('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+        
+        // Marcar todas como leídas (el botón de "Limpiar todo")
+        Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead'])->name('notifications.markAllRead');
+        
+        // Opcional: Una vista general de todas las notificaciones
+        Route::get('/notifications/all', [NotificationController::class, 'index'])->name('notifications.index');
 
 });

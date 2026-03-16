@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Gate;
 use Yajra\DataTables\Facades\DataTables;
 use App\Imports\InsumosImport;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Notifications\StockBajoNotification;
+use App\Models\User;
 
 class InsumosController extends Controller
 {
@@ -199,6 +201,20 @@ class InsumosController extends Controller
                         'id_local'  => $local_id,
                         'cantidad'  => $request->cantidad[$local_id] ?? 0, // Usamos la nueva columna cantidad
                     ]);
+                    // LÓGICA DE NOTIFICACIÓN
+                    if ($nuevaCantidad <= ($request->stock_min ?? 0)) {
+                        $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                        $detalles = [
+                            'titulo'  => '¡Stock Inicial Bajo!',
+                            'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$nuevaCantidad}) en un local.",
+                            'url'     => route('insumos.index'),
+                            'icono'   => 'fas fa-exclamation-triangle'
+                        ];
+                        
+                        foreach ($gerentes as $gerente) {
+                            $gerente->notify(new StockBajoNotification($detalles));
+                        }
+                    }
                 }
             }
 
@@ -252,7 +268,30 @@ class InsumosController extends Controller
                 'stock_min'         => $request->stock_min, // Actualizado en insumos
                 'stock_max'         => $request->stock_max, // Actualizado en insumos
             ]);
+            // --- LÓGICA DE NOTIFICACIÓN AUTOMÁTICA AL ACTUALIZAR ---
+            // Consultamos las cantidades actuales en todos los locales para este insumo
+            $stocksLocales = DB::table('insumos_has_cantidades')
+                ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
+                ->where('id_insumo', $id)
+                ->get();
 
+            foreach ($stocksLocales as $stockLocal) {
+                if ($stockLocal->cantidad <= $request->stock_min) {
+                    // Notificar a los administradores/gerentes
+                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $detalles = [
+                        'titulo'  => 'Stock Crítico tras Actualización',
+                        'mensaje' => "El producto {$request->producto} está por debajo del nuevo mínimo en {$stockLocal->nombre}.",
+                        'url'     => route('insumos.index'),
+                        'icono'   => 'fas fa-sync-alt'
+                    ];
+
+                    foreach ($gerentes as $gerente) {
+                        $gerente->notify(new StockBajoNotification($detalles));
+                    }
+                }
+            }
+            // -------------------------------------------------------
             DB::commit();
             
             $mensaje = "Insumo actualizado correctamente.";
@@ -419,18 +458,5 @@ class InsumosController extends Controller
             ->make(true);
     }
 
-    /*public function importar(Request $request) 
-    {
-        $request->validate(['archivo' => 'required|mimes:csv,xlsx']);
-
-        try {
-            // 2. Importar usando la clase que preparamos (InsumosImport)
-            // El proceso de incremento de precio ocurre dentro de InsumosImport
-            Excel::import(new InsumosImport, $request->file('archivo'));
-
-            return back()->with('success', 'Oferta procesada y precios actualizados correctamente.');
-        } catch (\Exception $e) {
-            return back()->with('error', 'Error al procesar el archivo: ' . $e->getMessage());
-        }
-    }*/
+    
 }

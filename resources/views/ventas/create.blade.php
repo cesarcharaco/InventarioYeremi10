@@ -119,15 +119,21 @@
                                 <select id="buscador_insumos" class="form-control select2-custom">
                                     <option value="">Buscar por producto, descripción o serial...</option>
                                     @foreach($productos as $p)
-                                        @php $stockLocal = $p->existencias->first()->cantidad ?? 0; @endphp
-                                        <option value="{{ $p->id }}" 
-                                                data-descripcion="{{ $p->descripcion }}"
-                                                data-bcv="{{ $p->precio_venta_usd }}"
-                                                data-bs="{{ $p->precio_venta_bs }}"
-                                                data-stock="{{ $stockLocal }}">
-                                            {{ $p->producto }}
-                                        </option>
-                                    @endforeach
+                                    @php 
+                                        // Buscamos la existencia específica para el local actual del usuario
+                                        $existenciaLocal = $p->existencias->where('id_local', $local->id)->first();
+                                        // Mantenemos el nombre stockLocal para que coincida con tu lógica previa si es necesario
+                                        $stockLocal = $existenciaLocal ? $existenciaLocal->cantidad : 0; 
+                                    @endphp
+                                    <option value="{{ $p->id }}" 
+                                            data-descripcion="{{ $p->descripcion }}"
+                                            data-bcv="{{ $p->precio_venta_usd }}"
+                                            data-bs="{{ $p->precio_venta_bs }}"
+                                            data-stock="{{ $stockLocal }}"
+                                            data-serial="{{ $p->serial }}">
+                                        {{ $p->producto }} (Stock: {{ $stockLocal }})
+                                    </option>
+                                @endforeach
                                 </select>
                             </div>
                         </div>
@@ -543,7 +549,7 @@ $(document).ready(function() {
         // Formateo de precios para visualización limpia
         let precioBCV = parseFloat(data.bcv).toFixed(2);
         let precioBS = parseFloat(data.bs).toFixed(2);
-        let stock = parseInt(data.stock);
+        let stock = parseInt(data.stock) || 0;
 
         var $container = $(
             `<div class='select2-result-repository clearfix' style='${stock <= 0 ? "opacity: 0.6;" : ""}'>

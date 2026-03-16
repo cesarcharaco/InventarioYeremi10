@@ -20,6 +20,9 @@ use Illuminate\Support\Facades\Gate;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use App\Notifications\StockBajoNotification;
+use App\Models\User;
+use App\Models\Configuracion;
 
 class VentaController extends Controller
 {
@@ -105,7 +108,7 @@ class VentaController extends Controller
         return redirect()->route('cajas.create')->with('error', 'No hay una caja abierta en este local.');
     }
 
-    $tasa_bcv = cache('tasa_bcv', 0);
+    $tasa_bcv = Configuracion::getTasa('tasa_bcv');
     if ($tasa_bcv == 0) {
         return redirect()->route('home')->with('error', 'Actualizando valor de TASA BCV');
     }
@@ -123,12 +126,19 @@ class VentaController extends Controller
     $descuentos = [10, 15, 20, 25, 30, 35, 40, 45, 50];
 
     // Carga de productos (Insumos) con stock en el local actual
-    $productos = Insumos::with(['existencias' => function($q) use ($local) {
+    /*$productos = Insumos::with(['existencias' => function($q) use ($local) {
         $q->where('id_local', $local->id);
     }])->whereHas('existencias', function($q) use ($local) {
         $q->where('id_local', $local->id)->where('cantidad', '>', 0);
-    })->get();
-    
+    })->get();*/
+    $productos = Insumos::with(['existencias' => function($q) use ($local) {
+        $q->where('id_local', $local->id);
+    }])
+    ->whereHas('existencias', function($q) use ($local) {
+        $q->where('id_local', $local->id)->where('cantidad', '>', 0);
+    })
+    ->get();
+
     $clientes = Cliente::where('activo', 'activo')
         ->withSum(['creditos as saldo_pendiente_total' => function($q) {
             $q->where('estado', 'pendiente');
@@ -261,6 +271,23 @@ class VentaController extends Controller
             }
 
             $existencia->decrement('cantidad', $item['cantidad']);
+            // --- NUEVA LÓGICA DE ALERTA DE STOCK ---
+            $insumoBase = Insumos::find($item['id_insumo']);
+            $nuevaCantidad = $existencia->fresh()->cantidad;
+
+            if ($nuevaCantidad <= $insumoBase->stock_min) {
+                $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                $detalles = [
+                    'titulo'  => '¡Stock Agotándose!',
+                    'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
+                    'url'     => route('insumos.index'),
+                    'icono'   => 'fas fa-exclamation-triangle text-danger'
+                ];
+
+                foreach ($gerentes as $gerente) {
+                    $gerente->notify(new StockBajoNotification($detalles));
+                }
+            }
         }
 
         // 6. Lógica de ABONO AUTOMÁTICO (Si el cliente tenía deuda y pagó de más)
@@ -302,8 +329,20 @@ class VentaController extends Controller
                 'saldo_pendiente'   => $request->monto_credito_usd,
                 'fecha_vencimiento' => now()->addDays(15), 
                 'estado'            => 'pendiente',
-                'tasa_cambio_origen'=> cache('tasa_bcv')
+                'tasa_cambio_origen'=> Configuracion::getTasa('tasa_bcv')
             ]);
+            /*Notificaciones*/
+            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+            $detalles = [
+                'titulo'  => '💸 Nueva Venta a Crédito',
+                'mensaje' => "Se otorgó un crédito de {$request->monto_credito_usd}$ a {$request->cliente_nombre}.",
+                'url'     => route('creditos.index'), // Ajusta a tu ruta de créditos
+                'icono'   => 'fas fa-hand-holding-usd text-info'
+            ];
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
         }
 
         DB::commit();
@@ -341,6 +380,19 @@ class VentaController extends Controller
                 'updated_at' => now()
             ]
         );
+
+        // --- NOTIFICACIÓN AL GERENTE ---
+            $gerentes = User::whereIn('role', ['admin'])->get();
+            $detalles = [
+                'titulo'  => '🔐 Solicitud de PIN',
+                'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para una venta de {$request->monto_total}$",
+                'url'     => '#', // O al dashboard de autorizaciones si tienes uno
+                'icono'   => 'fas fa-key text-warning'
+            ];
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
 
         return response()->json(['success' => true, 'message' => 'PIN generado en Dashboard']);
     }

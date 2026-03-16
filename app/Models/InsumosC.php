@@ -13,7 +13,8 @@ class InsumosC extends Model
     protected $fillable = [
         'id_insumo',
         'id_local',
-        'cantidad' // Única columna de stock físico
+        'cantidad', // Única columna de stock físico
+        'estado_local'
     ];
 
     /**
