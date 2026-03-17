@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Notifications\StockBajoNotification;
 
 class ClienteController extends Controller
 {
@@ -100,6 +101,20 @@ class ClienteController extends Controller
                 
                 // Creamos cliente
                 Cliente::create($datos);
+                // --- NOTIFICAR A TODOS LOS ADMINISTRATIVOS ---
+                $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+
+                $detalles = [
+                    'titulo'  => '🆕 Nuevo Mayorista Pendiente',
+                    'mensaje' => "El cliente {$datos['nombre']} se ha registrado y espera activación.",
+                    'url'     => route('clientes.index'), 
+                    'icono'   => 'fas fa-user-clock text-info'
+                ];
+
+                foreach ($gerentes as $gerente) {
+                    $gerente->notify(new StockBajoNotification($detalles));
+                }
+                // ----------------------------------------------
                 auth()->logout(); // cerrando inicio de sesion automatico
                 $mensaje = 'Tu registro ha sido enviado. Un administrador lo revisará pronto.';
                 $ruta = 'login';
