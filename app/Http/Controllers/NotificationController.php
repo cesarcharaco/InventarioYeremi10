@@ -42,4 +42,15 @@ class NotificationController extends Controller
         $notifications = auth()->user()->notifications()->paginate(15);
         return view('notifications.index', compact('notifications'));
     }
+
+    public function count()
+    {
+        if (!auth()->check()) {
+            return response()->json(['count' => 0]);
+        }
+        
+        return response()->json([
+            'count' => auth()->user()->unreadNotifications->count()
+        ]);
+    }
 }

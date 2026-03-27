@@ -290,7 +290,10 @@ Route::get('graficas', function () {
             Route::put('/ofertas/{id}/actualizar', [InsumosMayoresController::class, 'actualizarLista'])->name('insumos-mayores.actualizar');
             Route::delete('/ofertas/{id}/anular', [InsumosMayoresController::class, 'anularOferta'])->name('insumos-mayores.anular');
         });
-
+        Route::get('/forzar-tasa', function() {
+            \App\Services\TasaCambioService::actualizarTodasLasTasas();
+            return "Tasa actualizada manualmente";
+        })
     //NOTIFICACIONES
         // Marcar una sola notificación como leída (al hacer clic en ella)
         Route::get('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
@@ -300,5 +303,6 @@ Route::get('graficas', function () {
         
         // Opcional: Una vista general de todas las notificaciones
         Route::get('/notifications/all', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('/notifications/count', [NotificationController::class, 'count'])->name('notifications.count');
 
 });

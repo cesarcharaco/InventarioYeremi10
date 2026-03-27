@@ -61,6 +61,49 @@ $(document).ready(function() {
         allowClear: true,
         width: '100%'
     });
+
+
+
 }); 
+// Variable para llevar la cuenta actual
+let currentNotificationCount = {{ auth()->check() ? auth()->user()->unreadNotifications->count() : 0 }};
+
+function checkNotifications() {
+    @guest
+        return;
+    @endguest
+    $.ajax({
+        url: "{{ route('notifications.count') }}",
+        method: "GET",
+        success: function(data) {
+            // Si el nuevo conteo es mayor al que teníamos, algo nuevo llegó
+            if (data.count > currentNotificationCount) {
+                playNotificationSound();
+                
+                // Opcional: Actualizar el número en la campanita visualmente
+                $('.navbar-badge').text(data.count).show();
+                
+                // Actualizamos nuestra variable local
+                currentNotificationCount = data.count;
+            } else {
+                currentNotificationCount = data.count;
+            }
+        }
+    });
+}
+
+function playNotificationSound() {
+    const audio = new Audio("{{ asset('sounds/notification.mp3') }}");
+    
+    // Los navegadores modernos bloquean el sonido si el usuario no ha interactuado
+    // con la página primero. Esto intenta reproducirlo y maneja el error.
+    audio.play().catch(function(error) {
+        console.log("El navegador bloqueó el sonido automático hasta que hagas clic en algo.");
+    });
+}
+
+// Ejecutar cada 30 segundos
+setInterval(checkNotifications, 30000);
+
 </script>
 
