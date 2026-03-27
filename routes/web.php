@@ -293,7 +293,7 @@ Route::get('graficas', function () {
         Route::get('/forzar-tasa', function() {
             \App\Services\TasaCambioService::actualizarTodasLasTasas();
             return "Tasa actualizada manualmente";
-        })
+        });
     //NOTIFICACIONES
         // Marcar una sola notificación como leída (al hacer clic en ella)
         Route::get('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
