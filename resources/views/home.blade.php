@@ -145,6 +145,16 @@
       <div class="widget-small warning coloured-icon"><i class="icon fa fa-money fa-3x"></i>
         <div class="info">
           <h4>Tasas del Día</h4>
+          @if(auth()->user()->hasRole('admin'))
+              <div class="text-left mb-2">
+                <a href="javascript:void(0);" 
+                   onclick="actualizarTasaManual(this)" 
+                   class="btn btn-sm btn-warning shadow-sm" 
+                   style="font-weight: bold; font-size: 11px;">
+                    <i class="fa fa-refresh" id="icon-refresh"></i> ACTUALIZAR TASA
+                </a>
+            </div>
+          @endif
           <p style="font-size: 14px; margin-bottom: 0;">
             <b>BCV:</b> {{ number_format($tasa_bcv, 2, ',', '.') }} Bs.
           </p>
@@ -228,6 +238,28 @@ function cargarPinesActivos() {
 // Ejecución inicial y temporizador
 setInterval(cargarPinesActivos, 10000);
 cargarPinesActivos();
+
+function actualizarTasaManual(btn) {
+    let $icon = $(btn).find('#icon-refresh');
+    
+    // Evitar múltiples clics y animar el icono
+    if ($icon.hasClass('fa-spin')) return;
+    $icon.addClass('fa-spin');
+
+    $.ajax({
+        url: "{{ url('/update-tasa-manual') }}", // Usando la ruta que te funcionó
+        method: "GET",
+        success: function(response) {
+            // Recargamos la página para ver los cambios en todo el sistema 
+            // o podrías actualizar solo los spans si prefieres
+            location.reload(); 
+        },
+        error: function(xhr) {
+            $icon.removeClass('fa-spin');
+            alert("Error al conectar con el servidor: " + xhr.statusText);
+        }
+    });
+}
 </script>
 @endcan
 @endsection
