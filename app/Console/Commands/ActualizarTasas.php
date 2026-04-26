@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-
+use App\Services\TasaCambioService;
 class ActualizarTasas extends Command
 {
     protected $signature = 'tasas:actualizar';

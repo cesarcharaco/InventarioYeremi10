@@ -51,7 +51,7 @@ class InsumosMayoresController extends Controller
             'incremento'    => 'required|numeric',
             'archivo'       => 'required|mimes:csv,xlsx'
         ]);
-
+        
         try {
             // 2. Crear primero la cabecera (ListasOfertas)
             $lista = ListasOferta::create([

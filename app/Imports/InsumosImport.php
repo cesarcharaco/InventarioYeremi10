@@ -3,41 +3,58 @@
 namespace App\Imports;
 
 use App\Models\InsumosMayor;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\ToCollection;
 
-class InsumosImport implements ToModel, WithHeadingRow
+class InsumosImport implements ToCollection
 {
     private $lista_id;
     private $incremento;
 
-    // Solo añadimos el constructor para recibir el ID
-    public function __construct($lista_id,$incremento)
+    public function __construct($lista_id, $incremento)
     {
         $this->lista_id = $lista_id;
         $this->incremento = $incremento;
+    }
 
-    }
-    // Esto le dice al paquete que el encabezado está en la fila 9
-    public function headingRow(): int
+    public function collection(Collection $rows)
     {
-        return 10; 
-    }
-    public function model(array $row)
-    {
-        //dd($row);
-        // Aplicamos el incremento (ejemplo: 10% adicional)
-        $costo = (float) ($row[3] ?? 0); // Ajusta 'precio' al nombre exacto de la columna en tu Excel
+        $headerIndex = null;
+
+        // 1. Encontrar la fila del encabezado dinámicamente
+        foreach ($rows as $index => $row) {
+            // Buscamos la fila donde la primera columna diga "CÓDIGO"
+            if (isset($row[0]) && trim($row[0]) === 'CÓDIGO') {
+                $headerIndex = $index;
+                break;
+            }
+        }
+
+        if ($headerIndex === null) {
+            throw new \Exception("No se encontró el encabezado 'CÓDIGO' en el archivo.");
+        }
         
-        
-        return new InsumosMayor([
-            'lista_oferta_id' => $this->lista_id,
-            'codigo'      => (string) $row[0],
-            'descripcion' => $row[1],
-            'aplicativo'  => $row[2],
-            'costo_usd'   => $costo,
-            'venta_usd'   => round(($costo / $this->incremento), 2),
-            'estado'      => 'activo'
-        ]);
+        // 2. Procesar solo a partir de la fila siguiente al encabezado
+        for ($i = $headerIndex + 1; $i < $rows->count(); $i++) {
+            $row = $rows[$i];
+
+            // VALIDACIÓN CRÍTICA: Si el código está vacío, omitimos la fila
+            if (empty($row[0])) {
+                continue; 
+            }
+
+            // Mapeo (Ajusta los índices [x] según tu CSV real después de ver el dd)
+            $costo = (float) ($row[6] ?? 0);
+
+            InsumosMayor::create([
+                'lista_oferta_id' => $this->lista_id,
+                'codigo'          => (string) $row[0],
+                'descripcion'     => $row[1],
+                'aplicativo'      => $row[5] ?? 'N/A',
+                'costo_usd'       => $costo,
+                'venta_usd'       => $this->incremento > 0 ? round(($costo / $this->incremento), 2) : 0,
+                'estado'          => 'activo'
+            ]);
+        }
     }
 }
