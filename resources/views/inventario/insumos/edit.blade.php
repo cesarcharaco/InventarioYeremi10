@@ -84,6 +84,20 @@
             <input class="form-control" type="number" name="stock_max" value="{{ $insumo->stock_max }}" min="0">
           </div>
         </div>
+        <div class="col-md-4 form-group">
+            <label class="font-weight-bold">Serial / Código de Barra</label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-barcode"></i></span>
+                </div>
+                <input type="text" 
+                       name="serial" 
+                       id="serial" 
+                       class="form-control" 
+                       value="{{ $insumo->serial }}" 
+                       placeholder="Escanear o editar serial">
+            </div>
+        </div>
       </div>
 
       <div class="tile-footer">

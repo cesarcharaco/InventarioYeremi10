@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Venta;
 use App\Models\DetalleVenta;
+use App\Models\ModeloVenta;
+use App\Models\Categoria;
 use App\Models\Credito;
 use App\Models\Insumos;
 use App\Models\InsumosC;
@@ -144,7 +146,8 @@ class VentaController extends Controller
             $q->where('estado', 'pendiente');
         }], 'saldo_pendiente')
         ->get();
-    
+    $categorias = Categoria::orderBy('categoria', 'asc')->get();
+    $modelosVenta = ModeloVenta::orderBy('modelo', 'asc')->get();
     return view('ventas.create', compact(
         'productos', 
         'clientes', 
@@ -154,7 +157,9 @@ class VentaController extends Controller
         'correlativo_sugerido', 
         'descuentos',
         'ofertasActivas',
-        'motivoOferta'
+        'motivoOferta',
+        'categorias',
+        'modelosVenta'
     ));
 }
 

@@ -69,6 +69,9 @@
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
+                                <div class="input-group-append">
+                                        <button class="btn btn-primary" title="Agregar un nuevo cliente" type="button" data-toggle="modal" data-target="#modalClienteRapido"><i class="fa fa-user-plus"></i></button>
+                                    </div>
                                 <label class="font-weight-bold mb-2" style="font-size: 1.1rem;"><i class="fa fa-user"></i> Cliente
                                 <span id="info_cliente" style="display: none; margin-left: 10px; vertical-align: middle;">
                                                 <span class="badge badge-light border text-muted px-2 py-1" style="font-size: 0.85rem; font-weight: normal;">
@@ -105,9 +108,8 @@
                                         @endforeach
                                     </select>
                                     
-                                    <div class="input-group-append">
-                                        <button class="btn btn-primary" type="button" data-toggle="modal" data-target="#modalClienteRapido"><i class="fa fa-plus"></i></button>
-                                    </div>
+                                    
+
                                 </div>
                                 {{-- Info de deuda para el cajero --}}
                                 <small id="info_deuda_cliente" class="form-text text-danger font-weight-bold"></small>
@@ -115,6 +117,11 @@
                         </div>
                         <div class="col-md-8">
                             <div class="form-group">
+                                @if('crear-configuracion')
+                                <div class="input-group-append">
+                                        <button class="btn btn-primary" title="Agregar un nuevo insumo" type="button" data-toggle="modal" data-target="#modalInsumoRapido"><i class="fa fa-cubes"></i><i class="fa fa-plus ml-1" style="font-size: 0.75rem; vertical-align: super;"></i></button>
+                                </div>
+                                @endif
                                 <label class="font-weight-bold text-primary"><i class="fa fa-search"></i> Buscador de Insumos</label>
                                 <select id="buscador_insumos" class="form-control select2-custom">
                                     <option value="">Buscar por producto, descripción o serial...</option>
@@ -135,6 +142,7 @@
                                     </option>
                                 @endforeach
                                 </select>
+
                             </div>
                         </div>
                     </div>
@@ -359,7 +367,7 @@
     </form>
     @endif
 </main>
-
+@include('ventas.modal_insumo')
 {{-- PUNTO 5: Modales de Seguridad --}}
 <div class="modal fade" id="modalAvisoAutorizacion" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-sm modal-dialog-centered">

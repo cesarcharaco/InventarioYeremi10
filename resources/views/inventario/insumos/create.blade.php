@@ -60,6 +60,22 @@
                   <input class="form-control" type="number" name="stock_max" required value="0" min="0">
                 </div>
             </div>
+            <div class="col-md-4 form-group">
+                <label class="font-weight-bold">Serial / Código de Barra</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-barcode"></i></span>
+                    </div>
+                    <input type="text" 
+                           name="serial" 
+                           id="serial" 
+                           class="form-control" 
+                           placeholder="Escanear o dejar vacío para auto-generar">
+                </div>
+                <small class="form-text text-muted">
+                    <i class="fa fa-info-circle text-primary"></i> Si lo dejas en blanco, el sistema asignará uno automático.
+                </small>
+            </div>
         </div>
 
         <hr>

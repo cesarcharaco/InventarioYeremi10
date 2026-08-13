@@ -174,7 +174,9 @@ class InsumosController extends Controller
             'modelo_venta_id' => 'required|exists:modelos_venta,id',
         ]);
 
-        $serial = $this->generarSerialInsumo($request->categoria_id);
+        $serial = $request->filled('serial') 
+                ? $request->serial 
+                : $this->generarSerialInsumo($request->categoria_id);
         $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
         $precios = $modelo->calcularPrecios($request->costo);
 
@@ -247,9 +249,16 @@ class InsumosController extends Controller
             $insumoActual = Insumos::findOrFail($id);
             $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
             
-            $serialFinal = ($insumoActual->categoria_id != $request->categoria_id) 
-                ? $this->generarSerialInsumo($request->categoria_id) 
-                : $insumoActual->serial;
+            if ($request->filled('serial') && $request->serial !== $insumoActual->serial) {
+                // 1. Prioridad: Serial manual escrito/escaneado por el usuario
+                $serialFinal = $request->serial;
+            } elseif ($insumoActual->categoria_id != $request->categoria_id) {
+                // 2. Cambió la categoría y no escribió manual: Regenera por categoría
+                $serialFinal = $this->generarSerialInsumo($request->categoria_id);
+            } else {
+                // 3. Sin cambios en categoría ni serial manual: Mantiene el existente
+                $serialFinal = $insumoActual->serial;
+            }
 
             $costo = $insumoActual->costo;
             $p_usd  = $costo / $modelo->factor_bcv;
@@ -458,5 +467,92 @@ class InsumosController extends Controller
             ->make(true);
     }
 
-    
+    public function storeRapido(Request $request)
+    {
+        // 1. Autorización y Validación
+        $this->authorize('gestionar-insumos');
+        
+        $request->validate([
+            'producto'        => 'required|string|max:255',
+            'descripcion'     => 'nullable|string',
+            'categoria_id'    => 'required|exists:categorias,id',
+            'costo'           => 'required|numeric|min:0',
+            'modelo_venta_id' => 'required|exists:modelos_venta,id',
+            'id_local'        => 'required|exists:local,id',
+            'cantidad'        => 'required|integer|min:1',
+        ]);
+
+        // 2. Serial y Cálculo de Precios
+        $serial = $request->filled('serial') 
+                ? $request->serial 
+                : $this->generarSerialInsumo($request->categoria_id);
+
+        $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
+        $precios = $modelo->calcularPrecios($request->costo);
+
+        $stockMinimo = 10;
+        $stockMaximo = 100;
+
+        DB::beginTransaction();
+        try {
+            // 3. Creación del Insumo
+            $insumo = Insumos::create([
+                'producto'          => $request->producto,
+                'descripcion'       => $request->descripcion ?? $request->producto,
+                'serial'            => $serial,
+                'categoria_id'      => $request->categoria_id,
+                'stock_min'         => $stockMinimo,
+                'stock_max'         => $stockMaximo,
+                'costo'             => $request->costo,
+                'modelo_venta_id'   => $request->modelo_venta_id,
+                'precio_venta_usd'  => $precios['precio_venta_usd'],
+                'precio_venta_bs'   => $precios['precio_venta_bs'],
+                'precio_venta_usdt' => $precios['precio_venta_usdt']
+            ]);
+
+            // 4. Existencia Inicial en InsumosC
+            $cantidadInicial = (int) $request->cantidad;
+
+            InsumosC::create([
+                'id_insumo' => $insumo->id,
+                'id_local'  => $request->id_local,
+                'cantidad'  => $cantidadInicial,
+            ]);
+
+            // 5. Notificación Protegida
+            if ($cantidadInicial <= $stockMinimo) {
+                try {
+                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $detalles = [
+                        'titulo'  => '¡Stock Inicial Bajo!',
+                        'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$cantidadInicial}) en el local.",
+                        'url'     => route('insumos.index'),
+                        'icono'   => 'fas fa-exclamation-triangle'
+                    ];
+                    
+                    foreach ($gerentes as $gerente) {
+                        $gerente->notify(new StockBajoNotification($detalles));
+                    }
+                } catch (\Exception $eNotif) {
+                    // Silenciamos fallo puntual de correo/notificación
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Insumo creado y asignado con éxito',
+                'insumo'  => $insumo,
+                'stock'   => $cantidadInicial
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al registrar insumo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
