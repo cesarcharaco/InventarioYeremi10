@@ -36,6 +36,7 @@
               <th>Categoría</th>
               <th>Serial</th>
               <th>Cant.</th>
+              <th>Observación</th>
             </tr>
           </thead>
           <tbody>
@@ -48,6 +49,15 @@
               <td><span class="badge badge-info">{{ $d->insumo->categoria->nombre ?? 'N/A' }}</span></td>
               <td>{{ $d->insumo->serial }}</td>
               <td class="text-center font-weight-bold">{{ $d->cantidad }}</td>
+              <td>
+                @if(!empty($d->venta->observacion))
+                    <span class="badge badge-info" data-toggle="tooltip" title="{{ $d->venta->observacion }}">
+                        <i class="fa fa-comment"></i> {{ $d->venta->observacion }}
+                    </span>
+                @else
+                    <span class="text-muted small"><i>Sin nota</i></span>
+                @endif
+            </td>
             </tr>
             @endforeach
           </tbody>

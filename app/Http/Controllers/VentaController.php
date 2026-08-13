@@ -225,7 +225,8 @@ class VentaController extends Controller
             'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
             'monto_credito_usd' => $request->monto_credito_usd ?? 0,
             'total_usd'         => $request->total_usd, // El total neto enviado desde la vista
-            'estado'            => 'completada'
+            'estado'            => 'completada',
+            'observacion'       => $request->observacion
         ]);
 
         // 3. Extensión de información (Tabla: ventas_info_adicional)

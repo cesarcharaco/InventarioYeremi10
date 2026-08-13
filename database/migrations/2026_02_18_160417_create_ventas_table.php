@@ -24,6 +24,7 @@ return new class extends Migration
             $table->decimal('monto_credito_usd', 12, 2)->default(0);
             $table->decimal('total_usd', 12, 2)->default(0);
             $table->enum('estado', ['completada', 'anulada'])->default('completada');
+            $table->text('observacion')->nullable();
             $table->timestamps();
         });
     }

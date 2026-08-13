@@ -21,7 +21,8 @@ class Venta extends Model
         'pago_bs_efectivo',
         'monto_credito_usd',
         'total_usd',
-        'estado'
+        'estado',
+        'observacion'
     ];
 
     // --- RELACIONES ---

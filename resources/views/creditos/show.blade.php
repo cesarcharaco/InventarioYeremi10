@@ -109,9 +109,11 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse($historialAbonos as $abono)
+                                    @foreach($historialAbonos as $abono)
                                     <tr style="{{ $abono->estado === 'Anulado' ? 'opacity: 0.6; text-decoration: line-through;' : '' }}">
-                                        <td class="small">{{ $abono->created_at->format('d/m/Y h:i A') }}</td>
+                                        <td class="small" data-order="{{ $abono->created_at->timestamp }}">
+                                            {{ $abono->created_at->format('d/m/Y h:i A') }}
+                                        </td>
                                         
                                         <td>{{ $abono->usuario->name }}</td>
 
@@ -159,13 +161,8 @@
                                         </td>
                                         @endcan
                                     </tr>
-                                    @empty
-                                    <tr>
-                                        <td colspan="8" class="text-center p-4 text-muted">
-                                            <i class="fa fa-info-circle"></i> No hay abonos registrados para este cliente.
-                                        </td>
-                                    </tr>
-                                    @endforelse
+                                    
+                                    @endforeach
                                 </tbody>
                             </table>
                 </div>
@@ -185,15 +182,17 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse($historialIntereses as $interes)
+                                    @foreach($historialIntereses as $interes)
                                     <tr style="{{ $interes->estado === 'anulado' ? 'opacity: 0.6; text-decoration: line-through;' : '' }}">
-                                        <td class="small">{{ $interes->aplicado_en->format('d/m/Y h:i A') }}</td>
+                                        <td class="small" data-order="{{ $interes->aplicado_en->timestamp }}">
+                                            {{ $interes->aplicado_en->format('d/m/Y h:i A') }}
+                                        </td>
                                         
                                         <td>
                                             <span class="badge badge-light border">ID: {{ $interes->id_credito }}</span>
                                         </td>
 
-                                        <td>{{ $interes->administrador->name ?? 'N/A' }}</td>
+                                        <td>{{ $interes->administrador?->name ?? 'N/A' }}</td>
 
                                         <td class="text-primary font-weight-bold">{{ $interes->porcentaje }}%</td>
 
@@ -219,13 +218,8 @@
                                         </td>
                                         @endif
                                     </tr>
-                                    @empty
-                                    <tr>
-                                        <td colspan="7" class="text-center p-4 text-muted">
-                                            <i class="fa fa-info-circle"></i> No se han aplicado indexaciones a los créditos de este cliente.
-                                        </td>
-                                    </tr>
-                                    @endforelse
+                                   
+                                    @endforeach
                                 </tbody>
                             </table>
                 </div>
@@ -242,6 +236,50 @@
 @endsection
 @section('scripts')
 <script>
+    $(document).ready(function() {
+        if ($('#tabla-historial-abonos').length) {
+            $('#tabla-historial-abonos').DataTable({
+                retrieve: true,
+                pageLength: 5,
+                lengthMenu: [5, 10, 20],
+                responsive: true,
+                autoWidth: false,
+                language: {
+                    search: "Buscar:",
+                    paginate: { next: "Sig", previous: "Ant" },
+                    info: "Mostrando _START_ a _END_ de _TOTAL_ abonos",
+                    emptyTable: "No hay abonos registrados para este cliente."
+                },
+                dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
+                order: [[0, 'desc']]
+            });
+        }
+
+        if ($('#tabla-historial-intereses').length) {
+                
+                // 1. Destruir la instancia previa que crea el template
+                if ($.fn.DataTable.isDataTable('#tabla-historial-intereses')) {
+                    $('#tabla-historial-intereses').DataTable().destroy();
+                }
+
+                // 2. Inicializar con tus opciones personalizadas
+                $('#tabla-historial-intereses').DataTable({
+                    destroy: true,
+                    pageLength: 5,
+                    lengthMenu: [5, 10],
+                    responsive: true,
+                    autoWidth: false,
+                    language: {
+                        search: "Buscar:",
+                        paginate: { next: "Sig", previous: "Ant" },
+                        info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+                        emptyTable: "No se han aplicado indexaciones a los créditos de este cliente."
+                    },
+                    dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
+                    order: [[0, 'desc']]
+                });
+            }
+    });
     function confirmarAnulacion(url, monto) {
         $('#formAnularAbono').attr('action', url);
         $('#montoAbonoText').text('$' + monto);
@@ -471,38 +509,6 @@
          $('#btn_confirmar_index').prop('disabled', porcentaje <= 0);
      });
      
-     $('#tabla-historial-abonos').DataTable({
-         "pageLength": 5, // Mostrar 5 de 5
-         "lengthMenu": [5, 10, 20], // Permite al usuario cambiar a más si quiere
-         "responsive": true, // Hace que la tabla sea amigable con móviles
-         "language": {
-             "search": "Buscar:",
-             "paginate": {
-                 "next": "Sig",
-                 "previous": "Ant"
-             },
-             "info": "Mostrando _START_ a _END_ de _TOTAL_ abonos"
-         },
-         "dom": '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>', // Diseño limpio
-         "order": [[0, 'desc']] // Ordenar por fecha descendente automáticamente
-     });
-
-     $(document).ready(function() {
-        $('#tabla-historial-intereses').DataTable({
-            "pageLength": 5,
-            "lengthMenu": [5, 10],
-            "responsive": true,
-            "language": {
-                "search": "Buscar:",
-                "paginate": {
-                    "next": "Sig",
-                    "previous": "Ant"
-                },
-                "info": "Mostrando _START_ a _END_ de _TOTAL_ registros"
-            },
-            "dom": '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
-            "order": [[0, 'desc']] // Asegura que la fecha más reciente salga primero
-        });
-    });
+    
 </script>
 @endsection

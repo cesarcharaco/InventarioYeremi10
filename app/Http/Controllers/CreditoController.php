@@ -24,11 +24,10 @@ class CreditoController extends Controller
 
         // 1. Iniciamos la consulta desde el Cliente
         $query = Cliente::whereHas('creditos', function($q) {
-            // Solo clientes que tengan créditos pendientes
+            // Asegúrate de que 'pendiente' coincida con el valor exacto guardado en la BD
             $q->where('estado', 'pendiente');
         })
         ->withSum(['creditos as saldo_total_pendiente' => function($q) {
-            // La suma se hace a nivel de base de datos (muy rápido)
             $q->where('estado', 'pendiente');
         }], 'saldo_pendiente');
 
@@ -40,7 +39,7 @@ class CreditoController extends Controller
             });
         }
 
-        // 3. Buscador por cliente
+        // 3. Buscador por cliente (Opcional si DataTables ya busca en el cliente, pero útil si se envía por formulario)
         if ($request->filled('buscar')) {
             $query->where(function($q) use ($request) {
                 $q->where('nombre', 'like', "%{$request->buscar}%")
@@ -48,8 +47,8 @@ class CreditoController extends Controller
             });
         }
 
-        // Ejecutamos la paginación
-        $clientes = $query->paginate(20);
+        // CAMBIO CLAVE: Cargar todos los registros filtrados para que DataTables los pagine en JS
+        $clientes = $query->get();
 
         return view('creditos.index', compact('clientes'));
     }
@@ -362,7 +361,7 @@ class CreditoController extends Controller
         
         // Obtenemos los detalles de venta directamente
         $detalles = DetalleVenta::whereHas('venta', function($q) use ($id) {
-                $q->where('id_cliente', $id);
+                $q->where('id_cliente', $id)->where('monto_credito_usd', '>', 0);
             })
             ->with(['venta', 'insumo.categoria', 'insumo.modeloVenta'])
             ->orderBy('created_at', 'desc')

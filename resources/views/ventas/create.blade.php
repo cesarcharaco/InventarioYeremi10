@@ -336,7 +336,19 @@
                             <span class="badge badge-danger">Monto a Crédito: $<span id="label_monto_credito">0.00</span></span>
                             <small id="error_limite" class="text-danger d-block mt-1" style="display:none;"></small>
                         </div>
-
+                        <!-- NUEVO CAMPO: OBSERVACIÓN / NOTA -->
+                        <div class="form-group mt-3">
+                            <label for="observacion" class="font-weight-bold text-muted mb-1">
+                                <i class="fa fa-commenting-o"></i> Observación / Notas de la venta:
+                            </label>
+                            <textarea 
+                                name="observacion" 
+                                id="observacion" 
+                                rows="2" 
+                                class="form-control" 
+                                placeholder="Ej: Incluye 2 productos no registrados, nota de entrega, etc. (Opcional)"
+                            ></textarea>
+                        </div>
                         <button type="submit" class="btn btn-success btn-block btn-lg mt-3" id="btn-finalizar" disabled>
                             <i class="fa fa-check-circle"></i> FINALIZAR VENTA
                         </button>
