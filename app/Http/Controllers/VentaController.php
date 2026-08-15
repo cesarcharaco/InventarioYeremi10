@@ -110,7 +110,7 @@ class VentaController extends Controller
         return redirect()->route('cajas.create')->with('error', 'No hay una caja abierta en este local.');
     }
 
-    $tasa_bcv = Configuracion::getTasa('tasa_bcv');
+    $tasa_bcv = bcv_rate('USD');
     if ($tasa_bcv == 0) {
         return redirect()->route('home')->with('error', 'Actualizando valor de TASA BCV');
     }
