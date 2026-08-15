@@ -175,6 +175,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/interes/{id}/anular', [CreditoController::class, 'anularInteres'])->name('creditos.interes.anular');
         Route::post('/cliente/{id_cliente}/procesar-reembolso', [CreditoController::class, 'procesarReembolso'])->name('creditos.procesarReembolso');
         Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
+        Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])
+            ->name('creditos.pdf_estado_cuenta');
     });
 
     // Se excluyen index y show del resource para que no colisionen con el prefijo

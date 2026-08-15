@@ -87,6 +87,14 @@
                             ${{ number_format($resumen['saldo_pendiente'], 2) }}
                         </span>
                     </li>
+                    <li class="list-group-item bg-light p-3">
+                        <a href="{{ route('creditos.pdf_estado_cuenta', $cliente->id) }}" 
+                           class="btn btn-danger btn-block font-weight-bold shadow-sm" 
+                           target="_blank"
+                           title="Descargar Estado de Cuenta PDF">
+                            <i class="fas fa-file-pdf"></i> Imprimir Estado de Cuenta
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>

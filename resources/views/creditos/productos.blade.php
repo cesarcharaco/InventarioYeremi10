@@ -46,7 +46,7 @@
               <td><span class="badge badge-secondary">{{ $d->venta->codigo_factura }}</span></td>
               <td><strong>{{ $d->insumo->producto }}</strong></td>
               <td class="text-muted">{{ $d->insumo->descripcion }}</td>
-              <td><span class="badge badge-info">{{ $d->insumo->categoria->nombre ?? 'N/A' }}</span></td>
+              <td><span class="badge badge-info">{{ $d->insumo->categoria->categoria ?? 'N/A' }}</span></td>
               <td>{{ $d->insumo->serial }}</td>
               <td class="text-center font-weight-bold">{{ $d->cantidad }}</td>
               <td>

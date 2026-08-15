@@ -16,7 +16,7 @@ return new class extends Migration
             // En Venezuela: V-12345678 o J-12345678
             $table->string('identificacion')->unique(); 
             $table->string('nombre');
-            $table->string('telefono');
+            $table->string('telefono')->nullable();
             $table->string('direccion')->nullable();
             
             // Importante para tu módulo de créditos

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Carbon\Carbon;
-
+use Barryvdh\DomPDF\Facade\Pdf;
 class CreditoController extends Controller
 {
     public function index(Request $request)
@@ -368,5 +368,76 @@ class CreditoController extends Controller
             ->get();
         
         return view('creditos.productos', compact('cliente', 'detalles'));
+    }
+    /**
+     * Genera el Estado de Cuenta del Cliente en PDF
+     *
+     * @param int $cliente_id
+     * @return \Illuminate\Http\Response
+     */
+    public function pdfEstadoCuenta($cliente_id)
+    {
+        // 1. Obtener los datos del cliente con sus relaciones
+        $cliente = Cliente::with(['creditos'])->findOrFail($cliente_id);
+
+        // 2. Obtener créditos pendientes y sus IDs
+        $creditos = Credito::where('id_cliente', $cliente_id)->get();
+        $creditosIds = $creditos->pluck('id');
+
+        // 3. Obtener el historial completo de abonos
+        $historialAbonos = AbonoCredito::whereIn('id_credito', $creditosIds)
+            ->with(['usuario', 'credito'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 4. Obtener el historial completo de intereses / indexación
+        $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
+            ->with(['administrador', 'credito'])
+            ->orderBy('aplicado_en', 'desc')
+            ->get();
+
+        // 5. Estructurar el resumen financiero acumulado
+        $montoInicialTotal = $creditos->sum('monto_inicial');
+        
+        // Suma de intereses aplicados activos
+        $totalIntereses = $historialIntereses
+            ->where('estado', 'aplicado')
+            ->sum('monto_interes');
+
+        // Suma de abonos realizados activos
+        $totalAbonado = $historialAbonos
+            ->where('estado', 'Realizado')
+            ->sum('monto_pagado_usd');
+
+        // Saldo pendiente total actual
+        $saldoPendienteTotal = $creditos
+            ->where('estado', 'pendiente')
+            ->sum('saldo_pendiente');
+
+        $resumen = [
+            'monto_inicial'   => $montoInicialTotal,
+            'total_intereses' => $totalIntereses,
+            'total_abonado'   => $totalAbonado,
+            'saldo_a_favor'   => $cliente->creditos->sum('saldo_a_favor'),
+            'saldo_pendiente' => $saldoPendienteTotal,
+        ];
+
+        // 6. Obtener la información de la empresa / local para el encabezado
+        $empresa = Local::first();
+
+        // 7. Renderizar la vista PDF (Configuración en vertical / Letter o A4)
+        $pdf = Pdf::loadView('creditos.pdf.estado_cuenta', compact(
+            'cliente',
+            'resumen',
+            'historialAbonos',
+            'historialIntereses',
+            'empresa'
+        ));
+
+        // Ajustar tamaño de papel y orientación
+        $pdf->setPaper('letter', 'portrait');
+
+        // Retornar en línea (preview en pestaña)
+        return $pdf->stream("Estado_Cuenta_{$cliente->identificacion}.pdf");
     }
 }
