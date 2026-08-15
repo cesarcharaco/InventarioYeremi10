@@ -133,6 +133,7 @@
                                         $stockLocal = $existenciaLocal ? $existenciaLocal->cantidad : 0; 
                                     @endphp
                                     <option value="{{ $p->id }}" 
+                                            data-producto="{{ $p->producto }}"
                                             data-descripcion="{{ $p->descripcion }}"
                                             data-bcv="{{ $p->precio_venta_usd }}"
                                             data-bs="{{ $p->precio_venta_bs }}"
@@ -616,13 +617,39 @@ $(document).ready(function() {
             actualizarTotales(window.subtotalSinDescuento);
         }
     });
+
+    if ($('#buscador_insumos').data('select2')) {
+        $('#buscador_insumos').data('select2').options.set('matcher', function(params, data) {
+            if ($.trim(params.term) === '') {
+                return data;
+            }
+
+            if (!data.element) {
+                return null;
+            }
+
+            let term = params.term.toLowerCase();
+            let dataset = data.element.dataset;
+
+            // Compara contra producto (o texto visible) Y contra la descripción o serial
+            let producto = (dataset.producto || data.text).toLowerCase();
+            let descripcion = (dataset.descripcion || '').toLowerCase();
+            let serial = (dataset.serial || '').toLowerCase();
+
+            if (producto.indexOf(term) > -1 || descripcion.indexOf(term) > -1 || serial.indexOf(term) > -1) {
+                return data;
+            }
+
+            return null;
+        });
+    }
     // --- LÓGICA DE TABLA ---
     $('#buscador_insumos').on('select2:select', function (e) {
         let data = e.params.data.element.dataset;
         let id = $(this).val();
-        let nombre = e.params.data.text.trim();
+        let producto = data.producto || e.params.data.text.trim(); // Nombre base del producto
+        let descripcion = data.descripcion || '';                  // Descripción adicional
         
-        // Aseguramos valores numéricos válidos
         let precio_bcv = parseFloat(data.bcv) || 0;
         let precio_bs = parseFloat(data.bs) || 0;
         let stock = parseInt(data.stock) || 0;
@@ -642,7 +669,8 @@ $(document).ready(function() {
             }
             existe.cantidad++;
         } else {
-            detalleVentas.push({ id, nombre, precio_bcv, precio_bs, cantidad: 1, stock });
+            // Guardamos 'descripcion' dentro del objeto del carrito
+            detalleVentas.push({ id, producto, descripcion, precio_bcv, precio_bs, cantidad: 1, stock });
         }
 
         $(this).val(null).trigger('change');
@@ -657,11 +685,15 @@ $(document).ready(function() {
         detalleVentas.forEach((item, index) => {
             let subtotal = item.cantidad * item.precio_bcv;
             totalUSD += subtotal;
-            
 
-            // Agregamos data-label para que el CSS Mobile-First funcione
+            // Renderizamos Producto y Descripción limpia (sin etiqueta de Stock)
+            let descHtml = item.descripcion ? `<small class="d-block text-muted" style="font-size: 11px;">${item.descripcion}</small>` : '';
+
             html += `<tr>
-                <td data-label="Producto"><strong>${item.nombre}</strong></td>
+                <td data-label="Producto">
+                    <strong>${item.producto}</strong>
+                    ${descHtml}
+                </td>
                 <td data-label="Cant.">
                     <input type="number" class="form-control change-cant" 
                         data-index="${index}" value="${item.cantidad}" min="1" max="${item.stock}">
