@@ -81,7 +81,7 @@ class HomeController extends Controller
         } catch (\Exception $e) {
             // Si algo falla, las tasas quedan en 0 para no romper la vista
         }
-
+        
         return view('home', compact('i', 'in', 'tasa_bcv', 'tasa_binance'));
     
     }

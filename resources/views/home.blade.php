@@ -156,7 +156,7 @@
             </div>
           @endif
           <p style="font-size: 14px; margin-bottom: 0;">
-            <b>BCV:</b> {{ number_format($tasa_bcv, 2, ',', '.') }} Bs.
+            <b>BCV:</b> {{ number_format(bcv_rate('USD'), 2, ',', '.') }} Bs/USD
           </p>
           <p style="font-size: 14px; margin-bottom: 0;">
             <b>Binance:</b> {{ number_format($tasa_binance, 2, ',', '.') }} Bs.

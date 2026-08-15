@@ -49,7 +49,14 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/store', [ConfigOfertaController::class, 'store'])->name('config-ofertas.store');
         Route::patch('/{id}/desactivar', [ConfigOfertaController::class, 'desactivar'])->name('config-ofertas.desactivar');
     });
-
+    Route::get('/debug-bcv', function () {
+        try {
+            $rate = app(\App\Services\BcvRateService::class)->getCurrentRate('USD');
+            dd($rate);
+        } catch (\Throwable $e) {
+            dd($e->getMessage());
+        }
+    });
     Route::get('/pines-activos-ajax', [HomeController::class, 'getPinesAjax'])->name('admin.pines_activos');
 
     // Rutas de Usuarios y Perfil Personal
