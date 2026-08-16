@@ -184,6 +184,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
         Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])
             ->name('creditos.pdf_estado_cuenta');
+        Route::post('/creditos/cliente/{id}/directo', [CreditoController::class, 'storeDirecto'])->name('creditos.directo.store');
     });
 
     // Se excluyen index y show del resource para que no colisionen con el prefijo

@@ -15,16 +15,17 @@ use App\Models\AbonoCredito;
 use App\Models\PagoReferencia;
 use App\Models\AutorizacionPin;
 use App\Models\ConfigOfertas;
+use App\Models\User;
+use App\Models\Configuracion;
+use App\Notifications\StockBajoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Carbon\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
-use App\Notifications\StockBajoNotification;
-use App\Models\User;
-use App\Models\Configuracion;
+use Carbon\Carbon;
 
 class VentaController extends Controller
 {
@@ -207,7 +208,7 @@ class VentaController extends Controller
 
     // Fusionamos con las referencias que ya venían (si las hay)
     $request->merge(['referencias' => array_merge($request->referencias ?? [], $referenciasProcesadas)]);
-
+    $tasa_bcv = bcv_rate('USD');
     DB::beginTransaction();
     try {
         // 1. Determinar el código (Factura o Nota de Entrega)
@@ -335,7 +336,7 @@ class VentaController extends Controller
                 'saldo_pendiente'   => $request->monto_credito_usd,
                 'fecha_vencimiento' => now()->addDays(15), 
                 'estado'            => 'pendiente',
-                'tasa_cambio_origen'=> Configuracion::getTasa('tasa_bcv')
+                'tasa_cambio_origen'=> $tasa_bcv
             ]);
             /*Notificaciones*/
             $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
@@ -459,4 +460,6 @@ class VentaController extends Controller
             'correlativo' => $correlativo
         ]);
     }
+
+    
 }

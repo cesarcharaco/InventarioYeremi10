@@ -15,7 +15,7 @@ class CargaCreditosHistoricosSeeder extends Seeder
     public function run(): void
     {
         // IDs por defecto requeridos por tu BD para las llaves foráneas
-                $idLocalPredeterminado = 1;
+                $idLocalPredeterminado = 3;
                 $idUserPredeterminado  = 1;
                 $idCajaPredeterminada  = 1;
                 // Si no existe la caja predeterminada, la creamos respetando la estructura de tu tabla `cajas`

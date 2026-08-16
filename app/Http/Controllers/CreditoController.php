@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Venta;
 use App\Models\Credito;
 use App\Models\AbonoCredito;
 use App\Models\CreditoInteres;
@@ -9,37 +10,58 @@ use App\Models\Caja;
 use App\Models\Cliente;
 use App\Models\Local;
 use App\Models\DetalleVenta;
+use App\Models\AutorizacionPin;
+use App\Models\User;
+use App\Notifications\StockBajoNotification;
 use App\Services\CreditoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+
 class CreditoController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('ver-creditos');
+
         $user = auth()->user();
 
-        // 1. Iniciamos la consulta desde el Cliente
-        $query = Cliente::whereHas('creditos', function($q) {
-            // Asegúrate de que 'pendiente' coincida con el valor exacto guardado en la BD
-            $q->where('estado', 'pendiente');
-        })
-        ->withSum(['creditos as saldo_total_pendiente' => function($q) {
-            $q->where('estado', 'pendiente');
-        }], 'saldo_pendiente');
-
-        // 2. Filtro de Locales (para encargados/vendedores)
+        // 1. Obtener los IDs de los locales del usuario
+        $misLocales = [];
         if (!$user->esAdmin()) {
-            $misLocales = $user->local()->pluck('local.id');
-            $query->whereHas('creditos.venta', function($q) use ($misLocales) {
-                $q->whereIn('id_local', $misLocales);
-            });
+            $misLocales = \DB::table('users_has_local')
+                            ->where('id_user', $user->id)
+                            ->pluck('id_local')
+                            ->toArray();
         }
 
-        // 3. Buscador por cliente (Opcional si DataTables ya busca en el cliente, pero útil si se envía por formulario)
+        // 2. Consulta principal unificada
+        $query = Cliente::whereHas('creditos', function($qCredito) use ($user, $misLocales) {
+            // Unicamente créditos pendientes
+            $qCredito->where('estado', 'pendiente');
+
+            // Si NO es admin, exigimos que la VENTA asociada al crédito sea del local del vendedor
+            if (!$user->esAdmin()) {
+                $qCredito->whereHas('venta', function($qVenta) use ($misLocales) {
+                    $qVenta->whereIn('id_local', $misLocales);
+                });
+            }
+        })
+        ->withSum(['creditos as saldo_total_pendiente' => function($qCredito) use ($user, $misLocales) {
+            $qCredito->where('estado', 'pendiente');
+            
+            if (!$user->esAdmin()) {
+                $qCredito->whereHas('venta', function($qVenta) use ($misLocales) {
+                    $qVenta->whereIn('id_local', $misLocales);
+                });
+            }
+        }], 'saldo_pendiente');
+
+        // 3. Filtro de búsqueda por nombre o identificación
         if ($request->filled('buscar')) {
             $query->where(function($q) use ($request) {
                 $q->where('nombre', 'like', "%{$request->buscar}%")
@@ -47,7 +69,6 @@ class CreditoController extends Controller
             });
         }
 
-        // CAMBIO CLAVE: Cargar todos los registros filtrados para que DataTables los pagine en JS
         $clientes = $query->get();
 
         return view('creditos.index', compact('clientes'));
@@ -439,5 +460,94 @@ class CreditoController extends Controller
 
         // Retornar en línea (preview en pestaña)
         return $pdf->stream("Estado_Cuenta_{$cliente->identificacion}.pdf");
+    }
+
+    public function storeDirecto(Request $request, $cliente_id)
+    {
+        // 1. Validar los campos del modal
+        $request->validate([
+            'monto_credito_usd' => 'required|numeric|min:0.01',
+            'fecha_credito'     => 'required|date',
+            'observacion'       => 'nullable|string',
+            'pin_autorizacion'  => 'nullable|string'
+        ]);
+
+        // Validar autorización si no tiene el permiso avanzado
+        if (Gate::denies('gestionar-creditos-avanzado')) {
+            $local = auth()->user()->localActual();
+            $auth = AutorizacionPin::where('id_local', $local->id)
+                        ->where('pin', $request->pin_autorizacion)
+                        ->where('estado', 'usado') // Marcado previamente por verificarPin
+                        ->first();
+
+            if (!$auth) {
+                return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
+            }
+        }
+
+        $tasa_bcv = bcv_rate('USD');
+        DB::beginTransaction();
+
+        try {
+            $cliente = Cliente::findOrFail($cliente_id);
+
+            // Generar un código de factura único para esta operación
+            $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
+
+            // 2. Registrar en la tabla VENTA
+            $venta = new Venta();
+            $venta->codigo_factura     = $codigoFactura;
+            $venta->id_cliente         = $cliente->id;
+            $venta->id_user            = auth()->id();
+            $venta->id_local           = auth()->user()->id_local ?? 1;
+            $venta->id_caja            = auth()->user()->id_caja ?? 1;
+            
+            $venta->pago_usd_efectivo  = 0.00;
+            $venta->pago_bs_efectivo   = 0.00;
+            $venta->monto_credito_usd  = $request->monto_credito_usd;
+            $venta->total_usd          = $request->monto_credito_usd;
+            
+            $venta->estado             = 'completada';
+            $venta->observacion        = $request->observacion;
+            
+            // Asignar la fecha personalizada al created_at de la venta
+            $venta->created_at         = $request->fecha_credito;
+            $venta->updated_at         = now();
+            $venta->save();
+
+            // 3. Registrar en la tabla CREDITO asociado a la Venta
+            $credito = Credito::create([
+                'id_venta'           => $venta->id,
+                'id_cliente'         => $cliente->id,
+                'monto_inicial'      => $request->monto_credito_usd,
+                'saldo_pendiente'    => $request->monto_credito_usd,
+                'fecha_vencimiento'  => now()->addDays(15), 
+                'estado'             => 'pendiente',
+                'tasa_cambio_origen' => $tasa_bcv,
+                'created_at'         => $request->fecha_credito,
+                'updated_at'         => now(),
+            ]);
+
+            // 4. Notificaciones a administradores / gerentes
+            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+            $detalles = [
+                'titulo'  => '💸 Nueva Venta a Crédito Directo',
+                'mensaje' => "Se otorgó un crédito directo de {$request->monto_credito_usd}$ a {$cliente->nombre}.",
+                'url'     => route('creditos.index'),
+                'icono'   => 'fas fa-hand-holding-usd text-info'
+            ];
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Crédito directo de $' . number_format($request->monto_credito_usd, 2) . ' registrado con éxito.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Ocurrió un error al registrar el crédito directo: ' . $e->getMessage());
+        }
     }
 }
