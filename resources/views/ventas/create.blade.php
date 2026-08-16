@@ -533,14 +533,14 @@
                     </div>
                     <div class="form-group">
                         <label>Límite de Crédito ($)</label>
-                        <input type="number" step="0.01" name="limite_credito" class="form-control" value="0">
+                        <input type="number" step="0.01" name="limite_credito" class="form-control" value="1000">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-primary" id="btnGuardarCliente">
                         <i class="fa fa-save"></i> Guardar Cliente
                     </button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
                 </div>
             </form>
         </div>

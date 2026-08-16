@@ -353,7 +353,7 @@ class VentaController extends Controller
         }
 
         DB::commit();
-        return redirect()->route('ventas.index')->with('success', "Venta {$codigo} guardada.");
+        return redirect()->route('ventas.create')->with('success', "Venta {$codigo} guardada.");
 
     } catch (\Exception $e) {
         DB::rollBack();

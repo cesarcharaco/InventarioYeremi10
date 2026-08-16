@@ -1,9 +1,11 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\ModeloVenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 
 class ModeloVentaController extends Controller
 {
@@ -75,6 +77,7 @@ class ModeloVentaController extends Controller
         $modeloVenta = ModeloVenta::findOrFail($id);
         $data = $request->all();
 
+        // Limpieza según el método seleccionado
         if ($request->metodo_calculo == 'porcentaje') {
             $data['factor_bcv'] = null;
             $data['factor_usdt'] = null;
@@ -82,10 +85,53 @@ class ModeloVentaController extends Controller
             $data['porcentaje_extra'] = null;
         }
 
+        // 1. Actualizamos el Modelo de Venta primero
         $modeloVenta->update($data);
 
+        $mensajeExito = 'Modelo de venta actualizado correctamente.';
+
+        // 2. Verificación y Proceso Masivo si la casilla fue marcada
+        if ($request->has('actualizar_precios_insumos') && $request->actualizar_precios_insumos == 1) {
+            $insumosActualizados = 0;
+
+            DB::transaction(function () use ($modeloVenta, &$insumosActualizados) {
+                // Procesamiento por lotes (Chunks de 200 en 200) para evitar saturar RAM
+                $modeloVenta->insumos()->chunkById(200, function ($insumos) use ($modeloVenta, &$insumosActualizados) {
+                    foreach ($insumos as $insumo) {
+                        $costo = floatval($insumo->costo);
+
+                        if ($modeloVenta->porcentaje_extra !== null) {
+                            // Cálculo por Porcentaje Extra
+                            $pctExtra = floatval($modeloVenta->porcentaje_extra) / 100;
+                            $precioUsd = $costo + ($costo * $pctExtra);
+
+                            $insumo->precio_bcv_usd = $precioUsd;
+                            $insumo->precio_usdt_usd = $precioUsd;
+                            $insumo->precio_bs = $precioUsd * floatval($modeloVenta->tasa_bcv);
+                        } else {
+                            // Cálculo por Factores Divisores
+                            $factorBcv = floatval($modeloVenta->factor_bcv);
+                            $factorUsdt = floatval($modeloVenta->factor_usdt);
+
+                            $bcvUsd = $factorBcv > 0 ? ($costo / $factorBcv) : 0;
+                            $usdtUsd = $factorUsdt > 0 ? ($costo / $factorUsdt) : 0;
+
+                            $insumo->precio_bcv_usd = $bcvUsd;
+                            $insumo->precio_usdt_usd = $usdtUsd;
+                            $insumo->precio_bs = $bcvUsd * floatval($modeloVenta->tasa_bcv);
+                        }
+
+                        $insumo->save();
+                        $insumosActualizados++;
+                    }
+                });
+            });
+
+            $mensajeExito .= " Se recalcularon y actualizaron $insumosActualizados insumos masivamente.";
+        }
+
         return redirect()->route('modelos-venta.index')
-            ->with('success', 'Modelo de venta actualizado correctamente.');
+            ->with('success', $mensajeExito);
     }
 
     public function destroy($id)
@@ -93,18 +139,15 @@ class ModeloVentaController extends Controller
         Gate::authorize('gestionar-modelos-venta');
         $modeloVenta = ModeloVenta::findOrFail($id);
         
-        // Opcional: Validar si hay insumos usando este modelo antes de borrar
+        // Validar si hay insumos usando este modelo antes de borrar
         if ($modeloVenta->insumos()->count() > 0) { 
             return redirect()->route('modelos-venta.index')
-                ->with('error', 'No se puede eliminar el Modelo debido a que hay Insumos asignados dicho modelo, debe cambiarlos a otro modelo o eliminarlos');    
-         }else{
+                ->with('error', 'No se puede eliminar el Modelo debido a que hay Insumos asignados a dicho modelo, debe cambiarlos a otro modelo o eliminarlos.');    
+        } else {
             $modeloVenta->delete();
 
             return redirect()->route('modelos-venta.index')
                 ->with('success', 'Modelo eliminado correctamente.');    
-         }
-
-        
+        }
     }
-
 }
