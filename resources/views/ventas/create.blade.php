@@ -417,14 +417,14 @@
                     <label class="small font-weight-bold text-muted">TIPO DE DOCUMENTO</label>
                     <div class="btn-group btn-group-toggle w-100" data-toggle="buttons">
                         <label class="btn btn-outline-secondary active">
-                            <input type="radio" name="tipo_documento" id="tipo_nota_si" value="nota_entrega" >
+                            <input type="radio" name="tipo_documento" id="tipo_nota_si" value="nota_entrega" checked>
                             <i class="fa fa-check"></i> Sí, Nota de Entrega
                         </label>
                         <label class="btn btn-outline-secondary">
-                            <input type="radio" name="tipo_documento" id="tipo_nota_no" value="sin_documento" checked>
+                            <input type="radio" name="tipo_documento" id="tipo_nota_no" value="sin_documento">
                             <i class="fa fa-times"></i> No, sin documento
                         </label>
-                        <label class="btn btn-outline-primary" style="display: none;" id="btn_tipo_factura">
+                        <label class="btn btn-outline-primary" id="btn_tipo_factura">
                             <input type="radio" name="tipo_documento" id="tipo_factura" value="factura">
                             <i class="fa fa-file-invoice-dollar"></i> Factura Fiscal
                         </label>
@@ -545,6 +545,36 @@
             </form>
         </div>
     </div>
+</div>
+
+<!-- Modal Dinámico para Impresión de Documentos (Factura / Nota de Entrega) -->
+<div class="modal fade" id="modalImprimirDocumento" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="modalImprimirLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="modalImprimirLabel">
+          <i class="fa fa-print"></i> Venta Procesada Exitosamente
+        </h5>
+      </div>
+      <div class="modal-body text-center py-4">
+        <i class="fa fa-file-text-o fa-4x text-success mb-3"></i>
+        <h4 id="modal_titulo_doc">Documento generado</h4>
+        <h3 class="text-primary"><strong id="modal_codigo_doc"></strong></h3>
+        <p class="text-muted mt-2">¿Desea imprimir el comprobante / ticket de esta venta?</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <!-- Botón para Confirmar e Imprimir -->
+        <a href="#" id="btn_confirmar_impresion" target="_blank" class="btn btn-primary btn-lg">
+          <i class="fa fa-print"></i> Imprimir Ticket
+        </a>
+        
+        <!-- Botón para Cancelar u Omitir -->
+        <button type="button" class="btn btn-secondary btn-lg" data-dismiss="modal">
+          <i class="fa fa-times"></i> Omitir / Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 @endsection
 
@@ -1022,167 +1052,167 @@ $(document).ready(function() {
         renderTabla();
     });
 
-    $('#venta-form').on('submit', function(e) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+    // ==========================================
+        // 1. EVENTO GLOBAL: Cambio de Tipo Documento
+        // (Debe estar AFUERA del evento submit)
+        // ==========================================
+        $(document).on('change', 'input[name="tipo_documento"]', function() {
+            let valorSeleccionado = $(this).val();
+            
+            // Actualizamos o creamos el input hidden que realmente leerá el backend
+            if ($('#tipo_documento_real').length === 0) {
+                $('#venta-form').append('<input type="hidden" name="tipo_documento" id="tipo_documento_real">');
+            }
+            $('#tipo_documento_real').val(valorSeleccionado);
 
-        // 1. Validación de Carrito
-        if (detalleVentas.length === 0) {
-            Swal.fire('Carrito Vacío', 'Debes agregar al menos un producto.', 'error');
-            return false;
-        }
-        
-        // 2. Recopilación de Montos
-        let totalFacturaUSD = parseFloat($('#total_hidden').val()) || 0;
-        let totalFacturaBS = parseFloat($('#total_bs_hidden').val()) || 0;
-        
-        // Captura de inputs del formulario
-        let pUSD = parseFloat($('input[name="pago_usd_efectivo"]').val()) || 0;
-        let pZelle = parseFloat($('input[name="pago_zelle_usd"]').val()) || 0;
-        let pBS_Efectivo = parseFloat($('input[name="pago_bs_efectivo"]').val()) || 0;
-        let pBS_Punto = parseFloat($('input[name="pago_punto_bs"]').val()) || 0;
-        let pBS_PMovil = parseFloat($('input[name="pago_pagomovil_bs"]').val()) || 0;
-        
-        let pBS_Total = pBS_Efectivo + pBS_Punto + pBS_PMovil;
-        let pagadoTotalUSD = pUSD + pZelle + (pBS_Total / TASA);
-        let diferencia = totalFacturaUSD - pagadoTotalUSD;
+            // Clases de Bootstrap
+            $('input[name="tipo_documento"]').closest('label').removeClass('active');
+            $(this).closest('label').addClass('active');
+        });
 
-        // 3. Validaciones de negocio (Exceso y Crédito)
-        if (diferencia < -0.05 && !$('#pago_excedente_abono').is(':checked')) {
-            Swal.fire('Pago Excedido', 'El monto supera la factura. ¿Es un abono? Márcalo o ajusta.', 'warning');
-            return false;
-        }
+        // ==========================================
+        // 2. SUBMIT DEL FORMULARIO (Abre el Modal)
+        // ==========================================
+        $('#venta-form').on('submit', function(e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
 
-        if ($('#switchCredito').is(':checked')) {
-            let limite = parseFloat($('#id_cliente option:selected').data('limite')) || 0;
-            let pinAutorizado = $('#pin_autorizacion').val();
-            if (diferencia > (limite + 0.01) && !pinAutorizado) {
-                Swal.fire('Crédito Bloqueado', 'Excede el límite del cliente.', 'error');
+            // 1. Validación de Carrito
+            if (typeof detalleVentas === 'undefined' || detalleVentas.length === 0) {
+                Swal.fire('Carrito Vacío', 'Debes agregar al menos un producto.', 'error');
                 return false;
             }
-        }
-
-        // 4. --- BLOQUE DE VALIDACIÓN DE REFERENCIAS (Integrado) ---
-        let refZelle = $('#referencia_zelle').val();
-        let refPM = $('#referencia_pagomovil').val();
-        let refPunto = $('#referencia_punto').val();
-
-        if (pZelle > 0 && (!refZelle || refZelle.trim() === "")) {
-            Swal.fire('Referencia Faltante', 'Por favor, ingrese la referencia de Zelle haciendo clic en el botón de la llave.', 'warning');
-            return false;
-        }
-
-        if (pBS_PMovil > 0 && (!refPM || refPM.trim() === "")) {
-            Swal.fire('Referencia Faltante', 'Por favor, ingrese la referencia de Pago Móvil haciendo clic en el botón del banco.', 'warning');
-            return false;
-        }
-        // --------------------------------------------
-
-        // --- LLENAR MODAL DE CONFIRMACIÓN ---
-        
-        // Encabezado del Modal
-        $('#confirm_total_usd').text(`$ ${totalFacturaUSD.toFixed(2)}`);
-        $('#confirm_total_bs').text(`${totalFacturaBS.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs`);
-        
-        // Llenado de la Tabla (Fila por Fila)
-        $('#confirm_p_usd').text(`$ ${pUSD.toFixed(2)}`);
-        $('#confirm_p_bs_efec').text(`${pBS_Efectivo.toFixed(2)} Bs`);
-        
-        // Zelle con referencia (Integrado)
-        let txtZelle = `$ ${pZelle.toFixed(2)}`;
-        if (pZelle > 0 && refZelle) txtZelle += ` (Ref: ${refZelle})`;
-        $('#confirm_p_zelle').text(txtZelle);
-        
-        // Punto con referencia (Añadido por consistencia)
-        let txtPunto = `${pBS_Punto.toFixed(2)} Bs`;
-        if (pBS_Punto > 0 && refPunto) txtPunto += ` (Ref: ${refPunto})`;
-        $('#confirm_p_punto').text(txtPunto);
-        
-        // Pago Móvil con referencia (Integrado)
-        let txtPM = `${pBS_PMovil.toFixed(2)} Bs`;
-        if (pBS_PMovil > 0 && refPM) txtPM += ` (Ref: ${refPM})`;
-        $('#confirm_p_pm').text(txtPM);
-
-        // Lógica de Abono (Fila Azul)
-        if ($('#pago_excedente_abono').is(':checked') && diferencia < -0.01) {
-            $('#fila_confirm_abono').show();
-            $('#confirm_monto_abono').text(`$ ${Math.abs(diferencia).toFixed(2)}`);
-        } else {
-            $('#fila_confirm_abono').hide();
-        }
-
-        // Lógica de Crédito (Fila Roja)
-        if ($('#switchCredito').is(':checked') && diferencia > 0.01) {
-            $('#fila_confirm_credito').show();
-            $('#confirm_monto_credito').text(`$ ${diferencia.toFixed(2)}`);
-        } else {
-            $('#fila_confirm_credito').hide();
-        }
-        
-        // --- SECCIÓN DE DESCUENTO ---
-        let descuentoUSD = parseFloat($('#descuento_usd_hidden').val()) || 0;
-        let porcentajeDescuento = parseFloat($('#porcentaje_descuento_hidden').val()) || 0;
-        let subtotalOriginal = window.subtotalSinDescuento || totalFacturaUSD;
-
-        if (descuentoUSD > 0) {
-            $('#confirm_seccion_descuento').show();
-            $('#confirm_antes_usd').text('$ ' + subtotalOriginal.toFixed(2));
-            $('#confirm_descuento_usd').text('$ ' + descuentoUSD.toFixed(2));
-            $('#confirm_porcentaje').text(porcentajeDescuento);
-        } else {
-            $('#confirm_seccion_descuento').hide();
-        }
-        
-        // --- SECCIÓN DE IVA (NUEVO) ---
-        // Calcular base imponible e IVA (IVA incluido en el precio)
-        let baseImponibleBS = totalFacturaBS / 1.16;
-        let ivaBS = baseImponibleBS * 0.16;
-        
-        // Llenar modal
-        $('#confirm_base_imponible_bs').text(baseImponibleBS.toFixed(2));
-        $('#confirm_iva_bs').text(ivaBS.toFixed(2));
-        
-        // Crear inputs hidden para backend si no existen
-        if ($('#base_imponible_bs_hidden').length === 0) {
-            $('#venta-form').append('<input type="hidden" name="base_imponible_bs" id="base_imponible_bs_hidden">');
-        }
-        $('#base_imponible_bs_hidden').val(baseImponibleBS.toFixed(2));
-        
-        if ($('#iva_bs_hidden').length === 0) {
-            $('#venta-form').append('<input type="hidden" name="iva_bs" id="iva_bs_hidden">');
-        }
-        $('#iva_bs_hidden').val(ivaBS.toFixed(2));
-        
-        // Reset tipo documento (siempre nota de entrega por defecto)
-        $('#tipo_nota_entrega').prop('checked', true);
-        $('#tipo_documento_hidden').val('nota_entrega');
-        if ($('#tipo_documento').length === 0) {
-            $('#venta-form').append('<input type="hidden" name="tipo_documento" id="tipo_documento">');
-        }
-        $('#tipo_documento').val($('input[name="tipo_documento"]:checked').val());
-
-        // Monto abono (si aplica)
-        if ($('#pago_excedente_abono').is(':checked')) {
-            let montoAbono = parseFloat($('#confirm_monto_abono').text().replace('$ ', '')) || 0;
             
-            if ($('#monto_excedente').length === 0) {
-                $('#venta-form').append('<input type="hidden" name="monto_excedente" id="monto_excedente">');
-            }
-            $('#monto_excedente').val(montoAbono.toFixed(2));
+            // 2. Recopilación de Montos
+            let totalFacturaUSD = parseFloat($('#total_hidden').val()) || 0;
+            let totalFacturaBS = parseFloat($('#total_bs_hidden').val()) || 0;
             
-            // Para info_adicional
-            if ($('#aplica_abono').length === 0) {
-                $('#venta-form').append('<input type="hidden" name="aplica_abono" id="aplica_abono" value="1">');
-            }
-        } else {
-            // Remover si existe para no enviar basura
-            $('#monto_excedente').remove();
-            $('#aplica_abono').remove();
-        }
-        // Mostrar el Modal
-        $('#modalConfirmarVenta').modal('show');
-    });
+            // Captura de inputs del formulario
+            let pUSD = parseFloat($('input[name="pago_usd_efectivo"]').val()) || 0;
+            let pZelle = parseFloat($('input[name="pago_zelle_usd"]').val()) || 0;
+            let pBS_Efectivo = parseFloat($('input[name="pago_bs_efectivo"]').val()) || 0;
+            let pBS_Punto = parseFloat($('input[name="pago_punto_bs"]').val()) || 0;
+            let pBS_PMovil = parseFloat($('input[name="pago_pagomovil_bs"]').val()) || 0;
+            
+            let pBS_Total = pBS_Efectivo + pBS_Punto + pBS_PMovil;
+            let pagadoTotalUSD = pUSD + pZelle + (pBS_Total / TASA);
+            let diferencia = totalFacturaUSD - pagadoTotalUSD;
 
+            // 3. Validaciones de negocio (Exceso y Crédito)
+            if (diferencia < -0.05 && !$('#pago_excedente_abono').is(':checked')) {
+                Swal.fire('Pago Excedido', 'El monto supera la factura. ¿Es un abono? Márcalo o ajusta.', 'warning');
+                return false;
+            }
+
+            if ($('#switchCredito').is(':checked')) {
+                let limite = parseFloat($('#id_cliente option:selected').data('limite')) || 0;
+                let pinAutorizado = $('#pin_autorizacion').val();
+                if (diferencia > (limite + 0.01) && !pinAutorizado) {
+                    Swal.fire('Crédito Bloqueado', 'Excede el límite del cliente.', 'error');
+                    return false;
+                }
+            }
+
+            // 4. --- BLOQUE DE VALIDACIÓN DE REFERENCIAS ---
+            let refZelle = $('#referencia_zelle').val();
+            let refPM = $('#referencia_pagomovil').val();
+            let refPunto = $('#referencia_punto').val();
+
+            if (pZelle > 0 && (!refZelle || refZelle.trim() === "")) {
+                Swal.fire('Referencia Faltante', 'Por favor, ingrese la referencia de Zelle haciendo clic en el botón de la llave.', 'warning');
+                return false;
+            }
+
+            if (pBS_PMovil > 0 && (!refPM || refPM.trim() === "")) {
+                Swal.fire('Referencia Faltante', 'Por favor, ingrese la referencia de Pago Móvil haciendo clic en el botón del banco.', 'warning');
+                return false;
+            }
+
+            // --- LLENAR MODAL DE CONFIRMACIÓN ---
+            $('#confirm_total_usd').text(`$ ${totalFacturaUSD.toFixed(2)}`);
+            $('#confirm_total_bs').text(`${totalFacturaBS.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs`);
+            
+            $('#confirm_p_usd').text(`$ ${pUSD.toFixed(2)}`);
+            $('#confirm_p_bs_efec').text(`${pBS_Efectivo.toFixed(2)} Bs`);
+            
+            let txtZelle = `$ ${pZelle.toFixed(2)}`;
+            if (pZelle > 0 && refZelle) txtZelle += ` (Ref: ${refZelle})`;
+            $('#confirm_p_zelle').text(txtZelle);
+            
+            let txtPunto = `${pBS_Punto.toFixed(2)} Bs`;
+            if (pBS_Punto > 0 && refPunto) txtPunto += ` (Ref: ${refPunto})`;
+            $('#confirm_p_punto').text(txtPunto);
+            
+            let txtPM = `${pBS_PMovil.toFixed(2)} Bs`;
+            if (pBS_PMovil > 0 && refPM) txtPM += ` (Ref: ${refPM})`;
+            $('#confirm_p_pm').text(txtPM);
+
+            if ($('#pago_excedente_abono').is(':checked') && diferencia < -0.01) {
+                $('#fila_confirm_abono').show();
+                $('#confirm_monto_abono').text(`$ ${Math.abs(diferencia).toFixed(2)}`);
+            } else {
+                $('#fila_confirm_abono').hide();
+            }
+
+            if ($('#switchCredito').is(':checked') && diferencia > 0.01) {
+                $('#fila_confirm_credito').show();
+                $('#confirm_monto_credito').text(`$ ${diferencia.toFixed(2)}`);
+            } else {
+                $('#fila_confirm_credito').hide();
+            }
+            
+            // Descuentos
+            let descuentoUSD = parseFloat($('#descuento_usd_hidden').val()) || 0;
+            let porcentajeDescuento = parseFloat($('#porcentaje_descuento_hidden').val()) || 0;
+            let subtotalOriginal = window.subtotalSinDescuento || totalFacturaUSD;
+
+            if (descuentoUSD > 0) {
+                $('#confirm_seccion_descuento').show();
+                $('#confirm_antes_usd').text('$ ' + subtotalOriginal.toFixed(2));
+                $('#confirm_descuento_usd').text('$ ' + descuentoUSD.toFixed(2));
+                $('#confirm_porcentaje').text(porcentajeDescuento);
+            } else {
+                $('#confirm_seccion_descuento').hide();
+            }
+            
+            // IVA
+            let baseImponibleBS = totalFacturaBS / 1.16;
+            let ivaBS = baseImponibleBS * 0.16;
+            
+            $('#confirm_base_imponible_bs').text(baseImponibleBS.toFixed(2));
+            $('#confirm_iva_bs').text(ivaBS.toFixed(2));
+            
+            if ($('#base_imponible_bs_hidden').length === 0) {
+                $('#venta-form').append('<input type="hidden" name="base_imponible_bs" id="base_imponible_bs_hidden">');
+            }
+            $('#base_imponible_bs_hidden').val(baseImponibleBS.toFixed(2));
+            
+            if ($('#iva_bs_hidden').length === 0) {
+                $('#venta-form').append('<input type="hidden" name="iva_bs" id="iva_bs_hidden">');
+            }
+            $('#iva_bs_hidden').val(ivaBS.toFixed(2));
+
+            // Abono
+            if ($('#pago_excedente_abono').is(':checked')) {
+                let montoAbono = parseFloat($('#confirm_monto_abono').text().replace('$ ', '')) || 0;
+                if ($('#monto_excedente').length === 0) {
+                    $('#venta-form').append('<input type="hidden" name="monto_excedente" id="monto_excedente">');
+                }
+                $('#monto_excedente').val(montoAbono.toFixed(2));
+                
+                if ($('#aplica_abono').length === 0) {
+                    $('#venta-form').append('<input type="hidden" name="aplica_abono" id="aplica_abono" value="1">');
+                }
+            } else {
+                $('#monto_excedente').remove();
+                $('#aplica_abono').remove();
+            }
+
+            // Mostrar el Modal de Confirmación
+            $('#modalConfirmarVenta').modal('show');
+        });
+
+   
     // --- NUEVO: FUNCIÓN PARA SOLICITAR REFERENCIAS ---
     function solicitarReferencia(metodo) {
     const mapeo = {
@@ -1263,14 +1293,35 @@ function resetBotonEstado(metodo, $boton, config) {
     $boton.html(`<i class="fa ${config.icon}"></i>`);
 }
 
- // EVENTO PARA EL BOTÓN FINAL DENTRO DEL MODAL
+ /// ==========================================
+    // 3. ENVÍO FINAL DESDE EL MODAL
+    // ==========================================
     $(document).on('click', '#btnProcesarVentaFinal', function() {
-            // 1. Deshabilitar el botón y mostrar spinner (como hacías en tu función original)
-            $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
-            $('#btn-finalizar').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
+        // 1. Obtener el correlativo sugerido del DOM
+        let correlativo = $('#correlativo_nota').val() || '';
 
-            // 2. Enviar el formulario directamente al servidor
-            document.getElementById('venta-form').submit();
+        // 2. Asegurar que el input 'correlativo_nota' esté dentro de #venta-form
+        if ($('#venta-form input[name="correlativo_nota"]').length === 0) {
+            $('#venta-form').append(`<input type="hidden" name="correlativo_nota" value="${correlativo}">`);
+        } else {
+            $('#venta-form input[name="correlativo_nota"]').val(correlativo);
+        }
+        // Capturar el tipo de documento seleccionado en ese instante
+        let tipoDoc = $('input[name="tipo_documento"]:checked').val() || $('#tipo_documento_hidden').val() || 'nota_entrega';
+
+        // Asegurar que exista un input con name="tipo_documento" que Laravel pueda leer
+        if ($('#tipo_documento_real').length === 0) {
+            $('#venta-form').append(`<input type="hidden" name="tipo_documento" id="tipo_documento_real" value="${tipoDoc}">`);
+        } else {
+            $('#tipo_documento_real').val(tipoDoc);
+        }
+
+        // Deshabilitar botones para evitar doble submit
+        $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
+        $('#btn-finalizar').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
+
+        // Enviar formulario al controlador
+        document.getElementById('venta-form').submit();
     });
 
     $('#formClienteRapido').on('submit', function(e) {
@@ -1479,10 +1530,6 @@ function resetBotonEstado(metodo, $boton, config) {
         }
 
 
-        $(document).on('change', 'input[name="tipo_documento"]', function() {
-            $('#tipo_documento_hidden').val($(this).val());
-        });
-
         $('#id_cliente').on('change', function() {
             let limite = $('option:selected', this).data('limite') || 0;
             let deuda = $('option:selected', this).data('deuda') || 0;
@@ -1502,6 +1549,35 @@ function resetBotonEstado(metodo, $boton, config) {
         $(document).on('change', '#pago_excedente_abono', function() {
             actualizarCalculoPagos();
         });
+
+        @if(session('imprimir_documento'))
+          $(document).ready(function() {
+            const docData = @json(session('imprimir_documento'));
+
+            // 1. Asignar tipo (Ej: Nota de Entrega) y código (Ej: NE-000048)
+            $('#modal_titulo_doc').text(docData.tipo + ' Generada:');
+            $('#modal_codigo_doc').text(docData.codigo);
+            
+            // 2. Construir la URL hacia la función show del controlador
+            // Usa route() si tu ruta se llama 'ventas.show', o url() directa:
+            const urlShow = "{{ url('ventas') }}/" + docData.venta_id;
+            
+            // Asignamos la URL y forzamos que abra en una pestaña nueva
+            $('#btn_confirmar_impresion')
+              .attr('href', urlShow)
+              .attr('target', '_blank');
+
+            // 3. Desplegar el modal automáticamente
+            $('#modalImprimirDocumento').modal('show');
+
+            // 4. Al hacer clic en Imprimir, ocultar el modal tras 1 segundo
+            $('#btn_confirmar_impresion').on('click', function() {
+              setTimeout(function() {
+                $('#modalImprimirDocumento').modal('hide');
+              }, 1000);
+            });
+          });
+        @endif
 });
 </script>
 @endsection

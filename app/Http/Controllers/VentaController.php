@@ -17,6 +17,7 @@ use App\Models\AutorizacionPin;
 use App\Models\ConfigOfertas;
 use App\Models\User;
 use App\Models\Configuracion;
+use App\Models\Correlativo;
 use App\Notifications\StockBajoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -149,6 +150,7 @@ class VentaController extends Controller
         ->get();
     $categorias = Categoria::orderBy('categoria', 'asc')->get();
     $modelosVenta = ModeloVenta::orderBy('modelo', 'asc')->get();
+
     return view('ventas.create', compact(
         'productos', 
         'clientes', 
@@ -164,208 +166,250 @@ class VentaController extends Controller
     ));
 }
 
+   
+
     public function store(Request $request)
-{
-    
-    $user = Auth::user();
-    $local = $user->localActual();
-    $id_caja = $request->id_caja; 
+    {
+        $user = Auth::user();
+        $local = $user->localActual();
+        $id_caja = $request->id_caja; 
 
-    if (!$id_caja) {
-        return redirect()->back()->with('error', 'Debe especificar una caja válida para procesar la venta.');
-    }
-
-
-    //dd($request->all());
-
-    // Mapeamos los campos individuales del form al array de referencias que ya procesa tu store
-    $referenciasProcesadas = [];
-    
-    if ($request->pago_zelle_usd > 0) {
-        $referenciasProcesadas[] = [
-            'metodo' => 'Zelle',
-            'referencia' => $request->referencia_zelle ?? 'S/R',
-            'monto_usd' => $request->pago_zelle_usd,
-            'monto_bs' => 0
-        ];
-    }
-    if ($request->pago_punto_bs > 0) {
-        $referenciasProcesadas[] = [
-            'metodo' => 'Punto',
-            'referencia' => $request->referencia_punto ?? 'S/R',
-            'monto_bs' => $request->pago_punto_bs,
-            'monto_usd' => 0 // O el cálculo en USD si lo prefieres
-        ];
-    }
-    if ($request->pago_pagomovil_bs > 0) {
-        $referenciasProcesadas[] = [
-            'metodo' => 'Pago Movil',
-            'referencia' => $request->referencia_pagomovil ?? 'S/R',
-            'monto_bs' => $request->pago_pagomovil_bs,
-            'monto_usd' => 0
-        ];
-    }
-
-    // Fusionamos con las referencias que ya venían (si las hay)
-    $request->merge(['referencias' => array_merge($request->referencias ?? [], $referenciasProcesadas)]);
-    $tasa_bcv = bcv_rate('USD');
-    DB::beginTransaction();
-    try {
-        // 1. Determinar el código (Factura o Nota de Entrega)
-        if ($request->tipo_documento === 'nota_entrega') {
-            $codigo = 'NE-' . $request->correlativo_nota;
-        } elseif ($request->tipo_documento === 'factura') {
-            $codigo = 'FAC-'; // lógica factura
-        } else { // sin_documento
-            $codigo = 'V-' . uniqid(); // o tu prefijo para ventas sin doc
+        if (!$id_caja) {
+            return redirect()->back()->with('error', 'Debe especificar una caja válida para procesar la venta.');
         }
 
-        // 2. Crear la Venta (Cabecera)
-        $venta = Venta::create([
-            'codigo_factura'    => $codigo,
-            'id_cliente'        => $request->id_cliente,
-            'id_user'           => $user->id, 
-            'id_local'          => $local->id,
-            'id_caja'           => $id_caja,
-            'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
-            'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
-            'monto_credito_usd' => $request->monto_credito_usd ?? 0,
-            'total_usd'         => $request->total_usd, // El total neto enviado desde la vista
-            'estado'            => 'completada',
-            'observacion'       => $request->observacion
-        ]);
+        // Mapeamos los campos individuales del form al array de referencias
+        $referenciasProcesadas = [];
+        
+        if ($request->pago_zelle_usd > 0) {
+            $referenciasProcesadas[] = [
+                'metodo' => 'Zelle',
+                'referencia' => $request->referencia_zelle ?? 'S/R',
+                'monto_usd' => $request->pago_zelle_usd,
+                'monto_bs' => 0
+            ];
+        }
+        if ($request->pago_punto_bs > 0) {
+            $referenciasProcesadas[] = [
+                'metodo' => 'Punto',
+                'referencia' => $request->referencia_punto ?? 'S/R',
+                'monto_bs' => $request->pago_punto_bs,
+                'monto_usd' => 0
+            ];
+        }
+        if ($request->pago_pagomovil_bs > 0) {
+            $referenciasProcesadas[] = [
+                'metodo' => 'Pago Movil',
+                'referencia' => $request->referencia_pagomovil ?? 'S/R',
+                'monto_bs' => $request->pago_pagomovil_bs,
+                'monto_usd' => 0
+            ];
+        }
 
-        // 3. Extensión de información (Tabla: ventas_info_adicional)
-        $venta->infoAdicional()->create([
-            'tipo_documento'       => $request->tipo_documento,
-            'correlativo_nota'     => $request->correlativo_nota,
-            'porcentaje_descuento' => $request->porcentaje_descuento ?? 0,
-            'monto_descuento_usd'  => $request->monto_descuento_usd ?? 0,
-            'base_imponible_bs'    => $request->base_imponible_bs ?? 0,
-            'iva_bs'               => $request->iva_bs ?? 0,
-            'aplica_abono' => $request->has('pago_excedente_abono')
-        ]);
+        $request->merge(['referencias' => array_merge($request->referencias ?? [], $referenciasProcesadas)]);
+        $tasa_bcv = bcv_rate('USD');
 
+        DB::beginTransaction();
+        try {
+            $correlativoFiscal = null; // Variable para almacenar el objeto en caso de ser factura
 
-        // 4. Referencias Bancarias (Tabla: pago_referencias)
-        if ($request->has('referencias')) {
-            foreach ($request->referencias as $ref) {
-                $venta->referencias()->create([
-                    'metodo'     => $ref['metodo'],
-                    'referencia' => $ref['referencia'],
-                    'monto_bs'   => $ref['monto_bs'] ?? 0,
-                    'monto_usd'  => $ref['monto_usd'] ?? 0,
-                ]);
+            // 1. Determinar el código (Factura, Nota de Entrega o Sin Documento)
+            if ($request->tipo_documento === 'nota_entrega') {
+                
+                $codigo = 'NE-' . $request->correlativo_nota;
+
+            } elseif ($request->tipo_documento === 'factura') {
+                
+                // Buscar el siguiente correlativo fiscal disponible con bloqueo de fila
+                $correlativoFiscal = Correlativo::where('estado', 'disponible')
+                    ->orderBy('id', 'asc')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$correlativoFiscal) {
+                    throw new \Exception("No hay correlativos de factura fiscal disponibles en el sistema. Por favor cargue un nuevo lote.");
+                }
+
+                // Asignamos el prefijo FAC- + el número de factura
+                $codigo = 'FAC-' . $correlativoFiscal->numero_factura;
+
+            } else { // sin_documento
+                $codigo = 'V-' . uniqid();
             }
-        }
 
-        // 5. Detalles de Venta y Descuento de Stock (Tabla: insumos_has_cantidades)
-        foreach ($request->articulos as $item) {
-            $venta->detalles()->create([
-                'id_insumo'       => $item['id_insumo'],
-                'cantidad'        => $item['cantidad'],
-                'precio_unitario' => $item['precio_unitario'],
-                'subtotal'        => $item['cantidad'] * $item['precio_unitario']
+            // 2. Crear la Venta (Cabecera)
+            $venta = Venta::create([
+                'codigo_factura'    => $codigo,
+                'id_cliente'        => $request->id_cliente,
+                'id_user'           => $user->id, 
+                'id_local'          => $local->id,
+                'id_caja'           => $id_caja,
+                'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
+                'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
+                'monto_credito_usd' => $request->monto_credito_usd ?? 0,
+                'total_usd'         => $request->total_usd,
+                'estado'            => 'completada',
+                'observacion'       => $request->observacion
             ]);
 
-            // Descuento de stock usando el modelo InsumosC que me pasaste
-            $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
-                                 ->where('id_local', $local->id)
-                                 ->first();
-
-            if (!$existencia || $existencia->cantidad < $item['cantidad']) {
-                throw new \Exception("Stock insuficiente para: " . $item['nombre']);
+            // 2.1 Si fue factura fiscal, marcamos el correlativo como usado
+            if ($correlativoFiscal) {
+                $correlativoFiscal->update([
+                    'estado'    => 'usado',
+                    'venta_id'  => $venta->id,
+                    'fecha_uso' => now()
+                ]);
             }
 
-            $existencia->decrement('cantidad', $item['cantidad']);
-            // --- NUEVA LÓGICA DE ALERTA DE STOCK ---
-            $insumoBase = Insumos::find($item['id_insumo']);
-            $nuevaCantidad = $existencia->fresh()->cantidad;
+            // 3. Extensión de información (Tabla: ventas_info_adicional)
+            $venta->infoAdicional()->create([
+                'tipo_documento'       => $request->tipo_documento,
+                'correlativo_nota'     => $request->tipo_documento === 'factura' ? $correlativoFiscal->numero_factura : $request->correlativo_nota,
+                'numero_control'       => $correlativoFiscal ? $correlativoFiscal->numero_control : null, // Guardamos también el # de control si existe la columna
+                'porcentaje_descuento' => $request->porcentaje_descuento ?? 0,
+                'monto_descuento_usd'  => $request->monto_descuento_usd ?? 0,
+                'base_imponible_bs'    => $request->base_imponible_bs ?? 0,
+                'iva_bs'               => $request->iva_bs ?? 0,
+                'aplica_abono'         => $request->has('pago_excedente_abono')
+            ]);
 
-            if ($nuevaCantidad <= $insumoBase->stock_min) {
+            // 4. Referencias Bancarias
+            if ($request->has('referencias')) {
+                foreach ($request->referencias as $ref) {
+                    $venta->referencias()->create([
+                        'metodo'     => $ref['metodo'],
+                        'referencia' => $ref['referencia'],
+                        'monto_bs'   => $ref['monto_bs'] ?? 0,
+                        'monto_usd'  => $ref['monto_usd'] ?? 0,
+                    ]);
+                }
+            }
+
+            // 5. Detalles de Venta y Descuento de Stock
+            foreach ($request->articulos as $item) {
+                $venta->detalles()->create([
+                    'id_insumo'       => $item['id_insumo'],
+                    'cantidad'        => $item['cantidad'],
+                    'precio_unitario' => $item['precio_unitario'],
+                    'subtotal'        => $item['cantidad'] * $item['precio_unitario']
+                ]);
+
+                $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
+                                     ->where('id_local', $local->id)
+                                     ->first();
+
+                if (!$existencia || $existencia->cantidad < $item['cantidad']) {
+                    throw new \Exception("Stock insuficiente para: " . $item['nombre']);
+                }
+
+                $existencia->decrement('cantidad', $item['cantidad']);
+
+                $insumoBase = Insumos::find($item['id_insumo']);
+                $nuevaCantidad = $existencia->fresh()->cantidad;
+
+                if ($nuevaCantidad <= $insumoBase->stock_min) {
+                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $detalles = [
+                        'titulo'  => '¡Stock Agotándose!',
+                        'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
+                        'url'     => route('insumos.index'),
+                        'icono'   => 'fas fa-exclamation-triangle text-danger'
+                    ];
+
+                    foreach ($gerentes as $gerente) {
+                        $gerente->notify(new StockBajoNotification($detalles));
+                    }
+                }
+            }
+
+            // 6. Lógica de ABONO AUTOMÁTICO
+            if ($request->has('aplica_abono') && $request->monto_excedente > 0) {
+                $creditoOld = Credito::where('id_cliente', $request->id_cliente)
+                                    ->where('estado', 'pendiente')
+                                    ->lockForUpdate()
+                                    ->first();
+
+                if ($creditoOld) {
+                    AbonoCredito::create([
+                        'id_credito'        => $creditoOld->id,
+                        'id_user'           => $user->id,
+                        'id_caja'           => $id_caja,
+                        'monto_pagado_usd'  => $request->monto_excedente,
+                        'pago_usd_efectivo' => $request->exc_usd_efectivo ?? 0,
+                        'pago_bs_efectivo'  => $request->exc_bs_efectivo ?? 0,
+                        'detalles'          => "Abono automático desde Venta: " . $codigo,
+                        'estado'            => 'Realizado'
+                    ]);
+
+                    $creditoOld->decrement('saldo_pendiente', $request->monto_excedente);
+
+                    if ($creditoOld->fresh()->saldo_pendiente <= 0) {
+                        $creditoOld->update(['estado' => 'pagado', 'saldo_pendiente' => 0]);
+                    }
+                }
+            }
+
+            // 7. Si esta venta genera un crédito NUEVO
+            if ($request->monto_credito_usd > 0) {
+                Credito::create([
+                    'id_venta'          => $venta->id,
+                    'id_cliente'        => $request->id_cliente,
+                    'monto_inicial'     => $request->monto_credito_usd,
+                    'saldo_pendiente'   => $request->monto_credito_usd,
+                    'fecha_vencimiento' => now()->addDays(15), 
+                    'estado'            => 'pendiente',
+                    'tasa_cambio_origen'=> $tasa_bcv
+                ]);
+
                 $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
                 $detalles = [
-                    'titulo'  => '¡Stock Agotándose!',
-                    'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
-                    'url'     => route('insumos.index'),
-                    'icono'   => 'fas fa-exclamation-triangle text-danger'
+                    'titulo'  => '💸 Nueva Venta a Crédito',
+                    'mensaje' => "Se otorgó un crédito de {$request->monto_credito_usd}$ a {$request->cliente_nombre}.",
+                    'url'     => route('creditos.index'),
+                    'icono'   => 'fas fa-hand-holding-usd text-info'
                 ];
 
                 foreach ($gerentes as $gerente) {
                     $gerente->notify(new StockBajoNotification($detalles));
                 }
             }
-        }
 
-        // 6. Lógica de ABONO AUTOMÁTICO (Si el cliente tenía deuda y pagó de más)
-        if ($request->has('aplica_abono') && $request->monto_excedente > 0) {
-            $creditoOld = Credito::where('id_cliente', $request->id_cliente)
-                                ->where('estado', 'pendiente')
-                                ->lockForUpdate()
-                                ->first();
+            DB::commit();
 
-            if ($creditoOld) {
-                // Registramos el abono en la tabla abonos_creditos
-                AbonoCredito::create([
-                    'id_credito'        => $creditoOld->id,
-                    'id_user'           => $user->id,
-                    'id_caja'           => $id_caja,
-                    'monto_pagado_usd'  => $request->monto_excedente,
-                    'pago_usd_efectivo' => $request->exc_usd_efectivo ?? 0,
-                    'pago_bs_efectivo'  => $request->exc_bs_efectivo ?? 0,
-                    'detalles'          => "Abono automático desde Venta: " . $codigo,
-                    'estado'            => 'Realizado'
-                ]);
+            // 8. Respuesta con modal de impresión
+            if (in_array($request->tipo_documento, ['nota_entrega', 'factura'])) {
+                $tipoNombre = $request->tipo_documento === 'factura' ? 'Factura' : 'Nota de Entrega';
 
-                // Bajamos el saldo pendiente
-                $creditoOld->decrement('saldo_pendiente', $request->monto_excedente);
-
-                // Si se liquidó, cambiamos estado
-                if ($creditoOld->fresh()->saldo_pendiente <= 0) {
-                    $creditoOld->update(['estado' => 'pagado', 'saldo_pendiente' => 0]);
-                }
+                return redirect()->route('ventas.create')
+                    ->with('success', "Venta {$codigo} guardada exitosamente.")
+                    ->with('imprimir_documento', [
+                        'venta_id' => $venta->id,
+                        'codigo'   => $codigo,
+                        'tipo'     => $tipoNombre,
+                    ]);
             }
+
+            return redirect()->route('ventas.create')->with('success', "Venta {$codigo} guardada.");
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
-
-        // 7. Si esta venta genera un crédito NUEVO
-        if ($request->monto_credito_usd > 0) {
-            Credito::create([
-                'id_venta'          => $venta->id,
-                'id_cliente'        => $request->id_cliente,
-                'monto_inicial'     => $request->monto_credito_usd,
-                'saldo_pendiente'   => $request->monto_credito_usd,
-                'fecha_vencimiento' => now()->addDays(15), 
-                'estado'            => 'pendiente',
-                'tasa_cambio_origen'=> $tasa_bcv
-            ]);
-            /*Notificaciones*/
-            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
-            $detalles = [
-                'titulo'  => '💸 Nueva Venta a Crédito',
-                'mensaje' => "Se otorgó un crédito de {$request->monto_credito_usd}$ a {$request->cliente_nombre}.",
-                'url'     => route('creditos.index'), // Ajusta a tu ruta de créditos
-                'icono'   => 'fas fa-hand-holding-usd text-info'
-            ];
-
-            foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
-            }
-        }
-
-        DB::commit();
-        return redirect()->route('ventas.create')->with('success', "Venta {$codigo} guardada.");
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return redirect()->back()->withInput()->with('error', 'Error: ' . $e->getMessage());
     }
-}
 
     public function show($id)
     {
-        // Cargamos 'usuario' (no user) e 'insumo' (no producto)
-        $venta = Venta::with(['cliente', 'detalles.insumo', 'usuario', 'local', 'credito'])->findOrFail($id);
-
+        // Cargamos 'infoAdicional' para acceder a tipo_documento, correlativo_nota y numero_control
+        $venta = Venta::with([
+            'cliente', 
+            'detalles.insumo', 
+            'usuario', 
+            'local', 
+            'credito', 
+            'infoAdicional'
+        ])->findOrFail($id);
+        
+        // Si utilizas la misma vista para ambos documentos, solo pasas $venta
         return view('ventas.show', compact('venta'));
     }
 

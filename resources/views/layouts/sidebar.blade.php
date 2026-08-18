@@ -294,6 +294,12 @@
                                 <p>Locales</p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="{{ route('correlativos.index') }}" class="nav-link {{ request()->is('correlativos*') ? 'active' : '' }}">
+                                <i class="fas fa-barcode nav-icon"></i>
+                                <p>Correlativos SENIAT</p>
+                            </a>
+                        </li>
                         @endif
                         <li class="nav-item">
                             <a href="{{ route('categorias.index') }}" class="nav-link {{ Request::is('categorias*') ? 'active' : '' }}">

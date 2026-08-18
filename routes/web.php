@@ -27,7 +27,7 @@ use App\Http\Controllers\ConfigOfertaController;
 use App\Http\Controllers\MovimientoCajaController;
 use App\Http\Controllers\InsumosMayoresController;
 use App\Http\Controllers\NotificationController;
-
+use App\Http\Controllers\CorrelativoController;
 /*
 |-------------------------------------------------------------------------- 
 | Web Routes
@@ -250,4 +250,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead'])->name('notifications.markAllRead');
     Route::get('/notifications/all', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/count', [NotificationController::class, 'count'])->name('notifications.count');
+
+
+
+    
+
+    Route::middleware(['auth'])->group(function () {
+        Route::resource('correlativos', CorrelativoController::class);
+    });
 });
