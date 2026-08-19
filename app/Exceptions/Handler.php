@@ -4,16 +4,12 @@ namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Database\QueryException;
+use Illuminate\Session\TokenMismatchException;
 use Throwable;
 
 class Handler extends ExceptionHandler
 {
     /**
-     * The list of the inputs that are never flashed to the session on validation exceptions.
-     *
-     * @var array<int, string>
-     */
-     /**
      * A list of exception types with their corresponding custom log levels.
      */
     protected $levels = [
@@ -27,6 +23,11 @@ class Handler extends ExceptionHandler
         //
     ];
 
+    /**
+     * The list of the inputs that are never flashed to the session on validation exceptions.
+     *
+     * @var array<int, string>
+     */
     protected $dontFlash = [
         'current_password',
         'password',
@@ -41,21 +42,30 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
-        // Agrega este bloque para capturar el error 419
-        $this->renderable(function (\Throwable $e, $request) {
-        // Si la sesión expiró (419) o si se intenta acceder a un objeto nulo estando deslogueado
-        if ($e instanceof \Illuminate\Session\TokenMismatchException || 
-           ($e instanceof \Error && str_contains($e->getMessage(), 'Attempt to read property "name" on null'))) {
+    }
+
+    /**
+     * Render an exception into an HTTP response.
+     */
+    public function render($request, Throwable $exception)
+    {
+        // 1. CAPTURAR EXPIRACIÓN DE SESIÓN (TokenMismatchException / Error 419)
+        if ($exception instanceof TokenMismatchException || 
+           ($exception instanceof \Error && str_contains($exception->getMessage(), 'Attempt to read property "name" on null'))) {
             
+            // Si la petición es AJAX/JSON
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Su sesión ha expirado por inactividad.'
+                ], 419);
+            }
+
+            // Redirección directa al login
             return redirect()->route('login')
                 ->with('message', 'Su sesión ha expirado por inactividad. Por favor, ingrese de nuevo.');
         }
-    });
-    }
 
-    public function render($request, Throwable $exception)
-    {
-        // ✅ CAPTURAR ERROR DE BASE DE DATOS
+        // 2. CAPTURAR ERROR DE BASE DE DATOS (WAMP / MySQL)
         if ($exception instanceof QueryException) {
             $message = $exception->getMessage();
             

@@ -10,6 +10,25 @@
 
     // Correlativo / Número de documento
     $numeroDocumento = $infoAdicional->correlativo_nota ?? $venta->codigo_factura;
+
+    // 1. Obtener la información adicional relacionada
+        $info = $venta->infoAdicional;
+
+        // 2. Obtener Base, IVA y Total en Bolívares guardados en BD
+        $baseImponibleBS = $info->base_imponible_bs ?? 0;
+        $ivaBS           = $info->iva_bs ?? 0;
+        $totalBS         = $baseImponibleBS + $ivaBS;
+
+        // 3. Despejar la tasa histórica exacta (evitando división por cero)
+        if ($totalBS > 0 && $venta->total_usd > 0) {
+            $tasa = $totalBS / $venta->total_usd;
+        } else {
+            // Respaldo por si es un registro incompleto o en $0
+            $tasa = bcv_rate('USD') ?? 1;
+            $totalBS = $venta->total_usd * $tasa;
+            $baseImponibleBS = $totalBS / 1.16;
+            $ivaBS = $baseImponibleBS * 0.16;
+        }
 @endphp
 
 @section('title') 
@@ -186,13 +205,6 @@
                         </div>
 
                         {{-- Tabla Fiscal de Productos --}}
-                        @php
-                            $tasa = $venta->tasa_cambio ?? $tasa ?? 1;
-                            $totalBS = $venta->total_usd * $tasa;
-                            $baseImponibleBS = $totalBS / 1.16;
-                            $ivaBS = $baseImponibleBS * 0.16;
-                        @endphp
-
                         <table class="table-fiscal">
                             <thead>
                                 <tr>
@@ -348,38 +360,42 @@
                                 <tr>
                                     <th style="width: 8%; text-align: center;">CANT.</th>
                                     <th style="width: 62%;">DESCRIPCIÓN</th>
-                                    <th style="width: 15%; text-align: right;">P. UNITARIO ($)</th>
-                                    <th style="width: 15%; text-align: right;">P. TOTAL ($)</th>
+                                    <th style="width: 15%; text-align: right;">P. UNITARIO (Bs.)</th>
+                                    <th style="width: 15%; text-align: right;">P. TOTAL (Bs.)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($venta->detalles as $detalle)
+                                @php
+                                    $precioUnitarioBS = $detalle->precio_unitario * $tasa;
+                                    $subtotalBS = ($detalle->cantidad * $detalle->precio_unitario) * $tasa;
+                                @endphp
                                 <tr>
                                     <td style="text-align: center;">{{ $detalle->cantidad }}</td>
                                     <td>{{ $detalle->insumo->producto }} {{ $detalle->insumo->descripcion }}</td>
-                                    <td style="text-align: right;">{{ number_format($detalle->precio_unitario, 2) }}</td>
-                                    <td style="text-align: right;">{{ number_format($detalle->cantidad * $detalle->precio_unitario, 2) }}</td>
+                                    <td style="text-align: right;">{{ number_format($precioUnitarioBS, 2, ',', '.') }}</td>
+                                    <td style="text-align: right;">{{ number_format($subtotalBS, 2, ',', '.') }}</td>
                                 </tr>
                                 @endforeach
                             </tbody>
                         </table>
 
-                        {{-- Totales en USD --}}
+                        {{-- Totales en Bolívares --}}
                         <div class="row">
                             <div class="col-6"></div>
                             <div class="col-6">
                                 <table class="table-totales">
                                     <tr>
-                                        <td style="width: 60%;">SUB-TOTAL ($)</td>
-                                        <td style="text-align: right; width: 40%;">{{ number_format($venta->total_usd, 2) }}</td>
+                                        <td style="width: 60%;">SUB-TOTAL (Bs.)</td>
+                                        <td style="text-align: right; width: 40%;">{{ number_format($totalBS, 2, ',', '.') }}</td>
                                     </tr>
                                     <tr>
-                                        <td>FLETE ($)</td>
-                                        <td style="text-align: right;">0.00</td>
+                                        <td>FLETE (Bs.)</td>
+                                        <td style="text-align: right;">0,00</td>
                                     </tr>
                                     <tr class="row-total">
-                                        <td>TOTAL GENERAL ($)</td>
-                                        <td style="text-align: right;">{{ number_format($venta->total_usd, 2) }}</td>
+                                        <td>TOTAL GENERAL (Bs.)</td>
+                                        <td style="text-align: right;">{{ number_format($totalBS, 2, ',', '.') }}</td>
                                     </tr>
                                 </table>
                             </div>
