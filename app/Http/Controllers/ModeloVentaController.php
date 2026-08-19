@@ -105,20 +105,22 @@ class ModeloVentaController extends Controller
                             $pctExtra = floatval($modeloVenta->porcentaje_extra) / 100;
                             $precioUsd = $costo + ($costo * $pctExtra);
 
-                            $insumo->precio_bcv_usd = $precioUsd;
-                            $insumo->precio_usdt_usd = $precioUsd;
-                            $insumo->precio_bs = $precioUsd * floatval($modeloVenta->tasa_bcv);
+                            // NOMBRES CORREGIDOS SEGÚN EL MODELO INSUMOS
+                            $insumo->precio_venta_usd  = $precioUsd;
+                            $insumo->precio_venta_usdt = $precioUsd;
+                            $insumo->precio_venta_bs   = $precioUsd * floatval($modeloVenta->tasa_bcv);
                         } else {
                             // Cálculo por Factores Divisores
                             $factorBcv = floatval($modeloVenta->factor_bcv);
                             $factorUsdt = floatval($modeloVenta->factor_usdt);
 
-                            $bcvUsd = $factorBcv > 0 ? ($costo / $factorBcv) : 0;
+                            $bcvUsd  = $factorBcv > 0 ? ($costo / $factorBcv) : 0;
                             $usdtUsd = $factorUsdt > 0 ? ($costo / $factorUsdt) : 0;
 
-                            $insumo->precio_bcv_usd = $bcvUsd;
-                            $insumo->precio_usdt_usd = $usdtUsd;
-                            $insumo->precio_bs = $bcvUsd * floatval($modeloVenta->tasa_bcv);
+                            // NOMBRES CORREGIDOS SEGÚN EL MODELO INSUMOS
+                            $insumo->precio_venta_usd  = $bcvUsd;
+                            $insumo->precio_venta_usdt = $usdtUsd;
+                            $insumo->precio_venta_bs   = $bcvUsd * floatval($modeloVenta->tasa_bcv);
                         }
 
                         $insumo->save();
