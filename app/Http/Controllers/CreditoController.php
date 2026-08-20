@@ -391,15 +391,19 @@ class CreditoController extends Controller
     {
         $cliente = Cliente::findOrFail($id);
         
-        // Obtenemos los detalles de venta directamente
-        $detalles = DetalleVenta::whereHas('venta', function($q) use ($id) {
-                $q->where('id_cliente', $id)->where('monto_credito_usd', '>', 0);
-            })
-            ->with(['venta', 'insumo.categoria', 'insumo.modeloVenta'])
-            ->orderBy('created_at', 'desc')
+        // Obtenemos los créditos pendientes del cliente con sus ventas, productos y abonos
+        $creditos = Credito::where('id_cliente', $id)
+            ->where('estado', 'pendiente') // O donde saldo_pendiente > 0
+            ->with([
+                'venta.detalles.insumo', 
+                'abonos' => function($q) {
+                    $q->orderBy('created_at', 'asc');
+                }
+            ])
+            ->orderBy('created_at', 'asc')
             ->get();
         
-        return view('creditos.productos', compact('cliente', 'detalles'));
+        return view('creditos.productos', compact('cliente', 'creditos'));
     }
     /**
      * Genera el Estado de Cuenta del Cliente en PDF
