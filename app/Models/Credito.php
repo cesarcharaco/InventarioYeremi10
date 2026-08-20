@@ -19,7 +19,9 @@ class Credito extends Model
         'estado',
         'saldo_a_favor',
         'ultima_revalorizacion',
-        'tasa_cambio_origen'
+        'tasa_cambio_origen',
+        'created_at',
+        'updated_at',
     ];
 
     // Casts para manejar fechas automáticamente

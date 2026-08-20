@@ -689,7 +689,7 @@ class CreditoController extends Controller
 
             // Generar un código de factura único para esta operación
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
-
+            $fechaCredito = Carbon::parse($request->fecha_credito);
             // 2. Registrar en la tabla VENTA
             $venta = new Venta();
             $venta->codigo_factura     = $codigoFactura;
@@ -707,7 +707,7 @@ class CreditoController extends Controller
             $venta->observacion        = $request->observacion;
             
             // Asignar la fecha personalizada al created_at de la venta
-            $venta->created_at         = $request->fecha_credito;
+            $venta->created_at         = $fechaCredito;
             $venta->updated_at         = now();
             $venta->save();
 
@@ -717,10 +717,10 @@ class CreditoController extends Controller
                 'id_cliente'         => $cliente->id,
                 'monto_inicial'      => $request->monto_credito_usd,
                 'saldo_pendiente'    => $request->monto_credito_usd,
-                'fecha_vencimiento'  => now()->addDays(15), 
+                'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15),
                 'estado'             => 'pendiente',
                 'tasa_cambio_origen' => $tasa_bcv,
-                'created_at'         => $request->fecha_credito,
+                'created_at'         => $fechaCredito,
                 'updated_at'         => now(),
             ]);
 
@@ -838,6 +838,7 @@ class CreditoController extends Controller
 
             // Generar un código de factura único
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
+            $fechaCredito = Carbon::parse($request->fecha_credito);
 
             // 2. Registrar en la tabla VENTA
             $venta = new Venta();
@@ -855,7 +856,7 @@ class CreditoController extends Controller
             $venta->estado             = 'completada';
             $venta->observacion        = $request->observacion;
             
-            $venta->created_at         = $request->fecha_credito;
+            $venta->created_at         = $fechaCredito;
             $venta->updated_at         = now();
             $venta->save();
 
@@ -865,10 +866,10 @@ class CreditoController extends Controller
                 'id_cliente'         => $cliente->id,
                 'monto_inicial'      => $request->monto_credito_usd,
                 'saldo_pendiente'    => $request->monto_credito_usd,
-                'fecha_vencimiento'  => now()->addDays(15), 
+                'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15), 
                 'estado'             => 'pendiente',
                 'tasa_cambio_origen' => $tasa_bcv,
-                'created_at'         => $request->fecha_credito,
+                'created_at'         => $fechaCredito,
                 'updated_at'         => now(),
             ]);
 
