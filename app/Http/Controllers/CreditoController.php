@@ -39,12 +39,10 @@ class CreditoController extends Controller
                             ->toArray();
         }
 
-        // 2. Consulta principal unificada
+        // 2. Consulta principal: Clientes QUE TIENEN créditos pendientes (Tabla principal)
         $query = Cliente::whereHas('creditos', function($qCredito) use ($user, $misLocales) {
-            // Unicamente créditos pendientes
             $qCredito->where('estado', 'pendiente');
 
-            // Si NO es admin, exigimos que la VENTA asociada al crédito sea del local del vendedor
             if (!$user->esAdmin()) {
                 $qCredito->whereHas('venta', function($qVenta) use ($misLocales) {
                     $qVenta->whereIn('id_local', $misLocales);
@@ -71,7 +69,20 @@ class CreditoController extends Controller
 
         $clientes = $query->get();
 
-        return view('creditos.index', compact('clientes'));
+        // 4. Modal: Clientes QUE NO TIENEN créditos pendientes activos
+        $todosLosClientes = Cliente::whereDoesntHave('creditos', function($qCredito) use ($user, $misLocales) {
+            $qCredito->where('estado', 'pendiente');
+
+            if (!$user->esAdmin()) {
+                $qCredito->whereHas('venta', function($qVenta) use ($misLocales) {
+                    $qVenta->whereIn('id_local', $misLocales);
+                });
+            }
+        })
+        ->orderBy('nombre', 'asc')
+        ->get();
+
+        return view('creditos.index', compact('clientes', 'todosLosClientes'));
     }
 
     public function show($id)
@@ -548,6 +559,153 @@ class CreditoController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Ocurrió un error al registrar el crédito directo: ' . $e->getMessage());
+        }
+    }
+
+    public function storeDirectoGeneral(Request $request)
+        {
+            // 1. Validaciones de entrada
+            $request->validate([
+                'cliente_id'        => 'required|exists:clientes,id',
+                'monto_credito_usd' => 'required|numeric|min:0.01',
+                'fecha_credito'     => 'required|date',
+                'observacion'       => 'nullable|string',
+                'pin_autorizacion'  => 'nullable|string'
+            ]);
+
+            // Validar autorización si el usuario no tiene el permiso avanzado
+            if (Gate::denies('gestionar-creditos-avanzado')) {
+                $local = auth()->user()->localActual();
+                $auth = AutorizacionPin::where('id_local', $local ? $local->id : (auth()->user()->id_local ?? 1))
+                            ->where('pin', $request->pin_autorizacion)
+                            ->where('estado', 'usado')
+                            ->first();
+
+                if (!$auth) {
+                    return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
+                }
+            }
+
+            $tasa_bcv = bcv_rate('USD');
+            DB::beginTransaction();
+
+            try {
+                $cliente = Cliente::findOrFail($request->cliente_id);
+
+                // Generar un código de factura único
+                $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
+
+                // 2. Registrar en la tabla VENTA
+                $venta = new Venta();
+                $venta->codigo_factura     = $codigoFactura;
+                $venta->id_cliente         = $cliente->id;
+                $venta->id_user            = auth()->id();
+                $venta->id_local           = auth()->user()->id_local ?? 1;
+                $venta->id_caja            = auth()->user()->id_caja ?? 1;
+                
+                $venta->pago_usd_efectivo  = 0.00;
+                $venta->pago_bs_efectivo   = 0.00;
+                $venta->monto_credito_usd  = $request->monto_credito_usd;
+                $venta->total_usd          = $request->monto_credito_usd;
+                
+                $venta->estado             = 'completada';
+                $venta->observacion        = $request->observacion;
+                
+                $venta->created_at         = $request->fecha_credito;
+                $venta->updated_at         = now();
+                $venta->save();
+
+                // 3. Registrar en la tabla CREDITO
+                $credito = Credito::create([
+                    'id_venta'           => $venta->id,
+                    'id_cliente'         => $cliente->id,
+                    'monto_inicial'      => $request->monto_credito_usd,
+                    'saldo_pendiente'    => $request->monto_credito_usd,
+                    'fecha_vencimiento'  => now()->addDays(15), 
+                    'estado'             => 'pendiente',
+                    'tasa_cambio_origen' => $tasa_bcv,
+                    'created_at'         => $request->fecha_credito,
+                    'updated_at'         => now(),
+                ]);
+
+                // 4. Notificaciones
+                $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                $detalles = [
+                    'titulo'  => '💸 Nueva Venta a Crédito Directo',
+                    'mensaje' => "Se otorgó un crédito directo de {$request->monto_credito_usd}$ a {$cliente->nombre}.",
+                    'url'     => route('creditos.index'),
+                    'icono'   => 'fas fa-hand-holding-usd text-info'
+                ];
+
+                foreach ($gerentes as $gerente) {
+                    $gerente->notify(new StockBajoNotification($detalles));
+                }
+
+                DB::commit();
+
+                return redirect()->back()->with('success', 'Crédito directo de $' . number_format($request->monto_credito_usd, 2) . ' a ' . $cliente->nombre . ' registrado con éxito.');
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return redirect()->back()->with('error', 'Ocurrió un error al registrar el crédito directo: ' . $e->getMessage());
+            }
+        }
+        /**
+             * Elimina una venta a crédito o crédito directo, devolviendo el stock
+             * y eliminando los registros financieros asociados.
+             */
+    public function destroy($id)
+    {
+        // 1. Autorización mediante Gate o verificación Admin
+        if (Gate::denies('gestionar-creditos-avanzado') && !auth()->user()->esAdmin()) {
+            return redirect()->back()->with('error', 'No posee autorización suficiente para eliminar registros de crédito.');
+        }
+
+        try {
+            $idCliente = null;
+
+            DB::transaction(function () use ($id, &$idCliente) {
+                $credito = Credito::with(['venta.detalles.insumo', 'abonos', 'intereses'])->findOrFail($id);
+                
+                // 📌 Usamos la columna exacta de la base de datos: id_cliente
+                $idCliente = $credito->id_cliente;
+                
+                $venta = $credito->venta;
+
+                // 2. Retorno de stock si la venta tiene detalles (productos de inventario)
+                if ($venta && $venta->detalles->isNotEmpty()) {
+                    foreach ($venta->detalles as $detalle) {
+                        if ($detalle->insumo) {
+                            $detalle->insumo->increment('stock', $detalle->cantidad);
+                        }
+                    }
+                    $venta->detalles()->delete();
+                }
+
+                // 3. Eliminar historial financiero del crédito (abonos e intereses)
+                $credito->abonos()->delete();
+                $credito->intereses()->delete();
+
+                // 4. Eliminar la Venta y el Crédito
+                $credito->delete();
+                
+                if ($venta) {
+                    $venta->delete();
+                }
+            });
+
+            // 📌 Consultamos por la columna correcta: 'id_cliente'
+            $quedanCreditos = Credito::where('id_cliente', $idCliente)->exists();
+
+            if (!$quedanCreditos) {
+                return redirect()->route('creditos.index')
+                    ->with('success', 'Crédito eliminado y stock devuelto correctamente. El cliente ya no posee créditos pendientes.');
+            }
+
+            return redirect()->back()->with('success', 'El crédito y sus registros asociados han sido eliminados correctamente. El inventario fue actualizado.');
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Ocurrió un error al intentar eliminar el crédito: ' . $e->getMessage());
         }
     }
 }

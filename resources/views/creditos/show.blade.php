@@ -181,6 +181,7 @@
                                         <th class="text-right">Monto Original ($)</th>
                                         <th class="text-right">Saldo Pendiente ($)</th>
                                         <th class="text-center">Estado</th>
+                                        <th class="text-center">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -217,10 +218,24 @@
                                                 {{ ucfirst($credito->estado) }}
                                             </span>
                                         </td>
+                                        <td class="text-center">
+                                            <button type="button" 
+                                                        class="btn btn-danger btn-sm btn-eliminar-credito" 
+                                                        data-toggle="modal" 
+                                                        data-target="#modalEliminarCredito"
+                                                        data-id="{{ $credito->id }}"
+                                                        data-codigo="{{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}"
+                                                        data-monto="{{ number_format($credito->monto_inicial, 2) }}"
+                                                        data-saldo="{{ number_format($credito->saldo_pendiente, 2) }}"
+                                                        data-tieneproductos="{{ ($credito->venta && $credito->venta->detalles->isNotEmpty()) ? '1' : '0' }}"
+                                                        title="Eliminar Crédito">
+                                                    <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
                                     </tr>
                                     @empty
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-3">No hay créditos registrados para este cliente.</td>
+                                        <td colspan="7" class="text-center text-muted py-3">No hay créditos registrados para este cliente.</td>
                                     </tr>
                                     @endforelse
                                 </tbody>
@@ -360,6 +375,7 @@
 @include('creditos.modals.modal_gestion_saldo')
 @include('creditos.modals.modal_interes')
 @include('creditos.modals.modal_credito_directo')
+@include('creditos.modals.modal_eliminar_credito')
 @endsection
 @section('scripts')
 <script>
@@ -774,6 +790,32 @@
                     return false;
                 }
             @endcannot
+        });
+
+        $('.btn-eliminar-credito').on('click', function() {
+            var id = $(this).data('id');
+            var codigo = $(this).data('codigo');
+            var monto = $(this).data('monto');
+            var saldo = $(this).data('saldo');
+            var tieneProductos = $(this).data('tieneproductos');
+
+            // Configurar el action del formulario con la ruta correcta
+            var actionUrl = "{{ url('creditos') }}/" + id;
+            $('#formEliminarCredito').attr('action', actionUrl);
+
+            // Inyectar datos en la vista del modal
+            $('#eliminar_credito_codigo').text(codigo);
+            $('#eliminar_credito_monto').text(monto);
+            $('#eliminar_credito_saldo').text(saldo);
+
+            // Mostrar alerta según el tipo de crédito
+            if (tieneProductos == '1') {
+                $('#msg_retorno_stock').removeClass('d-none');
+                $('#msg_credito_directo').addClass('d-none');
+            } else {
+                $('#msg_credito_directo').removeClass('d-none');
+                $('#msg_retorno_stock').addClass('d-none');
+            }
         });
     });
 </script>

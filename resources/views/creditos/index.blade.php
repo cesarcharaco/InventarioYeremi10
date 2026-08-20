@@ -47,14 +47,20 @@
     }
 </style>
 <main class="app-content">
-    <div class="app-title">
+    <div class="app-title d-flex justify-content-between align-items-center flex-wrap">
         <div>
             <h3 class="title"><i class="fa fa-address-book"></i> Cuentas por Cobrar</h3>
-            <p>Listado de clientes con saldo pendiente</p>
+            <p class="mb-0">Listado de clientes con saldo pendiente</p>
         </div>
-        <div class="basic-tb-hd text-center">            
-          @include('layouts.partials.flash-messages')
+        <div>
+            <button type="button" class="btn btn-success font-weight-bold btn-block-mobile" data-toggle="modal" data-target="#modalCreditoDirectoGeneral">
+                <i class="fa fa-plus-circle"></i> Nuevo Crédito Directo
+            </button>
         </div>
+    </div>
+
+    <div class="basic-tb-hd text-center">          
+        @include('layouts.partials.flash-messages')
     </div>
 
     <div class="row">
@@ -65,7 +71,8 @@
                         <thead>
                             <tr>
                                 <th>Cliente</th>
-                                <th class="d-none d-md-table-cell">Identificación</th> <th>Saldo Pendiente</th>
+                                <th class="d-none d-md-table-cell">Identificación</th> 
+                                <th>Saldo Pendiente</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -74,7 +81,8 @@
                             <tr>
                                 <td>
                                     <div class="font-weight-bold">{{ $cliente->nombre }}</div>
-                                    <small class="text-muted d-md-none">{{ $cliente->identificacion }}</small> </td>
+                                    <small class="text-muted d-md-none">{{ $cliente->identificacion }}</small> 
+                                </td>
                                 <td class="d-none d-md-table-cell text-muted">
                                     {{ $cliente->identificacion }}
                                 </td>
@@ -99,6 +107,7 @@
 </main>
 
 @include('creditos.modals.abono_modal')
+@include('creditos.modals.modal_credito_directo_general')
 @endsection
 
 @section('scripts')
@@ -127,6 +136,14 @@
             dom: 'ftip',
             pageLength: 20
         });
+
+        // Inicializar Select2 en el modal
+        if ($.fn.select2) {
+            $('.select2-modal').select2({
+                dropdownParent: $('#modalCreditoDirectoGeneral'),
+                width: '100%'
+            });
+        }
     });
 </script>
 @endsection

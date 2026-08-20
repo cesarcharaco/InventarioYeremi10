@@ -172,6 +172,10 @@ Route::middleware(['auth'])->group(function () {
     // --- MÓDULO DE CRÉDITOS ---
     Route::prefix('creditos')->group(function () {
         Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
+        
+        // ⚠️ Importante: Colocamos directo-general AQUÍ para que no colisione con /{id}
+        Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
+        
         Route::get('/{id}', [CreditoController::class, 'show'])->name('creditos.show');
         Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
         Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
@@ -182,9 +186,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/interes/{id}/anular', [CreditoController::class, 'anularInteres'])->name('creditos.interes.anular');
         Route::post('/cliente/{id_cliente}/procesar-reembolso', [CreditoController::class, 'procesarReembolso'])->name('creditos.procesarReembolso');
         Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
-        Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])
-            ->name('creditos.pdf_estado_cuenta');
-        Route::post('/creditos/cliente/{id}/directo', [CreditoController::class, 'storeDirecto'])->name('creditos.directo.store');
+        Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])->name('creditos.pdf_estado_cuenta');
+        Route::post('/cliente/{id}/directo', [CreditoController::class, 'storeDirecto'])->name('creditos.directo.store');
+        Route::delete('/{id}', [CreditoController::class, 'destroy'])->name('creditos.destroy');
     });
 
     // Se excluyen index y show del resource para que no colisionen con el prefijo
