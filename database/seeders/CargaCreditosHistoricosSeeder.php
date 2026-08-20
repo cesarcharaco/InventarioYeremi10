@@ -1398,45 +1398,7 @@ class CargaCreditosHistoricosSeeder extends Seeder
                             'fecha_vencimiento' => '2026-12-15',
                         ],
                     ],
-                    //ANTONIO CUANES
-                    [
-                        'cliente' => [
-                            'nombre' => 'ANTONIO CUANES',
-                            'identificacion' => 'V-10000026',
-                            'telefono' => '0414-1234567',
-                            'direccion' => 'Centro',
-                            'limite_credito' => 500.00
-                        ],
-                        'venta' => [
-                            [
-                                'created_at' => '2026-07-18 10:00:00',
-                                'productos' => [
-                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 80.00],
-                                ]
-                            ],
-                            [
-                                'created_at' => '2026-07-19 10:00:00',
-                                'productos' => [
-                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 31.40],
-                                ]
-                            ],
-                            [
-                                'created_at' => '2026-07-23 10:00:00',
-                                'productos' => [
-                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 6.00],
-                                ]
-                            ],
-                            [
-                                'created_at' => '2026-07-28 10:00:00',
-                                'productos' => [
-                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 25.20],
-                                ]
-                            ],
-                        ],
-                        'credito' => [
-                            'fecha_vencimiento' => '2026-12-15',
-                        ],
-                    ],
+                    
                     //HECTOR NOGUERA
                     [
                         'cliente' => [
