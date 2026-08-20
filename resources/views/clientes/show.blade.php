@@ -24,7 +24,7 @@
           <div class="img-container mb-3">
              <i class="fa fa-user-circle-o fa-5x text-primary"></i>
           </div>
-          <h4 class="mb-1">{{ $cliente->nombre }}</h4>
+          <h4 class="mb-1">{{ $cliente->nombre }} @if(!$cliente->alias) Alias:{{ $cliente->alias }} @endif</h4>
           <span class="badge badge-dark p-2">{{ $cliente->identificacion }}</span>
           <hr>
           <div class="text-left">

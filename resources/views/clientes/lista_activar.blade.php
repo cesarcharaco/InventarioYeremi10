@@ -28,6 +28,7 @@
                 <tr>
                   <th>Identificación</th>
                   <th>Nombre y Apellido</th>
+                  <th>Alias</th>
                   <th>Teléfono</th>
                   <th>Sede Solicitada</th>
                   <th>Acciones</th>
@@ -38,6 +39,7 @@
                 <tr>
                   <td><span class="badge badge-warning">{{ $cliente->identificacion }}</span></td>
                   <td>{{ $cliente->nombre }}</td>
+                  <td>{{ $cliente->alias }}</td>
                   <td>{{ $cliente->telefono }}</td>
                   <td>{{ $cliente->local->nombre ?? 'N/A' }}</td>
                   <td>

@@ -84,17 +84,6 @@
                                                     </span>
                                                 </span>
                                             </span></label>
-                                <!-- <div id="info_cliente" style="display: none;">
-                                    <span class="badge badge-light border text-muted px-2 py-1" style="font-size: 0.9rem;">
-                                        Límite: $<span id="cliente_limite">0</span>
-                                    </span>
-                                    
-                                    <span id="cliente_deuda_container" style="display: none;">
-                                        <span class="badge badge-danger px-2 py-1 shadow-sm" style="font-size: 0.9rem;">
-                                            Deuda: $<span id="cliente_deuda">0</span>
-                                        </span>
-                                    </span>
-                                </div> -->
                                 <div class="input-group">
                                     <select name="id_cliente" id="id_cliente" class="form-control select2" required>
                                         <option value="">Seleccione cliente...</option>
@@ -103,7 +92,7 @@
                                             <option value="{{ $cliente->id }}" 
                                                 data-limite="{{ $cliente->limite_credito }}"
                                                 data-deuda="{{ $cliente->saldo_pendiente ?? 0 }}">
-                                                {{ $cliente->nombre }} ({{ $cliente->identificacion }})
+                                                {{ $cliente->nombre }} ({{ $cliente->identificacion }}){{ !empty($cliente->alias) ? ' - Alias: ' . $cliente->alias : '' }}
                                             </option>
                                         @endforeach
                                     </select>
@@ -526,6 +515,10 @@
                     <div class="form-group">
                         <label>Nombre Completo / Razón Social</label>
                         <input type="text" name="nombre" class="form-control" required placeholder="Juan Perez">
+                    </div>
+                    <div class="form-group">
+                        <label>Alias</label>
+                        <input type="text" name="alias" class="form-control" placeholder="Juancho">
                     </div>
                     <div class="form-group">
                         <label>Teléfono (Opcional)</label>

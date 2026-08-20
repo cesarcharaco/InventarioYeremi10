@@ -68,12 +68,22 @@
                 </div>
 
                 {{-- Nombre Completo --}}
-                <div class="col-md-8">                  
+                <div class="col-md-4">                  
                   <div class="form-group">
                     <label class="control-label">Nombre Completo o Razón Social <b style="color: red;">*</b></label>
                     <input class="form-control @error('nombre') is-invalid @enderror" 
                            type="text" name="nombre" required 
                            value="{{ old('nombre', $cliente->nombre) }}">
+                  </div>
+                </div>
+
+                {{-- Alias --}}
+                <div class="col-md-4">                  
+                  <div class="form-group">
+                    <label class="control-label">Alias</label>
+                    <input class="form-control @error('alias') is-invalid @enderror" 
+                           type="text" name="alias" 
+                           value="{{ old('alias',$cliente->alias) }}" placeholder="Ej: Juancho">
                   </div>
                 </div>
               </div>

@@ -26,6 +26,7 @@ class ClienteController extends Controller
         Gate::authorize('gestionar-clientes');
 
         $clientes = Cliente::with('local')->orderBy('nombre', 'asc')->get();
+        //dd($clientes);
         return view('clientes.index', compact('clientes'));
     }
 
@@ -55,6 +56,7 @@ class ClienteController extends Controller
         $rules = [
             'identificacion' => 'required|string|unique:clientes,identificacion',
             'nombre'         => 'required|string|max:255',
+            'alias'         => 'nullable|string|max:255',
             'telefono'       => 'required|string',
             'id_local'       => 'required|exists:local,id',
             'limite_credito' => 'nullable|numeric|min:0',
@@ -88,6 +90,7 @@ class ClienteController extends Controller
                 // Creamos usuario
                 $user = User::create([
                     'name'     => $datos['nombre'],
+                    'alias'     => $datos['alias'],
                     'cedula'   => $datos['identificacion'],
                     'telefono' => $datos['telefono'],
                     'email'    => $datos['email'],
@@ -139,7 +142,8 @@ class ClienteController extends Controller
         $validator = \Validator::make($request->all(), [
             'identificacion' => 'required|string|unique:clientes,identificacion',
             'nombre'         => 'required|string|max:255',
-            'telefono'       => 'required|string',
+            'alias'          => 'nullable|string|max:255',
+            'telefono'       => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -149,6 +153,7 @@ class ClienteController extends Controller
         $cliente = Cliente::create([
             'identificacion' => $request->identificacion,
             'nombre'         => $request->nombre,
+            'alias'          => $request->alias,
             'telefono'       => $request->telefono,
             'id_local'       => auth()->user()->localActual()->id, // Se vincula al local del vendedor
             'limite_credito' => 0 // Por defecto 0 en registro rápido
@@ -189,11 +194,12 @@ class ClienteController extends Controller
         Gate::authorize('gestionar-clientes');
 
         $cliente = Cliente::findOrFail($id);
-
+        //dd($request->all());
         $request->validate([
             'identificacion' => 'required|string|unique:clientes,identificacion,' . $id,
             'nombre'         => 'required|string|max:255',
-            'telefono'       => 'required|string',
+            'alias'          => 'nullable|string|max:255',
+            'telefono'       => 'nullable|string',
             'id_local'       => 'required|exists:local,id',
             'limite_credito' => 'required|numeric|min:0',
         ]);
@@ -220,32 +226,7 @@ class ClienteController extends Controller
             ->with('info', 'Cliente eliminado del sistema.');
     }
 
-    /*public function storeAjax(Request $request) {
-        try {
-            $request->validate([
-                'identificacion' => 'required|unique:clientes,identificacion',
-                'nombre'         => 'required|string|max:255',
-                'id_local'       => 'required|exists:local,id' // Validación del local
-            ]);
-
-            $cliente = Cliente::create([
-                'identificacion' => $request->identificacion,
-                'nombre'         => $request->nombre,
-                'telefono'       => $request->telefono,
-                'limite_credito' => $request->limite_credito ?? 0,
-                'id_local'       => $request->id_local, 
-                'estado'         => 1
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'cliente' => $cliente
-            ],200);
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e.getMessage()], 422);
-        }
-    }*/
-
+   
     public function storeAjax(Request $request)
     {
         
@@ -275,6 +256,7 @@ class ClienteController extends Controller
                 return Cliente::create([
                     'identificacion' => trim($request->identificacion),
                     'nombre'         => trim($request->nombre),
+                    'alias'          => trim($request->alias),
                     'telefono'       => $request->telefono,
                     'limite_credito' => $request->limite_credito ?? 0,
                     'id_local'       => $request->id_local,
