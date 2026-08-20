@@ -3,7 +3,6 @@
 
 @section('content')
 <main class="app-content">
-    <!-- HEADER: IDENTIDAD + ACCIONES -->
     <div class="app-title">
         <div>
             <h1><i class="fa fa-user"></i> Estado de Cuenta</h1>
@@ -21,7 +20,6 @@
         </a>
     </div>
 
-    <!-- KPIs FINANCIEROS -->
     <div class="row mb-4">
         <div class="col-md-4 mb-3">
             <div class="tile p-0 border-left border-danger" style="border-left-width: 4px !important;">
@@ -29,7 +27,7 @@
                     <div class="text-muted text-uppercase small font-weight-bold">Deuda Total <span class="badge badge-danger">Pendiente</span></div>
                     <div class="d-flex align-items-baseline justify-content-between mt-1">
                         <span class="h3 mb-0 font-weight-bold text-danger" style="font-variant-numeric: tabular-nums;">
-                            ${{ number_format($cliente->creditos->where('estado', 'pendiente')->sum('saldo_pendiente'), 2) }}
+                            ${{ number_format($resumen['saldo_pendiente'], 2) }}
                         </span>
                     </div>
                 </div>
@@ -48,23 +46,31 @@
             </div>
         </div>
         <div class="col-md-4 mb-3">
-            <div class="tile p-0 border-left border-primary" style="border-left-width: 4px !important;">
+            <div class="tile p-0 border-left {{ $resumen['saldo_a_favor'] > 0 ? 'border-info' : 'border-primary' }}" style="border-left-width: 4px !important;">
                 <div class="p-3">
-                    <div class="text-muted text-uppercase small font-weight-bold">Saldo Restante <span class="badge badge-primary">
-                            {{ $resumen['monto_inicial'] > 0 ? round(($resumen['saldo_pendiente'] / $resumen['monto_inicial']) * 100, 1) : 0 }}%
-                        </span></div>
-                    <div class="d-flex align-items-baseline justify-content-between mt-1">
-                        <span id="saldo_total_cliente" class="h3 mb-0 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;"
-                              data-valor="{{ $resumen['saldo_pendiente'] }}">
-                            ${{ number_format($resumen['saldo_pendiente'], 2) }}
-                        </span>
-                    </div>
+                    @if($resumen['saldo_a_favor'] > 0)
+                        <div class="text-muted text-uppercase small font-weight-bold">Saldo a Favor <span class="badge badge-info">Disponible</span></div>
+                        <div class="d-flex align-items-baseline justify-content-between mt-1">
+                            <span id="saldo_a_favor_cliente" class="h3 mb-0 font-weight-bold text-info" style="font-variant-numeric: tabular-nums;">
+                                ${{ number_format($resumen['saldo_a_favor'], 2) }}
+                            </span>
+                        </div>
+                    @else
+                        <div class="text-muted text-uppercase small font-weight-bold">Saldo Restante <span class="badge badge-primary">
+                                {{ $resumen['monto_inicial'] > 0 ? round(($resumen['saldo_pendiente'] / $resumen['monto_inicial']) * 100, 1) : 0 }}%
+                            </span></div>
+                        <div class="d-flex align-items-baseline justify-content-between mt-1">
+                            <span id="saldo_total_cliente" class="h3 mb-0 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;"
+                                  data-valor="{{ $resumen['saldo_pendiente'] }}">
+                                ${{ number_format($resumen['saldo_pendiente'], 2) }}
+                            </span>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ACCIONES RÁPIDAS -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="tile p-3">
@@ -101,9 +107,7 @@
         </div>
     </div>
 
-    <!-- DETALLE FINANCIERO + PESTAÑAS DE HISTORIALES -->
     <div class="row">
-        <!-- SIDEBAR: RESUMEN DETALLADO -->
         <div class="col-lg-3 col-md-4 mb-4">
             <div class="tile p-0 shadow-sm">
                 <div class="bg-dark text-white p-3 rounded-top">
@@ -134,21 +138,19 @@
                     </li>
                     @endif
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3" style="background: #f8f9fa;">
-                        <span class="font-weight-bold text-primary">Saldo Restante</span>
+                        <span class="font-weight-bold text-primary">Saldo Pendiente Neto</span>
                         <span class="h5 mb-0 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;">${{ number_format($resumen['saldo_pendiente'], 2) }}</span>
                     </li>
                 </ul>
             </div>
         </div>
 
-        <!-- CONTENIDO PRINCIPAL EN PESTAÑAS (TABS) -->
         <div class="col-lg-9 col-md-8">
             <div class="tile p-3">
-                <!-- NAV TABS -->
                 <ul class="nav nav-tabs nav-justified" id="tabsEstadoCuenta" role="tablist">
                     <li class="nav-item">
                         <a class="nav-link active font-weight-bold" id="tab-creditos-tab" data-toggle="tab" href="#tab-creditos" role="tab" aria-controls="tab-creditos" aria-selected="true">
-                            <i class="fa fa-credit-card text-primary"></i> Créditos Registrados
+                            <i class="fa fa-credit-card text-primary"></i> Créditos / Saldos
                             <span class="badge badge-primary ml-1">{{ $cliente->creditos->count() }}</span>
                         </a>
                     </li>
@@ -166,10 +168,8 @@
                     </li>
                 </ul>
 
-                <!-- TAB PANES -->
                 <div class="tab-content pt-3" id="tabsEstadoCuentaContent">
 
-                    <!-- PESTAÑA 1: LISTADO DE CRÉDITOS -->
                     <div class="tab-pane fade show active" id="tab-creditos" role="tabpanel" aria-labelledby="tab-creditos-tab">
                         <div class="table-responsive">
                             <table class="table table-sm table-hover" id="tabla-creditos">
@@ -179,25 +179,35 @@
                                         <th>Código / Referencia</th>
                                         <th>Tipo</th>
                                         <th class="text-right">Monto Original ($)</th>
-                                        <th class="text-right">Saldo Pendiente ($)</th>
+                                        <th class="text-right">Saldo ($)</th>
                                         <th class="text-center">Estado</th>
                                         <th class="text-center">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($cliente->creditos as $credito)
-                                    <tr>
+                                    @php
+                                        $esAnticipo = $credito->estado === 'anticipo' || $credito->saldo_pendiente < 0;
+                                    @endphp
+                                    <tr class="{{ $esAnticipo ? 'table-info' : '' }}">
                                         <td class="small text-nowrap" data-order="{{ $credito->created_at->timestamp }}">
                                             {{ $credito->created_at->format('d/m/Y h:i A') }}
                                         </td>
                                         <td>
                                             <strong>
-                                                {{-- Si es venta, intenta mostrar el código de la factura; de lo contrario el ID del crédito --}}
-                                                {{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}
+                                                @if($esAnticipo)
+                                                    ANT-{{ $credito->id }}
+                                                @else
+                                                    {{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}
+                                                @endif
                                             </strong>
                                         </td>
                                         <td>
-                                           @if($credito->venta && $credito->venta->detalles->isEmpty())
+                                            @if($esAnticipo)
+                                                <span class="badge badge-info">
+                                                    <i class="fas fa-wallet"></i> Saldo a Favor
+                                                </span>
+                                            @elseif($credito->venta && $credito->venta->detalles->isEmpty())
                                                 <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">
                                                     <i class="fas fa-hand-holding-usd"></i> Directo
                                                 </span>
@@ -210,13 +220,21 @@
                                         <td class="font-weight-bold text-right" style="font-variant-numeric: tabular-nums;">
                                             ${{ number_format($credito->monto_inicial, 2) }}
                                         </td>
-                                        <td class="font-weight-bold text-right {{ $credito->saldo_pendiente > 0 ? 'text-danger' : 'text-success' }}" style="font-variant-numeric: tabular-nums;">
-                                            ${{ number_format($credito->saldo_pendiente, 2) }}
+                                        <td class="font-weight-bold text-right {{ $esAnticipo ? 'text-info' : ($credito->saldo_pendiente > 0 ? 'text-danger' : 'text-success') }}" style="font-variant-numeric: tabular-nums;">
+                                            @if($esAnticipo)
+                                                +${{ number_format(abs($credito->saldo_pendiente), 2) }}
+                                            @else
+                                                ${{ number_format($credito->saldo_pendiente, 2) }}
+                                            @endif
                                         </td>
                                         <td class="text-center">
-                                            <span class="badge badge-{{ $credito->estado === 'pendiente' ? 'danger' : 'success' }}">
-                                                {{ ucfirst($credito->estado) }}
-                                            </span>
+                                            @if($esAnticipo)
+                                                <span class="badge badge-info">Anticipo</span>
+                                            @else
+                                                <span class="badge badge-{{ $credito->estado === 'pendiente' ? 'danger' : 'success' }}">
+                                                    {{ ucfirst($credito->estado) }}
+                                                </span>
+                                            @endif
                                         </td>
                                         <td class="text-center">
                                             <button type="button" 
@@ -224,18 +242,18 @@
                                                         data-toggle="modal" 
                                                         data-target="#modalEliminarCredito"
                                                         data-id="{{ $credito->id }}"
-                                                        data-codigo="{{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}"
+                                                        data-codigo="{{ $esAnticipo ? 'ANT-' . $credito->id : ($credito->venta->codigo_factura ?? 'CRD-' . $credito->id) }}"
                                                         data-monto="{{ number_format($credito->monto_inicial, 2) }}"
                                                         data-saldo="{{ number_format($credito->saldo_pendiente, 2) }}"
                                                         data-tieneproductos="{{ ($credito->venta && $credito->venta->detalles->isNotEmpty()) ? '1' : '0' }}"
-                                                        title="Eliminar Crédito">
+                                                        title="Eliminar Crédito/Anticipo">
                                                     <i class="fas fa-trash-alt"></i>
                                             </button>
                                         </td>
                                     </tr>
                                     @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-3">No hay créditos registrados para este cliente.</td>
+                                        <td colspan="7" class="text-center text-muted py-3">No hay créditos ni saldos registrados para este cliente.</td>
                                     </tr>
                                     @endforelse
                                 </tbody>
@@ -243,7 +261,6 @@
                         </div>
                     </div>
 
-                    <!-- PESTAÑA 2: HISTORIAL DE ABONOS -->
                     <div class="tab-pane fade" id="tab-abonos" role="tabpanel" aria-labelledby="tab-abonos-tab">
                         <div class="table-responsive">
                             <table class="table table-sm table-hover" id="tabla-historial-abonos">
@@ -313,7 +330,6 @@
                         </div>
                     </div>
 
-                    <!-- PESTAÑA 3: HISTORIAL DE INDEXACIÓN -->
                     <div class="tab-pane fade" id="tab-intereses" role="tabpanel" aria-labelledby="tab-intereses-tab">
                         <div class="table-responsive">
                             <table class="table table-sm table-hover" id="tabla-historial-intereses">
@@ -364,9 +380,7 @@
                         </div>
                     </div>
 
-                </div> <!-- /.tab-content -->
-            </div> <!-- /.tile -->
-        </div>
+                </div> </div> </div>
     </div>
 </main>
 @include('creditos.modals.abono_modal')
@@ -377,6 +391,7 @@
 @include('creditos.modals.modal_credito_directo')
 @include('creditos.modals.modal_eliminar_credito')
 @endsection
+
 @section('scripts')
 <script>
     $(document).ready(function() {
@@ -399,30 +414,27 @@
         }
 
         if ($('#tabla-historial-intereses').length) {
-                
-                // 1. Destruir la instancia previa que crea el template
-                if ($.fn.DataTable.isDataTable('#tabla-historial-intereses')) {
-                    $('#tabla-historial-intereses').DataTable().destroy();
-                }
-
-                // 2. Inicializar con tus opciones personalizadas
-                $('#tabla-historial-intereses').DataTable({
-                    destroy: true,
-                    pageLength: 5,
-                    lengthMenu: [5, 10],
-                    responsive: true,
-                    autoWidth: false,
-                    language: {
-                        search: "Buscar:",
-                        paginate: { next: "Sig", previous: "Ant" },
-                        info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
-                        emptyTable: "No se han aplicado indexaciones a los créditos de este cliente."
-                    },
-                    dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
-                    order: [[0, 'desc']]
-                });
+            if ($.fn.DataTable.isDataTable('#tabla-historial-intereses')) {
+                $('#tabla-historial-intereses').DataTable().destroy();
             }
-        // --- CONFIGURACIÓN DE TABLA CRÉDITOS ---
+
+            $('#tabla-historial-intereses').DataTable({
+                destroy: true,
+                pageLength: 5,
+                lengthMenu: [5, 10],
+                responsive: true,
+                autoWidth: false,
+                language: {
+                    search: "Buscar:",
+                    paginate: { next: "Sig", previous: "Ant" },
+                    info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+                    emptyTable: "No se han aplicado indexaciones a los créditos de este cliente."
+                },
+                dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
+                order: [[0, 'desc']]
+            });
+        }
+
         if ($('#tabla-creditos').length) {
             if ($.fn.DataTable.isDataTable('#tabla-creditos')) {
                 $('#tabla-creditos').DataTable().destroy();
@@ -444,11 +456,12 @@
                 order: [[0, 'desc']]
             });
         }
-        // Ajustar el ancho de las tablas de DataTables cuando se cambia de pestaña
+
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
             $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
         });
     });
+
     function confirmarAnulacion(url, monto) {
         $('#formAnularAbono').attr('action', url);
         $('#montoAbonoText').text('$' + monto);
@@ -456,34 +469,25 @@
     }
 
     function abrirModalInteres(cliente) {
-
         let saldoTotal = cliente.creditos.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
         $.ajax({
             url: `/creditos/${cliente.id}/modal-interes`, 
             type: 'GET',
             success: function(html) {
-                // 1. Limpiamos y cargamos el HTML (Tu lógica original)
                 $('#contenedor-modal-interes').remove();
                 $('body').append('<div id="contenedor-modal-interes">' + html + '</div>');
                 
-                // 2. UNA VEZ CARGADO EL HTML, inyectamos los datos del saldo y la ruta (La mejora necesaria)
                 let url = "{{ route('creditos.aplicarInteres', ':id') }}";
                 $('#formAplicarInteres').attr('action', url.replace(':id', cliente.creditos[0].id));
                 
-                // Si el modal tiene estos elementos, actualizamos sus valores
                 $('#saldo_base_global').text('$' + saldoTotal.toFixed(2));
                 $('#saldo_base_global').data('valor', saldoTotal);
-                // Y si necesitas inyectar ese valor en el modal:
-/*                $('#saldo_base_global').text('$' + saldoBase.toLocaleString('en-US', {minimumFractionDigits: 2}));
-                $('#saldo_base_global').data('valor', saldoBase);*/
-                // 3. Mostramos el modal
+
                 $('#modalAplicarInteres').modal('show');
             },
             error: function(xhr) {
-                // Obtenemos el mensaje del servidor de forma segura
                 var msj = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : "Error al cargar modal";
                 
-                // Inyectamos una alerta de error directa en el contenedor donde se espera que aparezca
                 $('.app-content').prepend(`
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         <strong>Error:</strong> ${msj}
@@ -495,54 +499,48 @@
             }
         });
     }
-    // Procesa el envío del formulario
-    $(document).on('submit', '#formAplicarInteres', function(e) {
-            e.preventDefault();
-            let form = $(this);
-            let btn = form.find('button[type="submit"]');
-            
-            btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Indexando...');
 
-            $.ajax({
-                url: form.attr('action'),
-                type: 'POST',
-                data: form.serialize(),
-                success: function(response) {
-                    if (response.success) {
-                        $('#modalAplicarInteres').modal('hide');
-                        
-                        // --- AQUÍ RESTAURAMOS TU ALERTA DINÁMICA ---
-                        $('.app-content').prepend(`
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                <strong>¡Éxito!</strong> ${response.mensaje}
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                        `);
-                        
-                        // Recargamos la página después de un tiempo para actualizar datos
-                        setTimeout(() => { location.reload(); }, 2500);
-                    }
-                },
-                error: function(xhr) {
-                    btn.prop('disabled', false).text('Confirmar Indexación');
-                    let errorMsg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : "Error en el servidor";
+    $(document).on('submit', '#formAplicarInteres', function(e) {
+        e.preventDefault();
+        let form = $(this);
+        let btn = form.find('button[type="submit"]');
+        
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Indexando...');
+
+        $.ajax({
+            url: form.attr('action'),
+            type: 'POST',
+            data: form.serialize(),
+            success: function(response) {
+                if (response.success) {
+                    $('#modalAplicarInteres').modal('hide');
                     
-                    // Alerta de error dentro del modal
-                    $('.modal-body').prepend(`
-                        <div class="alert alert-danger">
-                            ${errorMsg}
+                    $('.app-content').prepend(`
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <strong>¡Éxito!</strong> ${response.mensaje}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
                         </div>
                     `);
+                    
+                    setTimeout(() => { location.reload(); }, 2500);
                 }
-            });
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).text('Confirmar Indexación');
+                let errorMsg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : "Error en el servidor";
+                
+                $('.modal-body').prepend(`
+                    <div class="alert alert-danger">
+                        ${errorMsg}
+                    </div>
+                `);
+            }
         });
+    });
 
-    // Escuchar cambios en el input (Ahora sí entrará)
     $(document).on('input', '#input_porcentaje', function() {
-
-        console.log('Calculando...');
         let porcentaje = parseFloat($(this).val()) || 0;
         let saldoBase = parseFloat($('#saldo_base_global').data('valor')) || 0;
         let btn = $('#btn_confirmar_index');
@@ -550,7 +548,6 @@
         if (porcentaje > 0) {
             let montoInteres = saldoBase * (porcentaje / 100);
             let nuevoTotal = saldoBase + montoInteres;
-            console.log('porcentaje:'+saldoBase);
             $('#preview_interes').text('+$' + montoInteres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
             $('#preview_total').text('$' + nuevoTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
             btn.prop('disabled', false);
@@ -562,130 +559,160 @@
     });
 
     function abrirModalAbono(cliente) {
-        // 1. Limpiamos el formulario
         $('#formAbono')[0].reset();
         
-        // 2. Definimos la URL usando el ID del primer crédito pendiente (o un ID de referencia del cliente)
-        // Nota: Asegúrate de que tu ruta en Laravel acepte el ID del crédito que servirá de "disparador"
-        let url = "{{ route('creditos.abono', ':id') }}";
-        
-        // Tomamos el ID del crédito más antiguo (o el primero de la lista)
-        let primerCreditoId = cliente.creditos[0].id;
-        url = url.replace(':id', primerCreditoId);
-        $('#formAbono').attr('action', url);
+        // Ocultar alertas dinámicas
+        $('#alerta_saldo_favor').addClass('d-none');
+        $('#error-desglose').addClass('d-none');
+        $('.input-desglose').removeClass('is-invalid');
 
-        // 3. Actualizamos los datos para el Cliente
+        if (!cliente.creditos || cliente.creditos.length === 0) {
+            alert("El cliente no posee créditos pendientes.");
+            return;
+        }
+
+        let primerCredito = cliente.creditos[0];
+        let url = "{{ route('creditos.abono', ':id') }}";
+        url = url.replace(':id', primerCredito.id);
+        
+        $('#formAbono').attr('action', url);
         $('#nombre_cliente').text(cliente.nombre);
         
-        // Calculamos el saldo total sumando todos los créditos pendientes del cliente
+        // Calcular saldo total
         let saldoTotal = cliente.creditos.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
-        
         $('#txt_saldo_pendiente').text('$' + saldoTotal.toFixed(2));
-        
-        // 4. Actualizamos el límite del input (Ahora el máximo es el total del cliente)
-        $('#monto_total_usd').attr('max', saldoTotal);
-        
+
         $('#modalAbono').modal('show');
     }
+    $(document).on('input', '#monto_total_usd', function() {
+        let montoAbono = parseFloat($(this).val()) || 0;
+        let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
+
+        if (montoAbono > saldoPendiente && saldoPendiente > 0) {
+            let exceso = montoAbono - saldoPendiente;
+            $('#monto_saldo_favor').text('$' + exceso.toFixed(2));
+            $('#alerta_saldo_favor').removeClass('d-none');
+        } else {
+            $('#alerta_saldo_favor').addClass('d-none');
+        }
+    });
 
     $('#formAbono').on('submit', function(e) {
-            let totalDesglose = 0;
-            let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g,""));
-            let montoAbono = parseFloat($('#monto_total_usd').val());
-            let inputs = $('.input-desglose');
-            let errorDiv = $('#error-desglose');
-            if(montoAbono > saldoPendiente) {
-                alert("El abono no puede ser mayor a la deuda.");
-                return false;
-            }
-            // Recorremos todos los inputs que tengan la clase 'input-desglose'
-            $('.input-desglose').each(function() {
-                let valor = parseFloat($(this).val()) || 0;
-                totalDesglose += valor;
+        let form = this;
+        let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
+        let montoAbono = parseFloat($('#monto_total_usd').val()) || 0;
+
+        // 1. VALIDACIÓN DEL DESGLOSE DE PAGO
+        let totalDesglose = 0;
+        let inputs = $('.input-desglose');
+        let errorDiv = $('#error-desglose');
+
+        $('.input-desglose').each(function() {
+            let valor = parseFloat($(this).val()) || 0;
+            totalDesglose += valor;
+        });
+
+        if (totalDesglose <= 0) {
+            e.preventDefault();
+            errorDiv.removeClass('d-none').hide().fadeIn();
+            inputs.addClass('is-invalid');
+            $('.modal-body').animate({ scrollTop: 0 }, 'slow');
+            return false;
+        }
+        $('.input-desglose').removeClass('is-invalid');
+
+        // 2. CONFIRMACIÓN PROFESIONAL DE EXCEDENTE (SweetAlert2)
+        if (montoAbono > saldoPendiente && saldoPendiente > 0) {
+            e.preventDefault(); // Detenemos el envío automático
+            
+            let exceso = montoAbono - saldoPendiente;
+
+            Swal.fire({
+                title: '<strong>Confirmar Saldo a Favor</strong>',
+                icon: 'info',
+                html: `
+                    <div class="text-left font-weight-normal fs-6">
+                        <p class="mb-2">El monto ingresado excede la deuda actual del cliente. Se generará un anticipo automático.</p>
+                        <div class="card bg-light border-0 my-3 p-3 text-dark">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Deuda Pendiente:</span>
+                                <strong class="text-danger">$${saldoPendiente.toFixed(2)}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Monto Ingresado:</span>
+                                <strong class="text-dark">$${montoAbono.toFixed(2)}</strong>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="font-weight-bold text-primary">Saldo a Favor del Cliente:</span>
+                                <span class="badge badge-info fs-6 px-2 py-1">+$${exceso.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <p class="mb-0 text-muted small"><i class="fa fa-info-circle"></i> La deuda quedará totalmente liquidada y el excedente disponible para futuras compras.</p>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fa fa-check"></i> Sí, Procesar Pago',
+                cancelButtonText: 'Corregir Monto',
+                reverseButtons: true,
+                customClass: {
+                    popup: 'shadow-lg rounded-3'
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Deshabilitar botón para evitar envíos dobles
+                    $(form).find('button[type="submit"]').prop('disabled', true);
+                    form.submit(); // Dispara el envío real del formulario
+                }
             });
 
-            // Validación: Si la suma de todos es 0 o menor
-            if (totalDesglose <= 0) {
-                e.preventDefault(); // Detener envío
-                            
-                // Animación y estilo moderno
-                errorDiv.removeClass('d-none').hide().fadeIn();
-                inputs.addClass('is-invalid'); // Borde rojo de Bootstrap
-                
-                // Hacer scroll suave al error si el modal es muy largo
-                $('.modal-body').animate({ scrollTop: 0 }, 'slow');
-                
-                return false;
-            }
-            
-            // Si pasa la validación, quitamos el error visual (si existía)
-            $('.input-desglose').removeClass('is-invalid');
-        });
-        function confirmarAnulacionAbono(url, monto) {
-            // 1. Asignamos la URL dinámica al formulario
-            $('#formAnularAbono').attr('action', url);
-            
-            // 2. Mostramos el monto en el texto del modal para seguridad del usuario
-            $('#montoAbonoText').text('$' + parseFloat(monto).toFixed(2));
-            
-            // 3. Abrimos el modal
-            $('#modalAnularAbono').modal('show');
+            return false;
         }
-        $(document).on('input', '.input-desglose', function() {
-            let val = parseFloat($(this).val()) || 0;
-            if (val > 0) {
-                $('.input-desglose').removeClass('is-invalid').addClass('is-valid');
-                $('#error-desglose').fadeOut().addClass('d-none');
-            }
-        });
+    });
 
-        function confirmarAnulacionInteres(url, monto) {
-            // Limpiamos el formulario antes de mostrarlo
-            $('#formAnularInteres')[0].reset();
-            
-            // Configuramos la acción y el texto informativo
-            $('#formAnularInteres').attr('action', url);
-            $('#montoInteresText').text('$' + monto);
-            
-            // Mostramos el modal
-            $('#modalAnularInteres').modal('show');
+    function confirmarAnulacionAbono(url, monto) {
+        $('#formAnularAbono').attr('action', url);
+        $('#montoAbonoText').text('$' + parseFloat(monto).toFixed(2));
+        $('#modalAnularAbono').modal('show');
+    }
+
+    $(document).on('input', '.input-desglose', function() {
+        let val = parseFloat($(this).val()) || 0;
+        if (val > 0) {
+            $('.input-desglose').removeClass('is-invalid').addClass('is-valid');
+            $('#error-desglose').fadeOut().addClass('d-none');
         }
+    });
 
-        
+    function confirmarAnulacionInteres(url, monto) {
+        $('#formAnularInteres')[0].reset();
+        $('#formAnularInteres').attr('action', url);
+        $('#montoInteresText').text('$' + monto);
+        $('#modalAnularInteres').modal('show');
+    }
 
-     function abrirModalGestionSaldo() {
-         // Busca el modal por su ID
-         let modal = $('#modalReembolso'); 
-         
-         if (modal.length > 0) {
-             // En lugar de resetear un formulario que no tiene ID, 
-             // simplemente muestra el modal
-             modal.modal('show');
-         } else {
-             console.error("El modal #modalReembolso no se encontró.");
-         }
-     }
+    function abrirModalGestionSaldo() {
+        let modal = $('#modalReembolso'); 
+        if (modal.length > 0) {
+            modal.modal('show');
+        } else {
+            console.error("El modal #modalReembolso no se encontró.");
+        }
+    }
 
-     $('#input_porcentaje').on('input', function() {
-         let porcentaje = parseFloat($(this).val()) || 0;
-         let saldoBase = parseFloat($('#saldo_base').data('valor'));
-         let montoInteres = saldoBase * (porcentaje / 100);
+    $('#input_porcentaje').on('input', function() {
+        let porcentaje = parseFloat($(this).val()) || 0;
+        let saldoBase = parseFloat($('#saldo_base').data('valor'));
+        let montoInteres = saldoBase * (porcentaje / 100);
 
-         $('#preview_interes').text('$' + montoInteres.toFixed(2));
-         $('#preview_total').text('$' + (saldoBase + montoInteres).toFixed(2));
+        $('#preview_interes').text('$' + montoInteres.toFixed(2));
+        $('#preview_total').text('$' + (saldoBase + montoInteres).toFixed(2));
 
-         // Habilitar botón solo si hay porcentaje
-         $('#btn_confirmar_index').prop('disabled', porcentaje <= 0);
-     });
-     
-     function abrirModalCreditoDirecto(clienteId) {
-         // Limpia el formulario cada vez que se abre
-         $('#formCreditoDirecto')[0].reset();
-         
-         // Abre el modal Bootstrap
-         $('#modalCreditoDirecto').modal('show');
-     }
-    
+        $('#btn_confirmar_index').prop('disabled', porcentaje <= 0);
+    });
+
     function abrirModalCreditoDirecto(clienteId) {
         $('#formCreditoDirecto')[0].reset();
         $('#pin_autorizacion_directo').val('');
@@ -700,7 +727,6 @@
 
     $(document).ready(function() {
 
-        // Evento para solicitar y validar el PIN usando SweetAlert2
         $('#btnSolicitarPinDirecto').on('click', function() {
             let monto = $('#monto_credito_usd').val();
 
@@ -719,7 +745,6 @@
                 allowOutsideClick: false 
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // 1. Llamada AJAX a solicitar_pin
                     $.post("{{ route('ventas.solicitar_pin') }}", {
                         _token: "{{ csrf_token() }}",
                         local_nombre: "{{ auth()->user()->localActual()->nombre ?? 'Local' }}",
@@ -730,7 +755,6 @@
 
                         if(response.wa_link) { window.open(response.wa_link, '_blank'); }
 
-                        // 2. Prompt con SweetAlert2 para ingresar el PIN
                         Swal.fire({
                             title: 'Introduce el PIN',
                             text: 'El supervisor recibió un código de 6 dígitos',
@@ -742,13 +766,11 @@
                             showLoaderOnConfirm: true,
                             allowOutsideClick: false,
                             didOpen: () => {
-                                // SOLUCIÓN DEFINITIVA: Desactivar los listeners de foco de Bootstrap en todo el documento
                                 $(document).off('focusin.bs.modal');
                                 if ($.fn.modal && $.fn.modal.Constructor) {
                                     $.fn.modal.Constructor.prototype._enforceFocus = function() {};
                                 }
 
-                                // Forzar el foco y quitar la propiedad readonly/disabled si existiera
                                 setTimeout(() => {
                                     const input = Swal.getInput();
                                     if (input) {
@@ -780,7 +802,6 @@
             });
         });
 
-        // Validación al enviar el formulario
         $('#formCreditoDirecto').on('submit', function(e) {
             @cannot('gestionar-creditos-avanzado')
                 let pin = $('#pin_autorizacion_directo').val();
@@ -799,16 +820,13 @@
             var saldo = $(this).data('saldo');
             var tieneProductos = $(this).data('tieneproductos');
 
-            // Configurar el action del formulario con la ruta correcta
             var actionUrl = "{{ url('creditos') }}/" + id;
             $('#formEliminarCredito').attr('action', actionUrl);
 
-            // Inyectar datos en la vista del modal
             $('#eliminar_credito_codigo').text(codigo);
             $('#eliminar_credito_monto').text(monto);
             $('#eliminar_credito_saldo').text(saldo);
 
-            // Mostrar alerta según el tipo de crédito
             if (tieneProductos == '1') {
                 $('#msg_retorno_stock').removeClass('d-none');
                 $('#msg_credito_directo').addClass('d-none');

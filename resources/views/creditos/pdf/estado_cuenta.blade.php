@@ -157,7 +157,6 @@
     <table class="header-table">
         <tr>
             <td style="width: 30%;">
-                {{-- Carga dinámica de la imagen del Logo --}}
                 @if(!empty($empresa->logo) && file_exists(public_path('storage/' . $empresa->logo)))
                     <img src="data:image/png;base64,{{ base64_encode(file_get_contents(public_path('storage/' . $empresa->logo))) }}" class="logo-img">
                 @elseif(file_exists(public_path('images/logo.png')))
@@ -209,20 +208,65 @@
         <tr>
             <td class="resumen-label">Intereses / Indexaciones:</td>
             <td class="resumen-val text-warning">+ ${{ number_format($resumen['total_intereses'], 2) }}</td>
-            <td class="resumen-label" style="background-color: #ffe3e3;">Saldo Restante Pendiente:</td>
+            <td class="resumen-label" style="background-color: #ffe3e3;">Saldo Deuda Pendiente:</td>
             <td class="resumen-val text-danger" style="background-color: #ffe3e3; font-size: 13px;">
                 ${{ number_format($resumen['saldo_pendiente'], 2) }}
             </td>
         </tr>
+        
+        {{-- Fila Condicional si existe Saldo a Favor --}}
         @if($resumen['saldo_a_favor'] > 0)
         <tr>
-            <td colspan="2" class="resumen-label" style="background-color: #d1ecf1;">Saldo a Favor Disponible:</td>
-            <td colspan="2" class="resumen-val" style="background-color: #d1ecf1; color: #0c5460;">
-                ${{ number_format($resumen['saldo_a_favor'], 2) }}
+            <td class="resumen-label" style="background-color: #d1ecf1; color: #0c5460;">Saldo a Favor Disponible:</td>
+            <td class="resumen-val" style="background-color: #d1ecf1; color: #0c5460; font-size: 13px;">
+                + ${{ number_format($resumen['saldo_a_favor'], 2) }}
+            </td>
+            <td class="resumen-label" style="background-color: #d4edda; color: #155724; font-weight: bold;">TOTAL NETO A PAGAR:</td>
+            <td class="resumen-val" style="background-color: #d4edda; color: #155724; font-size: 14px; font-weight: bold;">
+                ${{ number_format($resumen['neto_a_pagar'], 2) }}
             </td>
         </tr>
         @endif
     </table>
+
+    {{-- NUEVA SECCIÓN: Detalle de Cuentas / Anticipos Activos --}}
+    @if(isset($creditos) && $creditos->count() > 0)
+        <div class="section-heading">DETALLE DE CUENTAS PENDIENTES Y ANTICIPOS</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 15%;">Fecha</th>
+                    <th style="width: 15%;"># Documento</th>
+                    <th style="width: 35%;">Tipo / Concepto</th>
+                    <th style="width: 15%;">Monto Orig.</th>
+                    <th style="width: 20%;">Saldo Actual</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($creditos as $cred)
+                    <tr>
+                        <td class="text-center">{{ $cred->created_at->format('d/m/Y') }}</td>
+                        <td class="text-center">#{{ $cred->id }}</td>
+                        <td>
+                            @if($cred->estado === 'anticipo')
+                                <strong class="text-success">Saldo a Favor / Anticipo</strong>
+                            @else
+                                Crédito Venta #{{ $cred->id_venta ?? 'N/A' }}
+                            @endif
+                        </td>
+                        <td class="text-right">${{ number_format($cred->monto_inicial, 2) }}</td>
+                        <td class="text-right font-bold {{ $cred->estado === 'anticipo' ? 'text-success' : 'text-danger' }}">
+                            @if($cred->estado === 'anticipo')
+                                +${{ number_format(abs($cred->saldo_pendiente), 2) }}
+                            @else
+                                ${{ number_format($cred->saldo_pendiente, 2) }}
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
 
     {{-- Tabla de Abonos --}}
     <div class="section-heading">HISTORIAL DE ABONOS Y PAGOS</div>

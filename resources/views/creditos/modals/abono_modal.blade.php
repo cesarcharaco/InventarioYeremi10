@@ -22,9 +22,14 @@
                                 <label class="font-weight-bold text-primary">Monto Total a Abonar (USD):</label>
                                 <div class="input-group">
                                     <div class="input-group-prepend"><span class="input-group-text">$</span></div>
-                                    <input type="number" step="0.01" name="monto_total_usd" id="monto_total_usd" class="form-control form-control-lg" placeholder="0.00" required>
+                                    <input type="number" step="0.01" min="0.01" name="monto_total_usd" id="monto_total_usd" class="form-control form-control-lg" placeholder="0.00" required>
                                 </div>
-                                <small class="text-muted">Este monto se descontará de la deuda principal.</small>
+                                <small class="text-muted d-block mt-1">Si ingresa un monto mayor a la deuda, el excedente quedará disponible a favor del cliente.</small>
+                                
+                                {{-- Contenedor dinámico de Saldo a Favor --}}
+                                <div id="alerta_saldo_favor" class="alert alert-info py-2 mt-2 d-none small mb-0">
+                                    <i class="fa fa-info-circle"></i> Se saldará la deuda y quedará <b id="monto_saldo_favor">$0.00</b> como saldo a favor.
+                                </div>
                             </div>
                             <hr>
                             <div class="form-group">
@@ -54,7 +59,7 @@
                                 <div class="input-group-prepend"><span class="input-group-text">P. Móvil Bs</span></div>
                                 <input type="number" step="0.01" name="pago_pagomovil_bs" class="form-control input-desglose" value="0">
                             </div>
-                            <p class="mt-2 small text-muted"><i class="fa fa-info-circle"></i> El desglose ayuda a cuadrar la caja diaria sin afectar el monto en dólares de la deuda.</p>
+                            <p class="mt-2 small text-muted"><i class="fa fa-info-circle"></i> El desglose ayuda a cuadrar la caja diaria con el monto real que entra.</p>
                         </div>
                     </div>
                 </div>

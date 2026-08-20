@@ -21,7 +21,7 @@ return new class extends Migration
             $table->decimal('saldo_pendiente', 12, 2); 
             $table->decimal('saldo_a_favor', 12, 2)->nullable()->default(0); 
             $table->date('fecha_vencimiento');
-            $table->enum('estado', ['pendiente', 'pagado', 'vencido', 'revalorizado'])->default('pendiente');
+            $table->enum('estado', ['pendiente', 'pagado', 'vencido', 'revalorizado','anticipo'])->default('pendiente');
             
             // Auditoría de revalorización
             $table->timestamp('ultima_revalorizacion')->nullable();

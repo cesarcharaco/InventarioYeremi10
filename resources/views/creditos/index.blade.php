@@ -86,11 +86,28 @@
                                 <td class="d-none d-md-table-cell text-muted">
                                     {{ $cliente->identificacion }}
                                 </td>
-                                <td>
-                                    <span class="badge badge-danger px-3 py-2">
-                                        ${{ number_format($cliente->saldo_total_pendiente, 2) }}
-                                    </span>
-                                </td>
+                               <td>
+                                   @php
+                                       $saldo = $cliente->saldo_total_pendiente ?? 0;
+                                   @endphp
+
+                                   @if($saldo < 0)
+                                       {{-- SALDO A FAVOR / ANTICIPO --}}
+                                       <span class="badge badge-info px-3 py-2" data-toggle="tooltip" title="Saldo a Favor">
+                                           +${{ number_format(abs($saldo), 2) }}
+                                       </span>
+                                   @elseif($saldo > 0)
+                                       {{-- DEUDA PENDIENTE --}}
+                                       <span class="badge badge-danger px-3 py-2" data-toggle="tooltip" title="Deuda Pendiente">
+                                           ${{ number_format($saldo, 2) }}
+                                       </span>
+                                   @else
+                                       {{-- AL DÍA (SIN DEUDA NI SALDO) --}}
+                                       <span class="badge badge-success px-3 py-2">
+                                           $0.00
+                                       </span>
+                                   @endif
+                               </td>
                                 <td class="text-center">
                                     <a href="{{ route('creditos.show', $cliente->id) }}" class="btn btn-info btn-sm btn-block-mobile">
                                         <i class="fa fa-eye"></i> <span class="d-none d-md-inline">Ver Detalle</span>
