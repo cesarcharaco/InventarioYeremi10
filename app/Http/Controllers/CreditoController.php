@@ -669,18 +669,22 @@ class CreditoController extends Controller
             $idCliente = null;
 
             DB::transaction(function () use ($id, &$idCliente) {
-                $credito = Credito::with(['venta.detalles.insumo', 'abonos', 'intereses'])->findOrFail($id);
+                $credito = Credito::with(['venta.detalles.insumo.existencias', 'abonos', 'intereses'])->findOrFail($id);
                 
                 // 📌 Usamos la columna exacta de la base de datos: id_cliente
                 $idCliente = $credito->id_cliente;
                 
                 $venta = $credito->venta;
 
-                // 2. Retorno de stock si la venta tiene detalles (productos de inventario)
+                // 2. Retorno de stock a la tabla existencias si la venta tiene detalles
                 if ($venta && $venta->detalles->isNotEmpty()) {
                     foreach ($venta->detalles as $detalle) {
                         if ($detalle->insumo) {
-                            $detalle->insumo->increment('stock', $detalle->cantidad);
+                            // Obtenemos la existencia vinculada al insumo
+                            $existencia = $detalle->insumo->existencias()->first();
+                            if ($existencia) {
+                                $existencia->increment('cantidad', $detalle->cantidad);
+                            }
                         }
                     }
                     $venta->detalles()->delete();
