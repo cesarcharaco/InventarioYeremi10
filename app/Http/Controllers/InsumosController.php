@@ -168,18 +168,19 @@ class InsumosController extends Controller
     {
         $this->authorize('gestionar-insumos');
         $request->validate([
-            'producto' => 'required',
-            'categoria_id' => 'required|exists:categorias,id',
-            'costo' => 'required|numeric|min:0',
+            'producto'        => 'required',
+            'categoria_id'    => 'required|exists:categorias,id',
+            'costo'           => 'required|numeric|min:0',
             'modelo_venta_id' => 'required|exists:modelos_venta,id',
         ]);
 
         $serial = $request->filled('serial') 
                 ? $request->serial 
                 : $this->generarSerialInsumo($request->categoria_id);
+
         $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
         $precios = $modelo->calcularPrecios($request->costo);
-
+        
         DB::beginTransaction();
         try {
             $insumo = Insumos::create([
@@ -187,8 +188,8 @@ class InsumosController extends Controller
                 'descripcion'       => $request->descripcion,
                 'serial'            => $serial,
                 'categoria_id'      => $request->categoria_id,
-                'stock_min'         => $request->stock_min ?? 0, // Guardado en insumos
-                'stock_max'         => $request->stock_max ?? 0, // Guardado en insumos
+                'stock_min'         => $request->stock_min ?? 0,
+                'stock_max'         => $request->stock_max ?? 0,
                 'costo'             => $request->costo,
                 'modelo_venta_id'   => $request->modelo_venta_id,
                 'precio_venta_usd'  => $precios['precio_venta_usd'],
@@ -196,19 +197,23 @@ class InsumosController extends Controller
                 'precio_venta_usdt' => $precios['precio_venta_usdt']
             ]);
 
-            if ($request->has('id_local')) {
+            if ($request->has('id_local') && is_array($request->id_local)) {
                 foreach ($request->id_local as $local_id) {
+                    // Definimos explícitamente la cantidad asignada a este local
+                    $cantidadLocal = $request->cantidad[$local_id] ?? 0;
+
                     InsumosC::create([
                         'id_insumo' => $insumo->id,
                         'id_local'  => $local_id,
-                        'cantidad'  => $request->cantidad[$local_id] ?? 0, // Usamos la nueva columna cantidad
+                        'cantidad'  => $cantidadLocal,
                     ]);
-                    // LÓGICA DE NOTIFICACIÓN
-                    if ($nuevaCantidad <= ($request->stock_min ?? 0)) {
+
+                    // Evaluamos contra la variable recién asignada
+                    if ($cantidadLocal <= ($request->stock_min ?? 0)) {
                         $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
                         $detalles = [
                             'titulo'  => '¡Stock Inicial Bajo!',
-                            'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$nuevaCantidad}) en un local.",
+                            'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$cantidadLocal}) en un local.",
                             'url'     => route('insumos.index'),
                             'icono'   => 'fas fa-exclamation-triangle'
                         ];
@@ -222,6 +227,7 @@ class InsumosController extends Controller
 
             DB::commit();
             return redirect()->route('insumos.index')->with('success', 'Insumo registrado con éxito');
+
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Error al registrar: ' . $e->getMessage());
