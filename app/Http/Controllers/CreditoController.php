@@ -81,7 +81,7 @@ class CreditoController extends Controller
 
     public function show($id)
     {
-        // 1. Buscamos al cliente y cargamos sus créditos (pendientes, pagados y anticipos)
+        // 1. Buscamos al cliente y cargamos sus créditos
         $cliente = Cliente::with([
             'creditos' => function($q) {
                 $q->with(['venta', 'abonos.usuario', 'intereses.administrador'])
@@ -89,45 +89,50 @@ class CreditoController extends Controller
             }
         ])->findOrFail($id);
 
-        // 2. Aplanamos todos los abonos para el historial global
+        // 2. Historial global (para las tablas de la vista)
         $historialAbonos = $cliente->creditos->flatMap(function($credito) {
             return $credito->abonos;
         })->sortByDesc('created_at');
 
-        // 3. Preparamos el resumen financiero
-        // Consideramos deudas a los registros que NO son anticipos
-        $creditosDeuda = $cliente->creditos->where('estado', '!=', 'anticipo');
-        // Los anticipos son aquellos con estado 'anticipo' o con saldo negativo
+        $historialIntereses = $cliente->creditos->flatMap(function($credito) {
+            return $credito->intereses;
+        })->sortByDesc('aplicado_en');
+
+        // 3. SEPARACIÓN DE CRÉDITOS POR ESTADO
+        // Créditos que actualmente representan una deuda activa
+        $creditosPendientes = $cliente->creditos->where('estado', 'pendiente');
+
+        // Créditos en saldo a favor / anticipos
         $creditosAnticipo = $cliente->creditos->filter(function($c) {
             return $c->estado === 'anticipo' || $c->saldo_pendiente < 0;
         });
 
-        $montoInicialDeuda = $creditosDeuda->sum('monto_inicial');
+        // 4. CÁLCULO DE MÉTRICAS ENFOCADAS EN LA DEUDA ACTIVA
+        $montoInicialPendiente = $creditosPendientes->sum('monto_inicial');
+        $saldoPendienteDeuda   = $creditosPendientes->sum('saldo_pendiente');
         
-        // Solo sumamos el saldo pendiente de las deudas reales que aún no estén pagadas
-        $saldoPendienteDeuda = $creditosDeuda->where('saldo_pendiente', '>', 0)->sum('saldo_pendiente');
-        
-        // El saldo a favor es la suma acumulada de los saldos negativos/anticipos
-        $saldoAFavor = abs($creditosAnticipo->sum('saldo_pendiente'));
+        // Abonos aplicados EXCLUSIVAMENTE a los créditos que hoy están pendientes
+        $totalAbonadoPendiente = $creditosPendientes->flatMap(function($credito) {
+            return $credito->abonos;
+        })->sum('monto_pagado_usd');
 
-        $totalIntereses = $cliente->creditos->sum(function($c) { 
+        // Intereses aplicados solo a deudas pendientes
+        $totalInteresesPendientes = $creditosPendientes->sum(function($c) { 
             return $c->intereses->sum('monto_interes'); 
         });
 
+        // Saldo a favor acumulado
+        $saldoAFavor = abs($creditosAnticipo->sum('saldo_pendiente'));
+
+        // 5. Estructuración del Resumen
         $resumen = [
-            'monto_inicial'   => $montoInicialDeuda,
-            'total_intereses' => $totalIntereses,
+            'monto_inicial'   => $montoInicialPendiente,
+            'total_intereses' => $totalInteresesPendientes,
+            'deuda_total'     => $montoInicialPendiente + $totalInteresesPendientes,
+            'total_abonado'   => $totalAbonadoPendiente,
             'saldo_pendiente' => $saldoPendienteDeuda,
             'saldo_a_favor'   => $saldoAFavor,
         ];
-
-        $resumen['deuda_total']   = $resumen['monto_inicial'] + $resumen['total_intereses'];
-        $resumen['total_abonado'] = $historialAbonos->sum('monto_pagado_usd');
-
-        // Consolidamos todos los intereses
-        $historialIntereses = $cliente->creditos->flatMap(function($credito) {
-            return $credito->intereses;
-        })->sortByDesc('aplicado_en');
 
         return view('creditos.show', compact('cliente', 'historialAbonos', 'resumen', 'historialIntereses'));
     }
@@ -847,6 +852,7 @@ class CreditoController extends Controller
             }
         }
 
+        $montoUsd = (float) $request->monto_credito_usd;
         $tasa_bcv = bcv_rate('USD');
         DB::beginTransaction();
 
@@ -867,8 +873,8 @@ class CreditoController extends Controller
             
             $venta->pago_usd_efectivo  = 0.00;
             $venta->pago_bs_efectivo   = 0.00;
-            $venta->monto_credito_usd  = $request->monto_credito_usd;
-            $venta->total_usd          = $request->monto_credito_usd;
+            $venta->monto_credito_usd  = $montoUsd;
+            $venta->total_usd          = $montoUsd;
             
             $venta->estado             = 'completada';
             $venta->observacion        = $request->observacion;
@@ -881,8 +887,8 @@ class CreditoController extends Controller
             $credito = Credito::create([
                 'id_venta'           => $venta->id,
                 'id_cliente'         => $cliente->id,
-                'monto_inicial'      => $request->monto_credito_usd,
-                'saldo_pendiente'    => $request->monto_credito_usd,
+                'monto_inicial'      => $montoUsd,
+                'saldo_pendiente'    => $montoUsd,
                 'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15), 
                 'estado'             => 'pendiente',
                 'tasa_cambio_origen' => $tasa_bcv,
@@ -890,22 +896,25 @@ class CreditoController extends Controller
                 'updated_at'         => now(),
             ]);
 
-            // =========================================================
             // 4. APLICAR SALDOS A FAVOR / ANTICIPOS ACTIVOS DEL CLIENTE
-            // =========================================================
             $anticipos = Credito::where('id_cliente', $cliente->id)
-                ->where('estado', 'anticipo')
+                ->where(function ($q) {
+                    $q->where('estado', 'anticipo')
+                      ->orWhere('saldo_pendiente', '<', 0);
+                })
                 ->where('saldo_pendiente', '<', 0)
                 ->orderBy('created_at', 'asc')
                 ->lockForUpdate()
                 ->get();
 
-            $deudaPendiente = $credito->saldo_pendiente;
+            $deudaPendiente = (float) $credito->saldo_pendiente;
 
             foreach ($anticipos as $anticipo) {
                 if ($deudaPendiente <= 0) break;
 
-                $disponibleAnticipo = abs($anticipo->saldo_pendiente);
+                $disponibleAnticipo = abs((float) $anticipo->saldo_pendiente);
+                if ($disponibleAnticipo <= 0) continue;
+
                 $descuento = min($deudaPendiente, $disponibleAnticipo);
 
                 // A) Registrar el abono vinculante
@@ -915,7 +924,8 @@ class CreditoController extends Controller
                     'id_caja'          => auth()->user()->id_caja ?? 1,
                     'monto_pagado_usd' => $descuento,
                     'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $anticipo->id . ')',
-                    'estado'           => 'Realizado'
+                    'estado'           => 'Realizado',
+                    'created_at'       => $fechaCredito
                 ]);
 
                 // B) Descontar de la nueva deuda
@@ -923,8 +933,8 @@ class CreditoController extends Controller
                 $credito->saldo_pendiente = round($deudaPendiente, 2);
 
                 if ($credito->saldo_pendiente <= 0) {
+                    $credito->saldo_pendiente = 0.00;
                     $credito->estado = 'pagado';
-                    $venta->update(['estado_pago' => 'Pagado']);
                 }
                 $credito->save();
 
@@ -935,7 +945,7 @@ class CreditoController extends Controller
                     $anticipo->saldo_pendiente = 0.00;
                     $anticipo->estado = 'pagado';
                 } else {
-                    $anticipo->saldo_pendiente = -$nuevoRemanenteAnticipo;
+                    $anticipo->saldo_pendiente = -round($nuevoRemanenteAnticipo, 2);
                 }
                 $anticipo->save();
             }
@@ -944,7 +954,7 @@ class CreditoController extends Controller
             $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
             $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito Directo',
-                'mensaje' => "Se otorgó un crédito directo de {$request->monto_credito_usd}$ a {$cliente->nombre}.",
+                'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",
                 'url'     => route('creditos.index'),
                 'icono'   => 'fas fa-hand-holding-usd text-info'
             ];
@@ -958,10 +968,10 @@ class CreditoController extends Controller
             // Respuestas con retroalimentación precisa del saldo
             if ($credito->estado === 'pagado') {
                 $msj = 'Crédito directo a ' . $cliente->nombre . ' registrado y saldado automáticamente con su Saldo a Favor.';
-            } elseif ($deudaPendiente < $request->monto_credito_usd) {
+            } elseif ($deudaPendiente < $montoUsd) {
                 $msj = 'Crédito directo registrado a ' . $cliente->nombre . '. Se le aplicó saldo a favor. Restan $' . number_format($credito->saldo_pendiente, 2) . ' por pagar.';
             } else {
-                $msj = 'Crédito directo de $' . number_format($request->monto_credito_usd, 2) . ' a ' . $cliente->nombre . ' registrado con éxito.';
+                $msj = 'Crédito directo de $' . number_format($montoUsd, 2) . ' a ' . $cliente->nombre . ' registrado con éxito.';
             }
 
             return redirect()->back()->with('success', $msj);
