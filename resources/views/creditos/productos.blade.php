@@ -1,9 +1,8 @@
 @extends('layouts.app')
-@section('title') Estado de Cuenta Pendiente @endsection
+@section('title') Estado de Cuenta Detallado @endsection
 
 @push('styles')
 <style>
-    /* Estilos exclusivos para cuando se manda a imprimir */
     @media print {
         .app-header, 
         .app-sidebar, 
@@ -37,21 +36,13 @@
             color: #000 !important;
         }
 
-        .table-secondary {
-            background-color: #e9ecef !important;
-        }
-
-        .table-success {
-            background-color: #d4edda !important;
-        }
-
-        .table-info {
-            background-color: #d1ecf1 !important;
-        }
-
         tr {
             page-break-inside: avoid;
         }
+    }
+
+    .tabular-nums {
+        font-variant-numeric: tabular-nums;
     }
 </style>
 @endpush
@@ -61,24 +52,26 @@
   <div class="app-title">
     <div>
       <h1><i class="fa fa-file-text-o"></i> Resumen de Cuenta Pendiente</h1>
-      <p>Detalle de compras, abonado y saldos para: <strong>{{ $cliente->nombre }}</strong></p>
+      <p class="text-muted mb-0">
+        Detalle de compras, créditos directos, abonado y saldos para: <strong>{{ $cliente->nombre }}</strong>
+      </p>
     </div>
     <ul class="app-breadcrumb breadcrumb">
       <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="fa fa-home fa-lg"></i></a></li>
-      <li class="breadcrumb-item"><a href="{{ route('creditos.show', $cliente->id) }}">Créditos</a></li>
-      <li class="breadcrumb-item">Historial</li>
+      <li class="breadcrumb-item"><a href="{{ route('creditos.show', $cliente->id) }}">Estado de Cuenta</a></li>
+      <li class="breadcrumb-item">Historial Detallado</li>
     </ul>
   </div>
 
   <div class="tile mb-4">
     <div class="row mb-3 d-print-none">
         <div class="col-md-12 d-flex justify-content-between align-items-center">
-            <a class="btn btn-secondary" href="{{ route('creditos.show', $cliente->id) }}">
+            <a class="btn btn-outline-secondary font-weight-bold" href="{{ route('creditos.show', $cliente->id) }}">
                 <i class="fa fa-arrow-left"></i> Regresar al Perfil
             </a>
             
-            <button class="btn btn-primary" onclick="window.print();">
-                <i class="fa fa-print"></i> Imprimir Estado
+            <button class="btn btn-primary font-weight-bold" onclick="window.print();">
+                <i class="fa fa-print"></i> Imprimir Reporte
             </button>
         </div>
     </div>
@@ -88,9 +81,9 @@
         <table class="table table-bordered table-sm align-middle" style="border: 2px solid #333;">
           <thead class="bg-dark text-white text-center">
             <tr>
-              <th style="width: 45%;">DESCRIPCIÓN DE VENTA / PRODUCTO / ANTICIPO</th>
+              <th style="width: 45%;">DESCRIPCIÓN DE VENTA / PRODUCTO / ANTICIPO / INDEXACIÓN</th>
               <th style="width: 15%;">DEBE ($)</th>
-              <th style="width: 15%;">ABONO ($)</th>
+              <th style="width: 15%;">ABONO / SALDO ($)</th>
               <th style="width: 25%;">NOTA / OBSERVACIÓN</th>
             </tr>
           </thead>
@@ -98,22 +91,29 @@
             @php 
               $totalDebeGeneral = 0; 
               $totalAbonoGeneral = 0; 
+              $totalInteresesGeneral = 0;
               $totalSaldoAFavor = 0;
             @endphp
 
             @forelse($creditos as $credito)
               @php 
-                $esAnticipo = ($credito->estado === 'anticipo');
+                $esAnticipo = ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0);
                 $venta = $credito->venta; 
                 $esCreditoDirecto = (!$venta || $venta->detalles->isEmpty());
 
                 if ($esAnticipo) {
-                    // Si es anticipo, el saldo a favor viene negativo
                     $totalSaldoAFavor += abs($credito->saldo_pendiente);
                 } else {
                     $totalDebeGeneral += $credito->monto_inicial;
-                    $abonosCredito = $credito->abonos->sum('monto_pagado_usd');
-                    $totalAbonoGeneral += $abonosCredito;
+                    
+                    // Suma de abonos válidos (descontando anulados y procesando reembolsos)
+                    $abonosValidos = $credito->abonos->where('estado', 'Realizado');
+                    $totalAbonoGeneral += $abonosValidos->sum('monto_pagado_usd');
+
+                    // Suma de intereses/indexaciones aplicadas
+                    $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
+                    $montoIntereses = $interesesAplicados->sum('monto_interes');
+                    $totalInteresesGeneral += $montoIntereses;
                 }
               @endphp
 
@@ -122,43 +122,47 @@
                 <td>
                   @if($esAnticipo)
                     <i class="fa fa-wallet text-info"></i> 
-                    <strong>SALDO A FAVOR / ANTICIPO #{{ $credito->id }}</strong>
+                    <strong>SALDO A FAVOR / ANTICIPO ANT-{{ $credito->id }}</strong>
                   @else
                     <i class="fa fa-file-invoice"></i> 
-                    COD-FACTURA: {{ $venta->codigo_factura ?? 'CRD-' . $credito->id }} 
+                    REF: {{ $venta->codigo_factura ?? 'CRD-' . $credito->id }} 
                   @endif
-                  <small class="text-muted ml-2">(FECHA: {{ $credito->created_at->format('d-m-Y') }})</small>
+                  <small class="text-muted ml-2">(FECHA: {{ $credito->created_at->format('d/m/Y h:i A') }})</small>
                 </td>
-                <td></td>
+                <td class="text-right tabular-nums">
+                  @if(!$esAnticipo)
+                    ${{ number_format($credito->monto_inicial, 2) }}
+                  @endif
+                </td>
                 <td></td>
                 <td class="align-middle small">
                   @if($esAnticipo)
                     <span class="badge badge-info">ANTICIPO / SALDO DISPONIBLE</span>
+                  @elseif($esCreditoDirecto)
+                    <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">CRÉDITO DIRECTO</span>
                   @elseif(!empty($venta->observacion))
                     <strong>NOTA:</strong> {{ $venta->observacion }}
-                  @elseif($esCreditoDirecto)
-                    <span class="badge badge-purple" style="background-color: #6f42c1; color: #fff;">CRÉDITO DIRECTO</span>
                   @else
-                    <i class="text-muted">Sin nota</i>
+                    <i class="text-muted">Venta a crédito</i>
                   @endif
                 </td>
               </tr>
 
               <!-- CONTENIDO SEGÚN TIPO DE REGISTRO -->
               @if($esAnticipo)
-                <!-- SI ES ANTICIPO -->
+                <!-- ANTICIPO / SALDO A FAVOR -->
                 <tr>
                   <td class="pl-4 text-info">
-                    <em>Monto entregado como saldo a favor o vuelto pendiente</em>
+                    <em>Monto registrado a favor del cliente para futuros pagos</em>
                   </td>
                   <td></td>
-                  <td class="text-right font-weight-bold text-info">
-                    ${{ number_format(abs($credito->saldo_pendiente), 2) }}
+                  <td class="text-right font-weight-bold text-info tabular-nums">
+                    +${{ number_format(abs($credito->saldo_pendiente), 2) }}
                   </td>
-                  <td class="small italic text-muted">Disponible para próximos pagos</td>
+                  <td class="small italic text-muted">A favor / Excedente</td>
                 </tr>
               @elseif(!$esCreditoDirecto)
-                <!-- SI ES VENTA CON PRODUCTOS -->
+                <!-- VENTA CON PRODUCTOS -->
                 @foreach($venta->detalles as $detalle)
                   <tr>
                     <td class="pl-4">
@@ -166,8 +170,9 @@
                       @if(!empty($detalle->insumo->serial))
                         <small class="text-muted">(S/N: {{ $detalle->insumo->serial }})</small>
                       @endif
+                      <small class="text-muted ml-1">x{{ $detalle->cantidad }}</small>
                     </td>
-                    <td class="text-right font-weight-bold">
+                    <td class="text-right text-muted small tabular-nums">
                       ${{ number_format($detalle->precio_unitario * $detalle->cantidad, 2) }}
                     </td>
                     <td></td>
@@ -175,12 +180,12 @@
                   </tr>
                 @endforeach
               @else
-                <!-- SI ES CRÉDITO DIRECTO -->
+                <!-- CRÉDITO DIRECTO -->
                 <tr>
-                  <td class="pl-4 text-italic text-purple">
-                    <em>Consumo / Préstamo directo registrado</em>
+                  <td class="pl-4 text-italic" style="color: #6f42c1;">
+                    <em>Préstamo / Cargo directo registrado en cuenta</em>
                   </td>
-                  <td class="text-right font-weight-bold">
+                  <td class="text-right text-muted small tabular-nums">
                     ${{ number_format($credito->monto_inicial, 2) }}
                   </td>
                   <td></td>
@@ -189,33 +194,51 @@
               @endif
 
               @if(!$esAnticipo)
-                <!-- TOTAL DE ESTE CRÉDITO -->
-                <tr class="bg-light">
-                  <td class="text-right font-weight-bold small text-uppercase">TOTAL VENTA:</td>
-                  <td class="text-right font-weight-bold text-dark border-top border-bottom">
-                    ${{ number_format($credito->monto_inicial, 2) }}
-                  </td>
-                  <td></td>
-                  <td></td>
-                </tr>
+                <!-- HISTORIAL DE INDEXACIONES / INTERESES -->
+                @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
+                  @foreach($interesesAplicados as $interes)
+                    <tr class="table-warning">
+                      <td class="pl-4 small">
+                        <i class="fa fa-line-chart text-warning"></i> 
+                        <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
+                        <span class="text-muted ml-2">({{ $interes->aplicado_en ? $interes->aplicado_en->format('d/m/Y') : '' }})</span>
+                      </td>
+                      <td class="text-right font-weight-bold text-danger tabular-nums">
+                        +${{ number_format($interes->monto_interes, 2) }}
+                      </td>
+                      <td></td>
+                      <td class="small text-muted italic">Ajuste de valor aplicado</td>
+                    </tr>
+                  @endforeach
+                @endif
 
                 <!-- HISTORIAL DE ABONOS -->
-                @foreach($credito->abonos as $abono)
-                  <tr class="table-success">
+                @foreach($credito->abonos->where('estado', 'Realizado') as $abono)
+                  @php $esReembolso = $abono->monto_pagado_usd < 0; @endphp
+                  <tr class="{{ $esReembolso ? 'table-warning' : 'table-success' }}">
                     <td class="pl-4 small">
-                      <i class="fa fa-check-circle text-success"></i> 
-                      <strong>#ABONO:</strong> {{ $abono->codigo_recibo ?? 'ABN-' . $abono->id }}
-                      <span class="text-muted ml-2">(FECHA: {{ $abono->created_at->format('d-m-Y') }})</span>
+                      <i class="fa {{ $esReembolso ? 'fa-undo text-danger' : 'fa-check-circle text-success' }}"></i> 
+                      <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $abono->codigo_recibo ?? 'ABN-' . $abono->id }}
+                      <span class="text-muted ml-2">({{ $abono->created_at->format('d/m/Y h:i A') }})</span>
                     </td>
                     <td></td>
-                    <td class="text-right font-weight-bold text-success">
-                      ${{ number_format($abono->monto_pagado_usd, 2) }}
+                    <td class="text-right font-weight-bold {{ $esReembolso ? 'text-danger' : 'text-success' }} tabular-nums">
+                      {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_pagado_usd), 2) }}
                     </td>
                     <td class="small italic text-muted">
-                      {{ $abono->detalles ?? 'Abono realizado' }}
+                      {{ $abono->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
                     </td>
                   </tr>
                 @endforeach
+
+                <!-- SUBTOTAL DE DEUDA RESTANTE DE ESTE CRÉDITO -->
+                <tr class="bg-light">
+                  <td class="text-right font-weight-bold small text-uppercase">SALDO PENDIENTE ESTE CRÉDITO:</td>
+                  <td colspan="2" class="text-right font-weight-bold {{ $credito->saldo_pendiente > 0 ? 'text-danger' : 'text-success' }} tabular-nums">
+                    ${{ number_format(max(0, $credito->saldo_pendiente), 2) }}
+                  </td>
+                  <td></td>
+                </tr>
               @endif
 
               <!-- SEPARADOR -->
@@ -225,39 +248,44 @@
               <tr>
                 <td colspan="4" class="text-center text-muted py-4">
                   <i class="fa fa-info-circle fa-2x d-block mb-2"></i>
-                  El cliente no posee ventas, créditos ni saldos pendientes actualmente.
+                  El cliente no posee registros de créditos, ventas ni saldos pendientes actualmente.
                 </td>
               </tr>
             @endforelse
 
           </tbody>
 
-          <!-- PIE DE PÁGINA CON BALANCE RESUMIDO -->
+          <!-- PIE DE PÁGINA CON RESUMEN FINANCIERO CONSOLIDADO -->
           @if($creditos->isNotEmpty())
           @php
-            $deudaRestante = $totalDebeGeneral - $totalAbonoGeneral;
+            $deudaTotalGeneral = $totalDebeGeneral + $totalInteresesGeneral;
+            $deudaRestante = $deudaTotalGeneral - $totalAbonoGeneral;
             $balanceFinal = $deudaRestante - $totalSaldoAFavor;
           @endphp
-          <tfoot class="bg-dark text-white font-weight-bold" style="font-size: 1em;">
+          <tfoot class="bg-dark text-white font-weight-bold" style="font-size: 0.95em;">
             <tr>
-              <td class="text-right">TOTAL COMPRAS:</td>
-              <td class="text-right text-warning">${{ number_format($totalDebeGeneral, 2) }}</td>
-              <td class="text-right text-success">${{ number_format($totalAbonoGeneral, 2) }}</td>
-              <td class="text-right">
-                TOTAL ABONADO
-              </td>
+              <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
+              <td class="text-right text-warning tabular-nums">${{ number_format($totalDebeGeneral, 2) }}</td>
+              <td class="text-right text-success tabular-nums">${{ number_format($totalAbonoGeneral, 2) }}</td>
+              <td class="text-right">TOTAL ABONADO NETO</td>
             </tr>
-            @if($totalSaldoAFavor > 0)
+            @if($totalInteresesGeneral > 0)
             <tr>
-              <td colspan="3" class="text-right text-info">SALDO A FAVOR ACUMULADO (ANTICIPOS):</td>
-              <td class="text-right text-info">${{ number_format($totalSaldoAFavor, 2) }}</td>
+              <td colspan="3" class="text-right text-warning">TOTAL INDEXACIONES (AJUSTE POR INFLACIÓN):</td>
+              <td class="text-right text-warning tabular-nums">+${{ number_format($totalInteresesGeneral, 2) }}</td>
             </tr>
             @endif
+            @if($totalSaldoAFavor > 0)
             <tr>
+              <td colspan="3" class="text-right text-info">SALDO A FAVOR / ANTICIPOS DISPONIBLES:</td>
+              <td class="text-right text-info tabular-nums">-${{ number_format($totalSaldoAFavor, 2) }}</td>
+            </tr>
+            @endif
+            <tr style="font-size: 1.1em; border-top: 2px solid #fff;">
               <td colspan="3" class="text-right text-uppercase">
-                {{ $balanceFinal >= 0 ? 'SALDO NETO PENDIENTE DE PAGO:' : 'BALANCE TOTAL A FAVOR DEL CLIENTE:' }}
+                {{ $balanceFinal >= 0 ? 'SALDO NETO PENDIENTE DE PAGO:' : 'BALANCE A FAVOR DEL CLIENTE:' }}
               </td>
-              <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }}" style="font-size: 1.15em;">
+              <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }} tabular-nums">
                 ${{ number_format(abs($balanceFinal), 2) }}
               </td>
             </tr>

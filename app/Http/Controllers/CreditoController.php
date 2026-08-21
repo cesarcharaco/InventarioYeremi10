@@ -134,113 +134,110 @@ class CreditoController extends Controller
 
     public function registrarAbono(Request $request, $id)
     {
-    // 1. Validaciones iniciales
-    $request->validate(['monto_total_usd' => 'required|numeric|min:0.01']);
-    
-    // Validar desglose (mínimo un valor mayor a 0)
-    $totalDesglose = ($request->pago_usd_efectivo ?? 0) + ($request->pago_bs_efectivo ?? 0) + 
-                     ($request->pago_punto_bs ?? 0) + ($request->pago_pagomovil_bs ?? 0);
+        // 1. Validaciones iniciales
+        $request->validate(['monto_total_usd' => 'required|numeric|min:0.01']);
+        
+        $totalDesglose = ($request->pago_usd_efectivo ?? 0) + ($request->pago_bs_efectivo ?? 0) + 
+                         ($request->pago_punto_bs ?? 0) + ($request->pago_pagomovil_bs ?? 0);
 
-    if ($totalDesglose <= 0) return back()->with('error', 'Debe registrar al menos un valor en el desglose.');
+        if ($totalDesglose <= 0) {
+            return back()->with('error', 'Debe registrar al menos un valor en el desglose.');
+        }
 
-    try {
-        DB::transaction(function () use ($request, $id) {
-            // Identificar cliente a partir del crédito recibido
-            $creditoReferencia = Credito::findOrFail($id);
-            $cliente = $creditoReferencia->cliente;
+        try {
+            DB::transaction(function () use ($request, $id) {
+                $creditoReferencia = Credito::findOrFail($id);
+                $cliente = $creditoReferencia->cliente;
+                $idCajaActiva = $this->obtenerCajaActiva();
 
-            // 2. Buscamos TODOS los créditos pendientes de este cliente (Más viejos primero)
-            $creditos = Credito::where('id_cliente', $cliente->id)
-                ->where('estado', 'pendiente')
-                ->orderBy('created_at', 'asc')
-                ->lockForUpdate()
-                ->get();
+                // 2. Buscamos TODOS los créditos pendientes de este cliente (Más viejos primero)
+                $creditos = Credito::where('id_cliente', $cliente->id)
+                    ->where('estado', 'pendiente')
+                    ->orderBy('created_at', 'asc')
+                    ->lockForUpdate()
+                    ->get();
 
-            $montoRestante = round($request->monto_total_usd, 2);
+                $montoRestante = round($request->monto_total_usd, 2);
 
-            // 3. Distribuir abono en las deudas activas
-            foreach ($creditos as $credito) {
-                if ($montoRestante <= 0) break;
+                // 3. Distribuir abono en las deudas activas
+                foreach ($creditos as $credito) {
+                    if ($montoRestante <= 0) break;
 
-                $saldo = round($credito->saldo_pendiente, 2);
-                $abono = min($montoRestante, $saldo);
+                    $saldo = round($credito->saldo_pendiente, 2);
+                    $abono = min($montoRestante, $saldo);
 
-                // Registramos el abono para este crédito específico
-                AbonoCredito::create([
-                    'id_credito'      => $credito->id,
-                    'id_user'         => Auth::id(),
-                    'id_caja'         => $this->obtenerCajaActiva($credito),
-                    'monto_pagado_usd'=> $abono,
-                    'detalles'        => 'Abono Global: ' . ($request->referencia ?? 'Sin referencia'),
-                    'estado'          => 'Realizado'
-                ]);
+                    AbonoCredito::create([
+                        'id_credito'       => $credito->id,
+                        'id_user'          => Auth::id(),
+                        'id_caja'          => $idCajaActiva,
+                        'monto_pagado_usd' => $abono,
+                        'detalles'         => 'Abono Global: ' . ($request->referencia ?? 'Sin referencia'),
+                        'estado'           => 'Realizado'
+                    ]);
 
-                // Actualizamos saldo
-                $credito->saldo_pendiente = round($saldo - $abono, 2);
-                if ($credito->saldo_pendiente <= 0) {
-                    $credito->estado = 'pagado';
-                    if ($credito->venta) {
-                        $credito->venta->update(['estado_pago' => 'Pagado']);
+                    $credito->saldo_pendiente = round($saldo - $abono, 2);
+                    if ($credito->saldo_pendiente <= 0) {
+                        $credito->estado = 'pagado';
+                        if ($credito->venta) {
+                            $credito->venta->update(['estado_pago' => 'Pagado']);
+                        }
+                    }
+                    $credito->save();
+
+                    $montoRestante = round($montoRestante - $abono, 2);
+                }
+
+                // 4. MANEJO DEL EXCEDENTE (Saldo a favor / Anticipo)
+                if ($montoRestante > 0) {
+                    $codigoAnticipo = 'ANT-' . strtoupper(Str::random(6));
+
+                    $ventaAnticipo = new Venta();
+                    $ventaAnticipo->codigo_factura     = $codigoAnticipo;
+                    $ventaAnticipo->id_cliente         = $cliente->id;
+                    $ventaAnticipo->id_user            = auth()->id();
+                    $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
+                    $ventaAnticipo->id_caja            = $idCajaActiva;
+                    
+                    $ventaAnticipo->pago_usd_efectivo  = 0.00;
+                    $ventaAnticipo->pago_bs_efectivo   = 0.00;
+                    $ventaAnticipo->monto_credito_usd  = 0.00;
+                    $ventaAnticipo->total_usd          = 0.00;
+                    
+                    $ventaAnticipo->estado             = 'completada';
+                    $ventaAnticipo->observacion        = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo';
+                    $ventaAnticipo->save();
+
+                    $creditoAnticipo = Credito::create([
+                        'id_cliente'        => $cliente->id,
+                        'id_venta'          => $ventaAnticipo->id,
+                        'monto_inicial'     => 0.00,
+                        'saldo_pendiente'   => -$montoRestante,
+                        'saldo_a_favor'     => $montoRestante,
+                        'fecha_vencimiento' => now(),
+                        'estado'            => 'anticipo',
+                    ]);
+
+                    AbonoCredito::create([
+                        'id_credito'       => $creditoAnticipo->id,
+                        'id_user'          => Auth::id(),
+                        'id_caja'          => $idCajaActiva,
+                        'monto_pagado_usd' => $montoRestante,
+                        'detalles'         => 'Excedente a favor: ' . ($request->referencia ?? 'Sin referencia'),
+                        'estado'           => 'Realizado'
+                    ]);
+
+                    if ($cliente) {
+                        $cliente->increment('saldo_a_favor', $montoRestante);
                     }
                 }
-                $credito->save();
+            });
 
-                $montoRestante -= $abono;
-            }
+            return redirect()->back()->with('success', 'Abono procesado correctamente.');
 
-            // =========================================================
-            // 4. MANEJO DEL EXCEDENTE (Saldo a favor / Anticipo)
-            // =========================================================
-            if ($montoRestante > 0) {
-                // A) Generar código de factura para la venta del anticipo
-                $codigoAnticipo = 'ANT-' . strtoupper(Str::random(6));
-
-                // B) Crear la venta de respaldo con totales en 0
-                $ventaAnticipo = new Venta();
-                $ventaAnticipo->codigo_factura     = $codigoAnticipo;
-                $ventaAnticipo->id_cliente         = $cliente->id;
-                $ventaAnticipo->id_user            = auth()->id();
-                $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
-                $ventaAnticipo->id_caja            = $this->obtenerCajaActiva($creditoReferencia) ?? (auth()->user()->id_caja ?? 1);
-                
-                $ventaAnticipo->pago_usd_efectivo  = 0.00;
-                $ventaAnticipo->pago_bs_efectivo   = 0.00;
-                $ventaAnticipo->monto_credito_usd  = 0.00;
-                $ventaAnticipo->total_usd          = 0.00;
-                
-                $ventaAnticipo->estado             = 'completada';
-                $ventaAnticipo->observacion        = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo';
-                $ventaAnticipo->save();
-
-                // C) Crear la entrada de Crédito tipo "ANTICIPO"
-                $creditoAnticipo = Credito::create([
-                    'id_cliente'        => $cliente->id,
-                    'id_venta'          => $ventaAnticipo->id,
-                    'monto_inicial'     => 0.00,
-                    'saldo_pendiente'   => -$montoRestante, // Guarda el excedente a favor en negativo
-                    'fecha_vencimiento' => now(),              // <--- AQUÍ: Asignamos la fecha actual para cumplir con MySQL
-                    'estado'            => 'anticipo',
-                    'detalles'          => 'Saldo a Favor generado por pago excedente: ' . ($request->referencia ?? '')
-                ]);
-
-                // D) Guardar el abono que respalda la entrada real de dinero a la caja
-                AbonoCredito::create([
-                    'id_credito'        => $creditoAnticipo->id,
-                    'id_user'           => Auth::id(),
-                    'id_caja'           => $this->obtenerCajaActiva($creditoReferencia) ?? (auth()->user()->id_caja ?? 1),
-                    'monto_pagado_usd'  => $montoRestante,
-                    'detalles'          => 'Excedente a favor: ' . ($request->referencia ?? 'Sin referencia'),
-                    'estado'            => 'Realizado'
-                ]);
-            }
-        });
-
-        return redirect()->back()->with('success', 'Abono procesado correctamente.');
-
-    } catch (\Exception $e) {
-        return back()->with('error', 'Error al procesar: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error al procesar: ' . $e->getMessage());
+        }
     }
-}
 
     /**
      * Revalorizar: Ajusta la deuda si la tasa de cambio subió 
@@ -406,35 +403,36 @@ class CreditoController extends Controller
     public function procesarGestionSaldo(int $creditoId, string $accion, array $datos)
     {
         return DB::transaction(function () use ($creditoId, $accion, $datos) {
-            // 1. Bloqueamos el registro del saldo a favor para evitar concurrencia
             $creditoAnticipo = Credito::lockForUpdate()->findOrFail($creditoId);
 
-            // Verificamos que sea un anticipo válido (saldo_pendiente en negativo o estado 'anticipo')
             $montoDisponible = abs($creditoAnticipo->saldo_pendiente);
 
             if ($montoDisponible <= 0 || $creditoAnticipo->estado !== 'anticipo') {
                 throw new \Exception('Este registro no posee saldo a favor disponible para gestionar.');
             }
 
-            // ==========================================
-            // CASO 1: REEMBOLSO (Devolver dinero físico/digital al cliente)
-            // ==========================================
+            $cliente = $creditoAnticipo->cliente;
+            $idCaja = $datos['id_caja'] ?? $this->obtenerCajaActiva();
+
+            // CASO 1: REEMBOLSO
             if ($accion === 'reembolso') {
-                
-                // Registramos un abono o movimiento de egreso en caja que refleje la salida del dinero
                 AbonoCredito::create([
                     'id_credito'       => $creditoAnticipo->id,
                     'id_user'          => auth()->id(),
-                    'id_caja'          => $datos['id_caja'] ?? null,
-                    'monto_pagado_usd' => -$montoDisponible, // Valor negativo para indicar salida de caja
+                    'id_caja'          => $idCaja,
+                    'monto_pagado_usd' => -$montoDisponible,
                     'detalles'         => 'REEMBOLSO DE SALDO A FAVOR: ' . ($datos['motivo'] ?? 'Devolución a cliente'),
                     'estado'           => 'Realizado'
                 ]);
 
-                // Dejamos el crédito del anticipo en cero y saldado
                 $creditoAnticipo->saldo_pendiente = 0.00;
-                $creditoAnticipo->estado = 'pagado'; // Desaparecerá de las cuentas activas
+                $creditoAnticipo->saldo_a_favor = 0.00;
+                $creditoAnticipo->estado = 'pagado';
                 $creditoAnticipo->save();
+
+                if ($cliente) {
+                    $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $montoDisponible));
+                }
 
                 return [
                     'status'  => 'success',
@@ -442,12 +440,8 @@ class CreditoController extends Controller
                 ];
             }
 
-            // ==========================================
-            // CASO 2: APLICAR SALDO (Usarlo para pagar otra deuda)
-            // ==========================================
+            // CASO 2: APLICAR SALDO
             if ($accion === 'aplicar') {
-                
-                // Buscamos las deudas pendientes del mismo cliente (de más antigua a más reciente)
                 $deudasPendientes = Credito::where('id_cliente', $creditoAnticipo->id_cliente)
                     ->where('estado', 'pendiente')
                     ->where('id', '!=', $creditoAnticipo->id)
@@ -467,17 +461,15 @@ class CreditoController extends Controller
                     $montoDeuda = round($deuda->saldo_pendiente, 2);
                     $descuento = min($saldoParaAplicar, $montoDeuda);
 
-                    // Registramos el abono en la deuda destino indicando la procedencia del dinero
                     AbonoCredito::create([
                         'id_credito'       => $deuda->id,
                         'id_user'          => auth()->id(),
-                        'id_caja'          => $datos['id_caja'] ?? null,
+                        'id_caja'          => $idCaja,
                         'monto_pagado_usd' => $descuento,
                         'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $creditoAnticipo->id . ')',
                         'estado'           => 'Realizado'
                     ]);
 
-                    // Actualizamos la deuda destino
                     $deuda->saldo_pendiente = round($montoDeuda - $descuento, 2);
                     if ($deuda->saldo_pendiente <= 0) {
                         $deuda->estado = 'pagado';
@@ -487,20 +479,25 @@ class CreditoController extends Controller
                     }
                     $deuda->save();
 
-                    $saldoParaAplicar -= $descuento;
+                    $saldoParaAplicar = round($saldoParaAplicar - $descuento, 2);
                 }
 
-                // Actualizamos el registro de anticipo según el remanente
+                $montoConsumido = round($montoDisponible - $saldoParaAplicar, 2);
+
                 if ($saldoParaAplicar <= 0) {
-                    // Se consumió todo el saldo a favor
                     $creditoAnticipo->saldo_pendiente = 0.00;
+                    $creditoAnticipo->saldo_a_favor = 0.00;
                     $creditoAnticipo->estado = 'pagado';
                 } else {
-                    // Aún le queda algo de saldo a favor sobrante
                     $creditoAnticipo->saldo_pendiente = -$saldoParaAplicar;
+                    $creditoAnticipo->saldo_a_favor = $saldoParaAplicar;
                 }
                 
                 $creditoAnticipo->save();
+
+                if ($cliente && $montoConsumido > 0) {
+                    $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $montoConsumido));
+                }
 
                 return [
                     'status'  => 'success',
@@ -536,25 +533,27 @@ class CreditoController extends Controller
         }
     }
 
-    private function obtenerCajaActiva()
+    /**
+     * Obtiene el ID de la caja abierta para el local actual o lanza una excepción.
+     *
+     * @return int
+     * @throws \Exception
+     */
+    private function obtenerCajaActiva(): int
     {
         $user = Auth::user();
-        $local = $user->localActual();
-        
-        if (!$local) {
-            return redirect()->route('home')->with('error', 'No tienes un local activo asignado.');
-        }
+        $local = $user ? $user->localActual() : null;
+        $localId = $local ? $local->id : (auth()->user()->id_local ?? 1);
 
-        // Buscamos la caja abierta del local (Sin tocar sesiones)
-        $caja = Caja::where('id_local', $local->id)
+        $caja = Caja::where('id_local', $localId)
                     ->where('estado', 'abierta')
                     ->first();
 
         if (!$caja) {
-            return redirect()->route('cajas.create')->with('error', 'No hay una caja abierta en este local.');
-        }else{
-            return $caja->id;
+            throw new \Exception('No hay una caja abierta en el local actual para registrar el movimiento.');
         }
+
+        return $caja->id;
     }
 
     public function listarProductos($id) 
@@ -659,152 +658,156 @@ class CreditoController extends Controller
     }
 
     public function storeDirecto(Request $request, $cliente_id)
-    {
-        // 1. Validar los campos del modal
-        $request->validate([
-            'monto_credito_usd' => 'required|numeric|min:0.01',
-            'fecha_credito'     => 'required|date',
-            'observacion'       => 'nullable|string',
-            'pin_autorizacion'  => 'nullable|string'
-        ]);
+{
+    // 1. Validar los campos del modal
+    $request->validate([
+        'monto_credito_usd' => 'required|numeric|min:0.01',
+        'fecha_credito'     => 'required|date',
+        'observacion'       => 'nullable|string',
+        'pin_autorizacion'  => 'nullable|string'
+    ]);
 
-        // Validar autorización si no tiene el permiso avanzado
-        if (Gate::denies('gestionar-creditos-avanzado')) {
-            $local = auth()->user()->localActual();
-            $auth = AutorizacionPin::where('id_local', $local->id)
-                        ->where('pin', $request->pin_autorizacion)
-                        ->where('estado', 'usado') // Marcado previamente por verificarPin
-                        ->first();
+    // Validar autorización si no tiene el permiso avanzado
+    if (Gate::denies('gestionar-creditos-avanzado')) {
+        $local = auth()->user()->localActual();
+        $auth = AutorizacionPin::where('id_local', $local->id)
+                    ->where('pin', $request->pin_autorizacion)
+                    ->where('estado', 'usado')
+                    ->first();
 
-            if (!$auth) {
-                return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
-            }
-        }
-
-        $tasa_bcv = bcv_rate('USD');
-        DB::beginTransaction();
-
-        try {
-            $cliente = Cliente::findOrFail($cliente_id);
-
-            // Generar un código de factura único para esta operación
-            $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
-            $fechaCredito = Carbon::parse($request->fecha_credito);
-            // 2. Registrar en la tabla VENTA
-            $venta = new Venta();
-            $venta->codigo_factura     = $codigoFactura;
-            $venta->id_cliente         = $cliente->id;
-            $venta->id_user            = auth()->id();
-            $venta->id_local           = auth()->user()->id_local ?? 1;
-            $venta->id_caja            = auth()->user()->id_caja ?? 1;
-            
-            $venta->pago_usd_efectivo  = 0.00;
-            $venta->pago_bs_efectivo   = 0.00;
-            $venta->monto_credito_usd  = $request->monto_credito_usd;
-            $venta->total_usd          = $request->monto_credito_usd;
-            
-            $venta->estado             = 'completada';
-            $venta->observacion        = $request->observacion;
-            
-            // Asignar la fecha personalizada al created_at de la venta
-            $venta->created_at         = $fechaCredito;
-            $venta->updated_at         = now();
-            $venta->save();
-
-            // 3. Registrar en la tabla CREDITO asociado a la Venta
-            $credito = Credito::create([
-                'id_venta'           => $venta->id,
-                'id_cliente'         => $cliente->id,
-                'monto_inicial'      => $request->monto_credito_usd,
-                'saldo_pendiente'    => $request->monto_credito_usd,
-                'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15),
-                'estado'             => 'pendiente',
-                'tasa_cambio_origen' => $tasa_bcv,
-                'created_at'         => $fechaCredito,
-                'updated_at'         => now(),
-            ]);
-
-            // =========================================================
-            // 4. VERIFICAR Y APLICAR SALDOS A FAVOR / ANTICIPOS ACTIVOS
-            // =========================================================
-            $anticipos = Credito::where('id_cliente', $cliente->id)
-                ->where('estado', 'anticipo')
-                ->where('saldo_pendiente', '<', 0)
-                ->orderBy('created_at', 'asc')
-                ->lockForUpdate()
-                ->get();
-
-            $deudaPendiente = $credito->saldo_pendiente;
-
-            foreach ($anticipos as $anticipo) {
-                if ($deudaPendiente <= 0) break;
-
-                $disponibleAnticipo = abs($anticipo->saldo_pendiente);
-                $descuento = min($deudaPendiente, $disponibleAnticipo);
-
-                // A) Registrar el abono en el nuevo crédito
-                AbonoCredito::create([
-                    'id_credito'       => $credito->id,
-                    'id_user'          => auth()->id(),
-                    'id_caja'          => auth()->user()->id_caja ?? 1,
-                    'monto_pagado_usd' => $descuento,
-                    'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $anticipo->id . ')',
-                    'estado'           => 'Realizado'
-                ]);
-
-                // B) Actualizar el crédito recién creado
-                $deudaPendiente -= $descuento;
-                $credito->saldo_pendiente = round($deudaPendiente, 2);
-
-                if ($credito->saldo_pendiente <= 0) {
-                    $credito->estado = 'pagado';
-                    $venta->update(['estado_pago' => 'Pagado']);
-                }
-                $credito->save();
-
-                // C) Actualizar o cerrar el registro del anticipo
-                $nuevoRemanenteAnticipo = $disponibleAnticipo - $descuento;
-
-                if ($nuevoRemanenteAnticipo <= 0) {
-                    $anticipo->saldo_pendiente = 0.00;
-                    $anticipo->estado = 'pagado'; // Ya se consumió por completo
-                } else {
-                    $anticipo->saldo_pendiente = -$nuevoRemanenteAnticipo;
-                }
-                $anticipo->save();
-            }
-
-            // 5. Notificaciones a administradores / gerentes
-            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
-            $detalles = [
-                'titulo'  => '💸 Nueva Venta a Crédito Directo',
-                'mensaje' => "Se otorgó un crédito directo de {$request->monto_credito_usd}$ a {$cliente->nombre}.",
-                'url'     => route('creditos.index'),
-                'icono'   => 'fas fa-hand-holding-usd text-info'
-            ];
-
-            foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
-            }
-
-            DB::commit();
-
-            // Mensaje dinámico según si se aplicó anticipo o no
-            if ($credito->estado === 'pagado') {
-                $msj = 'Crédito directo registrado y saldado automáticamente con el Saldo a Favor disponible.';
-            } elseif ($deudaPendiente < $request->monto_credito_usd) {
-                $msj = 'Crédito directo registrado. Se aplicó un saldo a favor y la deuda restante es de $' . number_format($credito->saldo_pendiente, 2);
-            } else {
-                $msj = 'Crédito directo de $' . number_format($request->monto_credito_usd, 2) . ' registrado con éxito.';
-            }
-
-            return redirect()->back()->with('success', $msj);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return redirect()->back()->with('error', 'Ocurrió un error al registrar el crédito directo: ' . $e->getMessage());
+        if (!$auth) {
+            return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
         }
     }
+
+    $montoUsd = (float) $request->monto_credito_usd;
+    $tasa_bcv = bcv_rate('USD');
+    DB::beginTransaction();
+
+    try {
+        $cliente = Cliente::findOrFail($cliente_id);
+
+        // Generar un código de factura único para esta operación
+        $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
+        $fechaCredito = Carbon::parse($request->fecha_credito);
+
+        // 2. Registrar la VENTA obligatoria para obtener $venta->id
+        $venta = new Venta();
+        $venta->codigo_factura     = $codigoFactura;
+        $venta->id_cliente         = $cliente->id;
+        $venta->id_user            = auth()->id();
+        $venta->id_local           = auth()->user()->id_local ?? 1;
+        $venta->id_caja            = auth()->user()->id_caja ?? 1;
+        
+        $venta->pago_usd_efectivo  = 0.00;
+        $venta->pago_bs_efectivo   = 0.00;
+        $venta->monto_credito_usd  = $montoUsd;
+        $venta->total_usd          = $montoUsd;
+        
+        $venta->estado             = 'completada';
+        $venta->observacion        = $request->observacion;
+        
+        $venta->created_at         = $fechaCredito;
+        $venta->updated_at         = now();
+        $venta->save();
+
+        // 3. Registrar el CRÉDITO enlazado a la Venta
+        $credito = Credito::create([
+            'id_venta'           => $venta->id,
+            'id_cliente'         => $cliente->id,
+            'monto_inicial'      => $montoUsd,
+            'saldo_pendiente'    => $montoUsd,
+            'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15),
+            'estado'             => 'pendiente',
+            'tasa_cambio_origen' => $tasa_bcv,
+            'created_at'         => $fechaCredito,
+            'updated_at'         => now(),
+        ]);
+
+        // 4. VERIFICAR Y APLICAR SALDOS A FAVOR / ANTICIPOS ACTIVOS
+        $anticipos = Credito::where('id_cliente', $cliente->id)
+            ->where(function ($q) {
+                $q->where('estado', 'anticipo')
+                  ->orWhere('saldo_pendiente', '<', 0);
+            })
+            ->where('saldo_pendiente', '<', 0)
+            ->orderBy('created_at', 'asc')
+            ->lockForUpdate()
+            ->get();
+
+        $deudaPendiente = (float) $credito->saldo_pendiente;
+
+        foreach ($anticipos as $anticipo) {
+            if ($deudaPendiente <= 0) break;
+
+            $disponibleAnticipo = abs((float) $anticipo->saldo_pendiente);
+            if ($disponibleAnticipo <= 0) continue;
+
+            $descuento = min($deudaPendiente, $disponibleAnticipo);
+
+            // A) Registrar el abono en el nuevo crédito
+            AbonoCredito::create([
+                'id_credito'       => $credito->id,
+                'id_user'          => auth()->id(),
+                'id_caja'          => auth()->user()->id_caja ?? 1,
+                'monto_pagado_usd' => $descuento,
+                'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $anticipo->id . ')',
+                'estado'           => 'Realizado',
+                'created_at'       => $fechaCredito
+            ]);
+
+            // B) Actualizar la deuda del nuevo crédito
+            $deudaPendiente -= $descuento;
+            $credito->saldo_pendiente = round($deudaPendiente, 2);
+
+            if ($credito->saldo_pendiente <= 0) {
+                $credito->saldo_pendiente = 0.00;
+                $credito->estado = 'pagado';
+            }
+            $credito->save();
+
+            // C) Actualizar o cerrar el anticipo usado
+            $nuevoRemanenteAnticipo = $disponibleAnticipo - $descuento;
+
+            if ($nuevoRemanenteAnticipo <= 0) {
+                $anticipo->saldo_pendiente = 0.00;
+                $anticipo->estado = 'pagado';
+            } else {
+                $anticipo->saldo_pendiente = -round($nuevoRemanenteAnticipo, 2);
+            }
+            $anticipo->save();
+        }
+
+        // 5. Notificaciones
+        $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+        $detalles = [
+            'titulo'  => '💸 Nueva Venta a Crédito Directo',
+            'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",
+            'url'     => route('creditos.index'),
+            'icono'   => 'fas fa-hand-holding-usd text-info'
+        ];
+
+        foreach ($gerentes as $gerente) {
+            $gerente->notify(new StockBajoNotification($detalles));
+        }
+
+        DB::commit();
+
+        if ($credito->estado === 'pagado') {
+            $msj = 'Crédito directo registrado y saldado automáticamente con el Saldo a Favor disponible.';
+        } elseif ($deudaPendiente < $montoUsd) {
+            $msj = 'Crédito directo registrado. Se aplicó un saldo a favor y la deuda restante es de $' . number_format($credito->saldo_pendiente, 2);
+        } else {
+            $msj = 'Crédito directo de $' . number_format($montoUsd, 2) . ' registrado con éxito.';
+        }
+
+        return redirect()->back()->with('success', $msj);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return redirect()->back()->with('error', 'Ocurrió un error al registrar el crédito directo: ' . $e->getMessage());
+    }
+}
 
     public function storeDirectoGeneral(Request $request)
     {
@@ -960,7 +963,6 @@ class CreditoController extends Controller
              */
     public function destroy($id)
     {
-        // 1. Autorización mediante Gate o verificación Admin
         if (Gate::denies('gestionar-creditos-avanzado') && !auth()->user()->esAdmin()) {
             return redirect()->back()->with('error', 'No posee autorización suficiente para eliminar registros de crédito.');
         }
@@ -969,39 +971,45 @@ class CreditoController extends Controller
             $idCliente = null;
 
             DB::transaction(function () use ($id, &$idCliente) {
-                $credito = Credito::with(['venta.detalles.insumo.existencias', 'abonos', 'intereses'])->findOrFail($id);
+                $credito = Credito::with(['venta.detalles.insumo.existencias', 'abonos', 'intereses', 'cliente'])->findOrFail($id);
                 
                 $idCliente = $credito->id_cliente;
+                $cliente = $credito->cliente;
                 $venta = $credito->venta;
 
-                // -------------------------------------------------------------
-                // A) REVERTIR ABONOS PROVENIENTES DE SALDOS A FAVOR / ANTICIPOS
-                // -------------------------------------------------------------
-                // Si esta deuda recibió abonos que venían de un saldo a favor,
-                // devolvemos ese saldo al anticipo correspondiente.
+                // 1. SI ES UN ANTICIPO, DESCONTAR DEL SALDO A FAVOR DEL CLIENTE
+                if ($credito->estado === 'anticipo' && $cliente) {
+                    $montoAnticipo = abs($credito->saldo_pendiente);
+                    $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $montoAnticipo));
+                }
+
+                // 2. REVERTIR ABONOS PROVENIENTES DE SALDOS A FAVOR / ANTICIPOS
                 foreach ($credito->abonos as $abono) {
                     if (str_contains($abono->detalles, 'Ref #')) {
-                        // Extraemos el ID del anticipo usando una expresión regular
                         preg_match('/Ref #(\d+)/', $abono->detalles, $coincidencias);
                         if (isset($coincidencias[1])) {
                             $idAnticipoOrigen = $coincidencias[1];
                             $anticipoOrigen = Credito::find($idAnticipoOrigen);
 
                             if ($anticipoOrigen) {
-                                // Le regresamos el dinero al saldo a favor
                                 $nuevoSaldo = $anticipoOrigen->saldo_pendiente - $abono->monto_pagado_usd;
+                                $montoRestaurado = $abono->monto_pagado_usd;
+
                                 $anticipoOrigen->update([
                                     'saldo_pendiente' => $nuevoSaldo,
+                                    'saldo_a_favor'   => abs($nuevoSaldo),
                                     'estado'          => 'anticipo'
                                 ]);
+
+                                if ($cliente) {
+                                    $cliente->increment('saldo_a_favor', $montoRestaurado);
+                                }
                             }
                         }
                     }
                 }
 
-                // -------------------------------------------------------------
-                // B) RETORNO DE STOCK SI EL CRÉDITO POSEE UNA VENTA Y PRODUCTOS
-                // -------------------------------------------------------------
+                // 3. RETORNO DE STOCK
                 if ($venta && $venta->detalles->isNotEmpty()) {
                     foreach ($venta->detalles as $detalle) {
                         if ($detalle->insumo) {
@@ -1014,12 +1022,9 @@ class CreditoController extends Controller
                     $venta->detalles()->delete();
                 }
 
-                // -------------------------------------------------------------
-                // C) ELIMINAR RELACIONES FINANCIERAS Y REGISTRO
-                // -------------------------------------------------------------
+                // 4. ELIMINAR RELACIONES FINANCIERAS Y REGISTRO
                 $credito->abonos()->delete();
                 $credito->intereses()->delete();
-
                 $credito->delete();
                 
                 if ($venta) {
@@ -1027,7 +1032,6 @@ class CreditoController extends Controller
                 }
             });
 
-            // Verificamos si aún le quedan créditos o anticipos activos al cliente
             $quedanCreditos = Credito::where('id_cliente', $idCliente)
                 ->whereIn('estado', ['pendiente', 'anticipo'])
                 ->exists();

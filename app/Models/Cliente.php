@@ -24,7 +24,8 @@ class Cliente extends Model
         'direccion',
         'limite_credito',
         'id_local',
-        'activo'
+        'activo',
+        'saldo_a_favor'
     ];
 
     /**

@@ -27,6 +27,7 @@ return new class extends Migration
             $table->foreignId('id_local')->constrained('local'); 
             
             $table->enum('activo',['activo','pendiente','suspendido'])->default('activo');
+            $table->decimal('saldo_a_favor')->nullable();
             $table->timestamps();
         });
     }
