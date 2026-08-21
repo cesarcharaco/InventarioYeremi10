@@ -23,9 +23,9 @@ class AbonoCredito extends Model
         'pago_punto_bs',
         'pago_pagomovil_bs',
         
-        // Campo flexible para detalles del abono
-        'detalles', // <--- Aquí reemplazamos 'referencia'
         'estado',
+        'created_at',
+        'updated_at'
     ];
 
     // Dentro de class AbonoCredito extends Model

@@ -18,6 +18,13 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6 border-right">
+                            
+                            {{-- NUEVO CAMPO: FECHA DEL ABONO --}}
+                            <div class="form-group mb-3">
+                                <label class="font-weight-bold">Fecha del Abono:</label>
+                                <input type="date" name="fecha_abono" id="fecha_abono" class="form-control" value="{{ date('Y-m-d') }}" required>
+                            </div>
+
                             <div class="form-group">
                                 <label class="font-weight-bold text-primary">Monto Total a Abonar (USD):</label>
                                 <div class="input-group">
@@ -34,7 +41,7 @@
                             <hr>
                             <div class="form-group">
                                 <label>Referencia / Nota:</label>
-                                <textarea name="referencia" class="form-control" rows="3" placeholder="Ej: Pago móvil, transferencia Banesco, etc."></textarea>
+                                <textarea name="referencia" class="form-control" rows="2" placeholder="Ej: Pago móvil, transferencia Banesco, etc."></textarea>
                             </div>
                         </div>
                         

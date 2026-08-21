@@ -135,7 +135,10 @@ class CreditoController extends Controller
     public function registrarAbono(Request $request, $id)
     {
         // 1. Validaciones iniciales
-        $request->validate(['monto_total_usd' => 'required|numeric|min:0.01']);
+        $request->validate([
+            'monto_total_usd' => 'required|numeric|min:0.01',
+            'fecha_abono'     => 'required|date'
+        ]);
         
         $totalDesglose = ($request->pago_usd_efectivo ?? 0) + ($request->pago_bs_efectivo ?? 0) + 
                          ($request->pago_punto_bs ?? 0) + ($request->pago_pagomovil_bs ?? 0);
@@ -149,6 +152,9 @@ class CreditoController extends Controller
                 $creditoReferencia = Credito::findOrFail($id);
                 $cliente = $creditoReferencia->cliente;
                 $idCajaActiva = $this->obtenerCajaActiva();
+                
+                // Convertir la fecha recibida del modal
+                $fechaAbono = \Carbon\Carbon::parse($request->fecha_abono);
 
                 // 2. Buscamos TODOS los créditos pendientes de este cliente (Más viejos primero)
                 $creditos = Credito::where('id_cliente', $cliente->id)
@@ -172,7 +178,9 @@ class CreditoController extends Controller
                         'id_caja'          => $idCajaActiva,
                         'monto_pagado_usd' => $abono,
                         'detalles'         => 'Abono Global: ' . ($request->referencia ?? 'Sin referencia'),
-                        'estado'           => 'Realizado'
+                        'estado'           => 'Realizado',
+                        'created_at'       => $fechaAbono,
+                        'updated_at'       => now(),
                     ]);
 
                     $credito->saldo_pendiente = round($saldo - $abono, 2);
@@ -205,6 +213,8 @@ class CreditoController extends Controller
                     
                     $ventaAnticipo->estado             = 'completada';
                     $ventaAnticipo->observacion        = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo';
+                    $ventaAnticipo->created_at         = $fechaAbono;
+                    $ventaAnticipo->updated_at         = now();
                     $ventaAnticipo->save();
 
                     $creditoAnticipo = Credito::create([
@@ -213,8 +223,10 @@ class CreditoController extends Controller
                         'monto_inicial'     => 0.00,
                         'saldo_pendiente'   => -$montoRestante,
                         'saldo_a_favor'     => $montoRestante,
-                        'fecha_vencimiento' => now(),
+                        'fecha_vencimiento' => $fechaAbono,
                         'estado'            => 'anticipo',
+                        'created_at'        => $fechaAbono,
+                        'updated_at'        => now(),
                     ]);
 
                     AbonoCredito::create([
@@ -223,7 +235,9 @@ class CreditoController extends Controller
                         'id_caja'          => $idCajaActiva,
                         'monto_pagado_usd' => $montoRestante,
                         'detalles'         => 'Excedente a favor: ' . ($request->referencia ?? 'Sin referencia'),
-                        'estado'           => 'Realizado'
+                        'estado'           => 'Realizado',
+                        'created_at'       => $fechaAbono,
+                        'updated_at'       => now(),
                     ]);
 
                     if ($cliente) {

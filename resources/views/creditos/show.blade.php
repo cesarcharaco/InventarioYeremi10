@@ -681,5 +681,86 @@
             }
         });
     });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // 1. Tasa BCV desde Laravel
+        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
+
+        // 2. Elementos del DOM
+        const inputMontoTotal  = document.getElementById('monto_total_usd');
+        const inputUsdEfectivo = document.querySelector('input[name="pago_usd_efectivo"]');
+        const inputBsEfectivo  = document.querySelector('input[name="pago_bs_efectivo"]');
+        const inputPuntoBs     = document.querySelector('input[name="pago_punto_bs"]');
+        const inputPagoMovilBs = document.querySelector('input[name="pago_pagomovil_bs"]');
+
+        const inputsDesglose = document.querySelectorAll('.input-desglose');
+        const divError       = document.getElementById('error-desglose');
+        
+        const formAbono = inputMontoTotal ? inputMontoTotal.closest('form') : null;
+        const btnSubmit = formAbono ? formAbono.querySelector('button[type="submit"]') : null;
+
+        function getNum(input) {
+            if (!input) return 0;
+            const val = parseFloat(input.value);
+            return isNaN(val) ? 0 : val;
+        }
+
+        // 3. Validación estricta de coincidencia
+        function validarCuadreMontos() {
+            const montoObjetivoUSD = getNum(inputMontoTotal);
+
+            const usdEfectivo = getNum(inputUsdEfectivo);
+            const bsEfectivo  = getNum(inputBsEfectivo);
+            const puntoBs     = getNum(inputPuntoBs);
+            const pagoMovilBs = getNum(inputPagoMovilBs);
+
+            // Convertir montos de bolívares a dólares
+            const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
+            const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
+
+            // Tolerancia para comparar flotantes
+            const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
+            const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
+
+            if (estanCuadrados) {
+                if (divError) divError.classList.add('d-none');
+                if (btnSubmit) btnSubmit.disabled = false;
+            } else {
+                if (btnSubmit) btnSubmit.disabled = true;
+                if (divError) {
+                    divError.classList.remove('d-none');
+
+                    if (montoObjetivoUSD <= 0) {
+                        divError.innerHTML = '<i class="fa fa-exclamation-circle"></i> Ingrese un monto a abonar válido.';
+                    } else {
+                        divError.innerHTML = `<i class="fa fa-exclamation-circle"></i> Discrepancia: El desglose suma <b>$${totalDesgloseUSD.toFixed(2)}</b> y el monto a abonar es <b>$${montoObjetivoUSD.toFixed(2)}</b>.`;
+                    }
+                }
+            }
+        }
+
+        // 4. Asignar eventos keyup/input/change al campo total y al desglose
+        if (inputMontoTotal) {
+            ['keyup', 'input', 'change'].forEach(evt => {
+                inputMontoTotal.addEventListener(evt, validarCuadreMontos);
+            });
+        }
+
+        inputsDesglose.forEach(input => {
+            ['keyup', 'input', 'change'].forEach(evt => {
+                input.addEventListener(evt, validarCuadreMontos);
+            });
+
+            input.addEventListener('blur', function() {
+                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
+                    this.value = '0';
+                    validarCuadreMontos();
+                }
+            });
+        });
+
+        // Ejecutar al cargar
+        validarCuadreMontos();
+    });
 </script>
 @endsection
