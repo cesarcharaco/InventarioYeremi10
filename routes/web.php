@@ -93,20 +93,23 @@ Route::middleware(['auth'])->group(function () {
 
     // Grupo de rutas para Despachos
     Route::group(['prefix' => 'despacho'], function () {
+        // 1. Rutas principales estáticas (siempre arriba)
         Route::get('/', [DespachoController::class, 'index'])->name('despacho.index');
         Route::get('/create', [DespachoController::class, 'create'])->name('despacho.create');
         Route::post('/store', [DespachoController::class, 'store'])->name('despacho.store');
+
+        // 2. Rutas específicas con sub-parámetros (antes del show /{id})
+        Route::get('/{id}/json', [DespachoController::class, 'getJson'])->name('despacho.json'); // <--- NUEVA: Para poblar el modal
+        Route::get('/{id}/edit', [DespachoController::class, 'edit'])->name('despacho.edit');
+
+        // 3. Ruta genérica de visualización (después de las específicas)
         Route::get('/{id}', [DespachoController::class, 'show'])->name('despacho.show');
         
-        // Confirmar recepción
-        Route::post('/confirmar/{id}', [DespachoController::class, 'confirmarRecepcion'])->name('despacho.confirmar');
-        
-        // Anular y Eliminar
+        // 4. Acciones por POST / DELETE
+        Route::post('/confirmar/{id}', [DespachoController::class, 'confirmarRecepcion'])->name('despacho.confirmar'); // <--- Esta ya la tenías
         Route::post('/anular/{id}', [DespachoController::class, 'anular'])->name('despacho.anular');
         Route::delete('/{id}', [DespachoController::class, 'destroy'])->name('despacho.destroy');
-        Route::get('/{id}/edit', [DespachoController::class, 'edit'])->name('despacho.edit');
     });
-
     Route::resource('solicitantes', SolicitantesController::class);
     Route::post('solicitantes/cambiar_status', [SolicitantesController::class, 'cambiar_status'])->name('solicitantes.cambiar_status');
     Route::post('prestamos/cambiar_status', [PrestamosController::class, 'cambiar_status'])->name('prestamos.cambiar_status');

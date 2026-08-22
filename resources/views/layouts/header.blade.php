@@ -30,11 +30,16 @@
                     @forelse(auth()->user()->unreadNotifications->take(5) as $notification)
                         <a href="{{ route('notifications.read', $notification->id) }}" class="dropdown-item">
                             <i class="{{ $notification->data['icono'] ?? 'fas fa-envelope' }} mr-2"></i> 
-                            <span class="text-sm font-weight-bold">{{ \Str::limit($notification->data['titulo'], 20) }}</span>
+                            
+                            {{-- Agregamos '?? "Notificación"' por si el título no existe --}}
+                            <span class="text-sm font-weight-bold">{{ \Str::limit($notification->data['titulo'] ?? 'Notificación', 20) }}</span>
+                            
                             <span class="float-right text-muted text-xs">
                                 {{ $notification->created_at->diffForHumans() }}
                             </span>
-                            <div class="text-xs text-secondary text-truncate">{{ $notification->data['mensaje'] }}</div>
+                            
+                            {{-- Agregamos un respaldo para el mensaje también por seguridad --}}
+                            <div class="text-xs text-secondary text-truncate">{{ $notification->data['mensaje'] ?? 'Nueva alerta en el sistema' }}</div>
                         </a>
                         <div class="dropdown-divider"></div>
                     @empty

@@ -4,12 +4,15 @@
 
 @section('content')
 <main class="app-content">
-  {{-- 1. VERIFICACIÓN DE PERMISO PARA CREAR (ESTILO CATEGORÍAS) --}}
+  {{-- VERIFICACIÓN DE PERMISO PARA CREAR --}}
   @cannot('crear-despacho')
-    <div class="tile text-center">
-        <h1 class="text-danger"><i class="fa fa-lock"></i> Acceso Restringido</h1>
-        <p>No tienes permisos para registrar salidas de mercancía en el sistema.</p>
-        <a href="{{ route('despacho.index') }}" class="btn btn-primary">Volver al listado</a>
+    <div class="tile text-center shadow-sm py-5">
+        <h1 class="text-danger mb-3"><i class="fa fa-lock fa-2x"></i></h1>
+        <h3 class="text-danger">Acceso Restringido</h3>
+        <p class="text-muted">No tienes permisos para registrar salidas de mercancía en el sistema.</p>
+        <a href="{{ route('despacho.index') }}" class="btn btn-primary mt-2">
+            <i class="fa fa-arrow-left"></i> Volver al listado
+        </a>
     </div>
   @else
   <div class="app-title">
@@ -20,7 +23,7 @@
     <ul class="app-breadcrumb breadcrumb">
       <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="fa fa-home fa-lg"></i></a></li>
       <li class="breadcrumb-item"><a href="{{ route('despacho.index') }}">Despachos</a></li>
-      <li class="breadcrumb-item"><a href="#">Nuevo</a></li>
+      <li class="breadcrumb-item active">Nuevo</li>
     </ul>
   </div>
 
@@ -29,21 +32,20 @@
     <div class="row">
       {{-- PANEL IZQUIERDO: DATOS DE CABECERA --}}
       <div class="col-md-4">
-        <div class="tile">
-          <h3 class="tile-title">Datos del Envío</h3>
+        <div class="tile shadow-sm">
+          <h3 class="tile-title"><i class="fa fa-info-circle text-primary"></i> Datos del Envío</h3>
           <div class="tile-body">
             <div class="form-group">
               <label><b>Código de Despacho</b></label>
-              <input class="form-control" type="text" name="codigo" value="{{ $codigo }}" readonly>
+              <input class="form-control bg-light font-weight-bold text-primary" type="text" name="codigo" value="{{ $codigo }}" readonly>
             </div>
 
             <div class="form-group">
               <label><b>Origen (Donde sale)</b> <b class="text-danger">*</b></label>
-              {{-- APLICACIÓN DE LA NUEVA GATE DE ALCANCE --}}
               @can('seleccionar-cualquier-origen')
                 <select name="id_local_origen" id="id_local_origen" class="form-control select2" required>
                     <option value="">Seleccione origen...</option>
-                    @foreach($locales as $local)
+                    @foreach($localesOrigen as $local)
                         <option value="{{ $local->id }}">{{ $local->nombre }} ({{ $local->tipo }})</option>
                     @endforeach
                 </select>
@@ -60,7 +62,7 @@
               <label><b>Destino (A donde va)</b> <b class="text-danger">*</b></label>
               <select name="id_local_destino" id="id_local_destino" class="form-control select2" required>
                 <option value="">Seleccione destino...</option>
-                @foreach($locales as $local)
+                @foreach($localesDestino as $local)
                   <option value="{{ $local->id }}">{{ $local->nombre }}</option>
                 @endforeach
               </select>
@@ -78,7 +80,7 @@
 
             <div class="form-group">
               <label><b>Observaciones</b></label>
-              <textarea class="form-control" name="observacion" rows="2"></textarea>
+              <textarea class="form-control" name="observacion" rows="2" placeholder="Notas adicionales del envío..."></textarea>
             </div>
           </div>
         </div>
@@ -86,13 +88,13 @@
 
       {{-- PANEL DERECHO: SELECCIÓN DE PRODUCTOS --}}
       <div class="col-md-8">
-        <div class="tile">
-          <h3 class="tile-title">Cargar Repuestos</h3>
+        <div class="tile shadow-sm">
+          <h3 class="tile-title"><i class="fa fa-cogs text-primary"></i> Cargar Repuestos</h3>
           <div class="tile-body">
-            <div class="row">
+            <div class="row align-items-end">
               <div class="col-md-7">
-                <div class="form-group">
-                  <label><b>Buscar Insumo</b></label>
+                <div class="form-group mb-md-0">
+                  <label><b>Buscar Insumo / Repuesto</b></label>
                   <select id="select_insumo" class="form-control select2">
                     <option value="">Seleccione un repuesto...</option>
                     @foreach($insumos as $insumo)
@@ -102,40 +104,40 @@
                 </div>
               </div>
               <div class="col-md-3">
-                <div class="form-group">
+                <div class="form-group mb-md-0">
                   <label><b>Cantidad</b></label>
                   <input type="number" id="input_cantidad" class="form-control" min="1" value="1">
                 </div>
               </div>
               <div class="col-md-2">
-                <label>&nbsp;</label>
-                <button type="button" class="btn btn-info btn-block" onclick="agregarProducto()">
-                  <i class="fa fa-plus"></i>
+                <button type="button" class="btn btn-info btn-block text-white" onclick="agregarProducto()" title="Agregar a la lista">
+                  <i class="fa fa-plus"></i> Añadir
                 </button>
               </div>
             </div>
 
-            <table class="table table-bordered table-hover mt-3" id="tabla_productos">
-              <thead>
-                <tr>
-                  <th>Repuesto</th>
-                  <th width="100px">Cant.</th>
-                  <th width="50px"></th>
-                </tr>
-              </thead>
-              <tbody id="detalles_despacho">
-                {{-- Aquí se cargarán las filas vía JS --}}
-              </tbody>
-            </table>
+            <div class="table-responsive mt-4">
+              <table class="table table-bordered table-hover align-middle" id="tabla_productos">
+                <thead class="table-light">
+                  <tr>
+                    <th>Repuesto / Insumo</th>
+                    <th width="120px" class="text-center">Cant.</th>
+                    <th width="60px" class="text-center"><i class="fa fa-trash"></i></th>
+                  </tr>
+                </thead>
+                <tbody id="detalles_despacho">
+                  {{-- Filas dinámicas vía JavaScript --}}
+                </tbody>
+              </table>
+            </div>
           </div>
           
-          <div class="tile-footer">
+          <div class="tile-footer bg-white border-top">
             <button class="btn btn-primary" type="submit" id="btn-guardar" disabled>
-              <i class="fa fa-fw fa-lg fa-check-circle"></i> Procesar Despacho
+              <i class="fa fa-check-circle"></i> Procesar Despacho
             </button>
-            &nbsp;&nbsp;&nbsp;
-            <a class="btn btn-secondary" href="{{ route('despacho.index') }}">
-                <i class="fa fa-fw fa-lg fa-times-circle"></i> Cancelar
+            <a class="btn btn-secondary ml-2" href="{{ route('despacho.index') }}">
+                <i class="fa fa-times-circle"></i> Cancelar
             </a>
           </div>
         </div>
@@ -148,19 +150,15 @@
 
 @section('scripts')
 <script>
-    if (typeof items === 'undefined') {
-        var items = 0; 
-    } else {
-        items = 0; 
-    }
+    var items = 0;
 
     function agregarProducto() {
         let insumo_id = $('#select_insumo').val();
         let insumo_text = $('#select_insumo option:selected').text();
-        let cantidad = $('#input_cantidad').val();
+        let cantidad = parseInt($('#input_cantidad').val());
 
-        if (insumo_id == "" || cantidad <= 0) {
-            Swal.fire('Atención', 'Seleccione un producto y una cantidad válida.', 'warning');
+        if (insumo_id == "" || isNaN(cantidad) || cantidad <= 0) {
+            Swal.fire('Atención', 'Seleccione un producto y una cantidad válida mayor a cero.', 'warning');
             return;
         }
 
@@ -170,7 +168,7 @@
         });
 
         if (existe) {
-            Swal.fire('Repetido', 'Este producto ya está en la lista.', 'info');
+            Swal.fire('Repetido', 'Este producto ya se encuentra agregado en la lista.', 'info');
             return;
         }
 
@@ -178,13 +176,13 @@
             <tr id="fila_${items}">
                 <td>
                     <input type="hidden" name="id_insumo[]" value="${insumo_id}">
-                    ${insumo_text}
+                    <span class="font-weight-bold text-dark">${insumo_text}</span>
                 </td>
-                <td>
-                    <input type="number" name="cantidad[]" class="form-control form-control-sm" value="${cantidad}" readonly>
+                <td class="text-center">
+                    <input type="number" name="cantidad[]" class="form-control form-control-sm text-center font-weight-bold" value="${cantidad}" readonly>
                 </td>
-                <td>
-                    <button type="button" class="btn btn-danger btn-sm" onclick="eliminarFila(${items})">
+                <td class="text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="eliminarFila(${items})" title="Quitar">
                         <i class="fa fa-trash"></i>
                     </button>
                 </td>
@@ -195,6 +193,7 @@
         items++; 
         verificarBoton();
         
+        // Resetear selectores
         $('#select_insumo').val(null).trigger('change');
         $('#input_cantidad').val(1);
     }
@@ -212,25 +211,28 @@
     $(document).ready(function() {
         $('.select2').select2({ width: '100%' });
 
+        // Disparar validación inicial por si hay un local precargado
+        $('#id_local_origen').trigger('change');
+
         $('#form-despacho').on('submit', function(e) {
             e.preventDefault();
             let form = this;
 
             Swal.fire({
                 title: '¿Procesar Despacho?',
-                text: "Se generará la salida de mercancía y se actualizará el inventario.",
+                text: "Se generará la salida oficial de mercancía y se actualizará el inventario.",
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#009688',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Sí, procesar',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fa fa-check"></i> Sí, procesar',
                 cancelButtonText: 'Cancelar',
                 reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
                     Swal.fire({
-                        title: 'Generando Despacho',
-                        text: 'Por favor espere...',
+                        title: 'Generando Despacho...',
+                        text: 'Registrando inventario y notificando sucursal de destino.',
                         allowOutsideClick: false,
                         didOpen: () => { Swal.showLoading() }
                     });
@@ -239,6 +241,7 @@
             });
         });
 
+        // Lógica para evitar que origen y destino sean iguales
         $('#id_local_origen').on('change', function() {
             let origenId = $(this).val();
             let destinoSelect = $('#id_local_destino');

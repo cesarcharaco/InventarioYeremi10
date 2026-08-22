@@ -10,22 +10,29 @@ return new class extends Migration
     {
         Schema::create('despachos', function (Blueprint $table) {
             $table->id();
-            $table->string('codigo')->unique(); // Ej: DESP-2026-0001
+            $table->string('codigo')->unique();
             
-            // Relaciones con la tabla local
-            // Usamos constrained('local') para indicar explícitamente la tabla destino
             $table->foreignId('id_local_origen')->constrained('local');
             $table->foreignId('id_local_destino')->constrained('local');
             
-            // Datos de logística
+            // Datos de logística de salida
             $table->string('transportado_por');
             $table->string('vehiculo_placa')->nullable();
-            $table->text('observacion')->nullable();
+            $table->text('observacion')->nullable(); // Nota de salida (Admin)
+            
+            // Nota de recepción (Encargado de tienda ante incidencias / ítems erróneos)
+            $table->text('observacion_recepcion')->nullable(); 
             
             // Control de flujo
-            $table->enum('estado', ['Pendiente', 'En Tránsito', 'Recibido', 'Cancelado'])->default('En Tránsito');
+            $table->enum('estado', [
+                'Pendiente', 
+                'En Tránsito', 
+                'Recibido', 
+                'recibido_con_incidencias', 
+                'Cancelado'
+            ])->default('En Tránsito');
             
-            // Tiempos de logística
+            // Tiempos
             $table->timestamp('fecha_despacho')->useCurrent();
             $table->timestamp('fecha_recepcion')->nullable(); 
             

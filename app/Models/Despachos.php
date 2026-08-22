@@ -17,6 +17,7 @@ class Despachos extends Model
         'transportado_por',
         'vehiculo_placa',
         'observacion',
+        'observacion_recepcion',
         'estado',
         'fecha_despacho',
         'fecha_recepcion'

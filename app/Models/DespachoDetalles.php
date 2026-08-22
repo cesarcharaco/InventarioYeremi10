@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DespachoDetalles extends Model
@@ -13,7 +12,8 @@ class DespachoDetalles extends Model
     protected $fillable = [
         'id_despacho',
         'id_insumo',
-        'cantidad'
+        'cantidad_enviada',  // <-- Reemplaza al antiguo 'cantidad'
+        'cantidad_recibida'  // <-- Nuevo campo para registrar lo que llegó físicamente
     ];
 
     // Relación con el despacho padre
@@ -23,7 +23,6 @@ class DespachoDetalles extends Model
     }
 
     public function insumos() {
-  
-    return $this->belongsTo(\App\Models\Insumos::class, 'id_insumo');
-}
+        return $this->belongsTo(\App\Models\Insumos::class, 'id_insumo');
+    }
 }

@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('despacho_detalles', function (Blueprint $table) {
@@ -19,18 +16,18 @@ return new class extends Migration
                   ->constrained('despachos')
                   ->onDelete('cascade');
 
-            // Relación con Insumos (sin cascada para proteger integridad)
+            // Relación con Insumos
             $table->foreignId('id_insumo')
                   ->constrained('insumos');
 
-            $table->integer('cantidad');
+            // Control de cantidades separadas para auditoría exacta
+            $table->integer('cantidad_enviada');
+            $table->integer('cantidad_recibida')->default(0);
+
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('despacho_detalles');
