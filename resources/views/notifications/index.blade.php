@@ -60,11 +60,13 @@
                         <i class="fa fa-envelope text-primary" title="Nueva"></i>
                       @endif
                     </td>
-                    <td>
-                      <i class="{{ $n->data['icono'] ?? 'fa fa-info-circle' }} mr-2"></i>
-                      <strong>{{ $n->data['titulo'] }}</strong>
+                    <td class="align-middle">
+                        <i class="{{ $n->data['icono'] ?? 'fa fa-info-circle' }} mr-2"></i>
+                        <strong>{{ $n->data['titulo'] ?? ($n->data['title'] ?? 'Alerta del Sistema') }}</strong>
                     </td>
-                    <td>{{ $n->data['mensaje'] }}</td>
+                    <td class="align-middle">
+                        {{ $n->data['mensaje'] ?? ($n->data['message'] ?? 'Sin descripción disponible') }}
+                    </td>
                     <td>
                       <span class="text-muted small">
                         <i class="fa fa-clock-o"></i> {{ $n->created_at->diffForHumans() }}

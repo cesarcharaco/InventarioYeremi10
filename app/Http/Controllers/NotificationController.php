@@ -17,13 +17,9 @@ class NotificationController extends Controller
         // La marcamos como leída
         $notification->markAsRead();
 
-        // Extraemos la URL que guardamos en el array 'data'
-        $url = $notification->data['url'] ?? route('home');
-
-        // Redirigimos al usuario a la sección correspondiente (ej: Inventario o Créditos)
-        return redirect($url);
+        // Redirigir siempre al index de notificaciones para que el usuario las vea ahí
+        return redirect()->route('notifications.index');
     }
-
     /**
      * Marcar todas las notificaciones del usuario actual como leídas
      */

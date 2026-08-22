@@ -15,9 +15,26 @@
                         <p>Inicio</p>
                     </a>
                 </li>
+                {{-- NOTIFICACIONES DEL SISTEMA --}}
+                @can('ver-notificaciones')
+                <li class="nav-item">
+                    <a href="{{ route('notifications.index') }}" class="nav-link {{ Request::is('notifications*') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-bell text-warning"></i>
+                        <p>
+                            Notificaciones
+                            @php 
+                                $notifCount = auth()->user()->unreadNotifications->count() ?? 0; 
+                            @endphp
+                            @if($notifCount > 0)
+                                <span class="right badge badge-danger">{{ $notifCount }}</span>
+                            @endif
+                        </p>
+                    </a>
+                </li>
+                @endcan
 
-                {{-- MÓDULO INVENTARIO: Visible para todos, pero con lógica interna --}}
-                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
+                {{-- MÓDULO INVENTARIO: Visible para personal interno con permisos de insumos --}}
+                @can('gestionar-insumos')
                 <li class="nav-item has-treeview {{ Request::is('insumos*') || Request::is('precios*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('insumos*') || Request::is('precios*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-box"></i>
@@ -30,22 +47,23 @@
                                 <p>Inventario</p>
                             </a>
                         </li>
-                        {{-- Solo Admin y Encargado ven Precios de Costo/Gestión --}}
-                        @if(auth()->user()->esAdmin() || auth()->user()->hasRole('encargado'))
+                        {{-- Solo perfiles autorizados para ver costos --}}
+                        @can('ver-costos')
                         <li class="nav-item">
                             <a href="{{ route('insumos.precios') }}" class="nav-link {{ Request::is('*precios*') ? 'active' : '' }}">
                                 <i class="far fa-circle nav-icon"></i>
                                 <p>Gestión de Precios</p>
                             </a>
                         </li>
-                        @endif
+                        @endcan
                     </ul>
                 </li>
-                @endif
-                {{-- MÓDULO ABASTECIMIENTO: Solo Admin y Almacenista --}}
-                @can('gestionar-proveedores')
-                <li class="nav-item has-treeview {{ Request::is('proveedores*') ? 'menu-open' : '' }}">
-                    <a href="#" class="nav-link {{ Request::is('proveedores*') ? 'active' : '' }}">
+                @endcan
+
+                {{-- MÓDULO ABASTECIMIENTO: Proveedores y Entradas --}}
+                @if(auth()->user()->can('gestionar-proveedores') || auth()->user()->can('gestionar-entradas'))
+                <li class="nav-item has-treeview {{ Request::is('proveedores*') || Request::is('entradas*') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link {{ Request::is('proveedores*') || Request::is('entradas*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-truck-loading text-info"></i>
                         <p>
                             Abastecimiento
@@ -53,6 +71,7 @@
                         </p>
                     </a>
                     <ul class="nav nav-treeview">
+                        @can('gestionar-proveedores')
                         <li class="nav-item">
                             <a href="{{ route('proveedores.index') }}" class="nav-link {{ Request::is('proveedores') ? 'active' : '' }}">
                                 <i class="fas fa-address-card nav-icon"></i>
@@ -65,6 +84,8 @@
                                 <p>Nuevo Proveedor</p>
                             </a>
                         </li>
+                        @endcan
+                        @can('gestionar-entradas')
                         <li class="nav-item">
                             <a href="{{ route('entradas.index') }}" class="nav-link {{ Request::is('entradas') ? 'active' : '' }}">
                                 <i class="fas fa-file-import nav-icon"></i>
@@ -77,11 +98,13 @@
                                 <p>Nueva Entrada (Carga)</p>
                             </a>
                         </li>
+                        @endcan
                     </ul>
                 </li>
-                @endcan
-                {{-- INCIDENCIAS: Todos registran, pero solo Admin ve el historial completo --}}
-                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
+                @endif
+
+                {{-- INCIDENCIAS: Registro general y auditoría avanzada --}}
+                @can('registrar-incidencia')
                 <li class="nav-item has-treeview {{ Request::is('incidencias*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('incidencias*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-exclamation-triangle text-warning"></i>
@@ -94,7 +117,7 @@
                                 <p>Registrar / Ver</p>
                             </a>
                         </li>
-                        @can('anular-historial') {{-- Gate que creamos antes --}}
+                        @can('anular-historial')
                         <li class="nav-item">
                             <a href="{{ route('incidencias.historial') }}" class="nav-link {{ Request::is('incidencias/historial*') ? 'active' : '' }}">
                                 <i class="fas fa-history nav-icon"></i>
@@ -104,9 +127,10 @@
                         @endcan
                     </ul>
                 </li>
-                @endif
-                {{-- LOGÍSTICA: Principalmente para Almacenistas y Admin --}}
-                @if(!auth()->user()->hasRole('vendedor') && !auth()->user()->hasRole('cliente_mayorista'))
+                @endcan
+
+                {{-- LOGÍSTICA --}}
+                @can('ver-logistica')
                 <li class="nav-item has-treeview {{ Request::is('despacho*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('despacho*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-truck"></i>
@@ -127,8 +151,9 @@
                         </li>
                     </ul>
                 </li>
-                @endif
-                {{-- NUEVO: MÓDULO CLIENTES (Visible para Admin, Encargado y Vendedor) --}}
+                @endcan
+
+                {{-- MÓDULO CLIENTES --}}
                 @can('gestionar-clientes')
                 <li class="nav-item has-treeview {{ Request::is('clientes*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('clientes*') ? 'active' : '' }}">
@@ -148,7 +173,6 @@
                                 <p>Nuevo Cliente</p>
                             </a>
                         </li>
-                        {{-- NUEVO: Enlace a Clientes por Activar --}}
                         <li class="nav-item">
                             <a href="{{ route('clientes.pendientes') }}" class="nav-link {{ Request::is('clientes/pendientes') ? 'active' : '' }}">
                                 <i class="fas fa-user-check nav-icon text-warning"></i>
@@ -163,7 +187,8 @@
                     </ul>
                 </li>
                 @endcan
-                {{-- MÓDULO CRÉDITOS: Visible para Admin, Encargado y Vendedor --}}
+
+                {{-- MÓDULO CRÉDITOS / CUENTAS POR COBRAR --}}
                 @can('ver-creditos')
                 <li class="nav-item has-treeview {{ Request::is('creditos*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('creditos*') ? 'active' : '' }}">
@@ -180,13 +205,13 @@
                                 <p>Deudores y Abonos</p>
                             </a>
                         </li>
-                        {{-- Aquí podrías agregar reportes de cobranza en el futuro --}}
                     </ul>
                 </li>
                 @endcan
+
                 <li class="nav-header">OPERACIONES DE VENTA</li>
 
-                {{-- Caja operativa: Abrir/Cerrar mi propio turno --}}
+                {{-- Caja operativa --}}
                 @can('operar-caja')
                 <li class="nav-item">
                     <a href="{{ route('cajas.create') }}" class="nav-link {{ request()->is('cajas*') ? 'active' : '' }}">
@@ -194,7 +219,6 @@
                         <p>Mi Jornada (Abrir/Cerrar)</p>
                     </a>
                 </li>
-
                 <li class="nav-item">
                     <a href="{{ route('ventas.create') }}" class="nav-link {{ request()->is('ventas/create') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-shopping-cart text-success"></i>
@@ -203,7 +227,7 @@
                 </li>
                 @endcan
 
-                {{-- Historial Operativo: ¿Qué se vendió? --}}
+                {{-- Historial de Ventas --}}
                 @can('ver-historial-ventas')
                 <li class="nav-item">
                     <a href="{{ route('ventas.index') }}" class="nav-link {{ request()->is('ventas') ? 'active' : '' }}">
@@ -213,7 +237,7 @@
                 </li>
                 @endcan
 
-                {{-- SECCIÓN DE AUDITORÍA: ¿Cuanto dinero entró realmente? --}}
+                {{-- AUDITORÍA DE CAJAS --}}
                 @can('auditar-cajas')
                 <li class="nav-header">CONTABILIDAD Y CIERRES</li>
                 <li class="nav-item">
@@ -223,8 +247,9 @@
                     </a>
                 </li>
                 @endcan
-                {{-- REPORTES Y GRÁFICAS: Exclusivo SuperAdmin --}}
-                @if(auth()->user()->esAdmin())
+
+                {{-- REPORTES GERENCIALES --}}
+                @can('ver-reportes')
                 <li class="nav-header">REPORTES GERENCIALES</li>
                 <li class="nav-item">
                     <a href="{{ route('reportes.index') }}" class="nav-link {{ Request::is('graficas*') || Request::is('reportes*') ? 'active' : '' }}">
@@ -232,62 +257,61 @@
                         <p>Gráficas de Ganancias</p>
                     </a>
                 </li>
-                @endif
-                {{-- MAYORISTA: Acceso a gestión de productos al mayor --}}
+                @endcan
+
+                {{-- MÓDULO MAYORISTA --}}
                 @if(auth()->user()->hasRole('cliente_mayorista'))
-                        {{-- Menú para el cliente mayorista (solo acceso a su área) --}}
-                        <li class="nav-item">
-                            <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-tags"></i>
-                                <p>Productos al Mayor</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('pedidos.mis_pedidos') }}" class="nav-link {{ Request::is('mayorista/mis-pedidos*') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-shopping-bag"></i>
-                                <p>Mis Pedidos</p>
-                            </a>
-                        </li>
-                        {{-- Aquí iría tu ruta de pedidos, mantén la tuya original --}}
-                    @else
-                        {{-- Menú de gestión para el personal interno (Admin, Encargado, Vendedor) --}}
-                        <li class="nav-item has-treeview {{ Request::is('insumos-mayores*') ? 'menu-open' : '' }}">
-                            <a href="#" class="nav-link {{ Request::is('insumos-mayores*') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-tags"></i>
-                                <p>Mayorista <i class="right fas fa-angle-left"></i></p>
-                            </a>
-                            <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
-                                        <i class="fas fa-list-ul nav-icon text-info"></i>
-                                        <p>Productos al Mayor</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('insumos-mayores.gestion') }}" class="nav-link {{ Request::is('ofertas/gestion') ? 'active' : '' }}">
-                                        <i class="fas fa-cogs nav-icon text-warning"></i>
-                                        <p>Gestionar Ofertas</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('insumos-mayores.formulario') }}" class="nav-link {{ Request::is('mayorista/cargar-oferta') ? 'active' : '' }}">
-                                        <i class="fas fa-file-upload nav-icon text-success"></i>
-                                        <p>Cargar Ofertas</p>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    @endif
-                {{-- CONFIGURACIONES: Solo Admin y Encargado --}}
-                @if(auth()->user()->esAdmin() || auth()->user()->hasRole('encargado'))
+                    <li class="nav-item">
+                        <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-tags"></i>
+                            <p>Productos al Mayor</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('pedidos.mis_pedidos') }}" class="nav-link {{ Request::is('mayorista/mis-pedidos*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-shopping-bag"></i>
+                            <p>Mis Pedidos</p>
+                        </a>
+                    </li>
+                @else
+                    <li class="nav-item has-treeview {{ Request::is('insumos-mayores*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ Request::is('insumos-mayores*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-tags"></i>
+                            <p>Mayorista <i class="right fas fa-angle-left"></i></p>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item">
+                                <a href="{{ route('insumos-mayores.listas') }}" class="nav-link {{ Request::is('insumos-mayores') ? 'active' : '' }}">
+                                    <i class="fas fa-list-ul nav-icon text-info"></i>
+                                    <p>Productos al Mayor</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('insumos-mayores.gestion') }}" class="nav-link {{ Request::is('ofertas/gestion') ? 'active' : '' }}">
+                                    <i class="fas fa-cogs nav-icon text-warning"></i>
+                                    <p>Gestionar Ofertas</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('insumos-mayores.formulario') }}" class="nav-link {{ Request::is('mayorista/cargar-oferta') ? 'active' : '' }}">
+                                    <i class="fas fa-file-upload nav-icon text-success"></i>
+                                    <p>Cargar Ofertas</p>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                @endif
+
+                {{-- CONFIGURACIONES DEL SISTEMA --}}
+                @if(auth()->user()->can('crear-configuracion') || auth()->user()->can('gestionar-usuarios') || auth()->user()->can('movimientos_caja'))
                 <li class="nav-header">SISTEMA</li>
-                <li class="nav-item has-treeview {{ Request::is('categorias*') || Request::is('modelos-venta*') || Request::is('local*') ? 'menu-open' : '' }}">
+                <li class="nav-item has-treeview {{ Request::is('categorias*') || Request::is('modelos-venta*') || Request::is('local*') || Request::is('usuarios*') ? 'menu-open' : '' }}">
                     <a href="#" class="nav-link {{ Request::is('categorias*') || Request::is('modelos-venta*') || Request::is('local*') ? 'active' : '' }}">
                         <i class="nav-icon fas fa-cog"></i>
                         <p>Configuraciones <i class="right fas fa-angle-left"></i></p>
                     </a>
                     <ul class="nav nav-treeview">
-                        @if(auth()->user()->esAdmin())
+                        @can('gestionar-locales')
                         <li class="nav-item">
                             <a href="{{ route('local.index') }}" class="nav-link {{ Request::is('local*') ? 'active' : '' }}">
                                 <i class="fas fa-store nav-icon"></i>
@@ -300,13 +324,17 @@
                                 <p>Correlativos SENIAT</p>
                             </a>
                         </li>
-                        @endif
+                        @endcan
+
+                        @can('crear-configuracion')
                         <li class="nav-item">
                             <a href="{{ route('categorias.index') }}" class="nav-link {{ Request::is('categorias*') ? 'active' : '' }}">
                                 <i class="far fa-circle nav-icon"></i>
                                 <p>Categorías</p>
                             </a>
                         </li>
+                        @endcan
+
                         @can('gestionar-usuarios')
                         <li class="nav-item">
                             <a href="{{ route('usuarios.index') }}" class="nav-link {{ Request::is('usuarios*') ? 'active' : '' }}">
@@ -314,7 +342,9 @@
                                 <p>Usuarios</p>
                             </a>
                         </li>
-                        {{-- Modelos de Venta (RESTAURADO) --}}
+                        @endcan
+
+                        @can('gestionar-modelos-venta')
                         <li class="nav-item">
                             <a href="{{ route('modelos-venta.index') }}" class="nav-link {{ Request::is('modelos-venta*') ? 'active' : '' }}">
                                 <i class="fas fa-tags nav-icon"></i>
@@ -322,6 +352,7 @@
                             </a>
                         </li>
                         @endcan
+
                         @can('gestionar-ofertas')
                         <li class="nav-item">
                             <a href="{{ route('config-ofertas.index') }}" class="nav-link {{ Request::is('config-ofertas*') ? 'active' : '' }}">
@@ -334,7 +365,7 @@
                         @can('movimientos_caja')
                         <li class="nav-item">
                             <a href="{{ route('movimientos.index') }}" class="nav-link {{ Request::is('movimientos-caja*') ? 'active' : '' }}">
-                                <i class="fas fa-exchange-alt nav-icon"></i> {{-- Icono de intercambio/flujo --}}
+                                <i class="fas fa-exchange-alt nav-icon"></i>
                                 <p>Movimientos de Caja</p>
                             </a>
                         </li>
@@ -345,7 +376,6 @@
                 @endauth
 
                 @guest
-                    {{-- Lo que ve el cliente que se está registrando solo --}}
                     <li class="nav-header">REGISTRO DE CLIENTE</li>
                     <li class="nav-item">
                         <a href="#" class="nav-link active">

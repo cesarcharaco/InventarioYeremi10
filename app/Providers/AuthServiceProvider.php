@@ -270,5 +270,15 @@ class AuthServiceProvider extends ServiceProvider
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
     });
 
+    // Módulo de Notificaciones: Visible para todo el personal interno
+    Gate::define('ver-notificaciones', function (User $user) {
+        return in_array($user->role, [
+            User::ROLE_SUPERADMIN, 
+            User::ROLE_ENCARGADO, 
+            User::ROLE_ALMACENISTA, 
+            User::ROLE_VENDEDOR
+        ]);
+    });
+
     }
 }
