@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class VentaController extends Controller
 {
@@ -505,5 +506,72 @@ class VentaController extends Controller
         ]);
     }
 
-    
+    public function generarPresupuesto(Request $request)
+    {
+        try {
+            // 1. Obtener la información del cliente
+            $cliente = Cliente::find($request->id_cliente);
+            
+            if (!$cliente) {
+                // Cliente genérico por si no se selecciona uno específico en el POS
+                $cliente = new Cliente([
+                    'nombre'       => 'Cliente Ocasional / General',
+                    'identificacion' => 'N/A',
+                    'telefono'     => 'N/A',
+                    'direccion'    => 'No especificada'
+                ]);
+            }
+
+            // 2. Procesar los artículos enviados desde el carrito del POS
+            $articulosEnviados = $request->input('articulos', []);
+            $detallesPresupuesto = [];
+            $subtotalGeneral = 0;
+
+            foreach ($articulosEnviados as $item) {
+                $cantidad        = $item['cantidad'] ?? 1;
+                $precioUnitario  = $item['precio_unitario'] ?? 0;
+                $subtotal        = $cantidad * $precioUnitario;
+                $subtotalGeneral += $subtotal;
+
+                // Buscar el insumo en base de datos para asegurar datos actualizados
+                $insumo = Insumos::find($item['id_insumo'] ?? null);
+
+                $detallesPresupuesto[] = [
+                    'nombre'          => $insumo->producto ?? $item['nombre'] ?? 'Producto N/A',
+                    'serial'          => $insumo->serial ?? null,
+                    'cantidad'        => $cantidad,
+                    'precio_unitario' => $precioUnitario,
+                    'subtotal'        => $subtotal
+                ];
+            }
+
+            // 3. Cálculos de descuentos y totales
+            $porcentajeDescuento = $request->input('porcentaje_descuento', 0);
+            $montoDescuento      = ($subtotalGeneral * $porcentajeDescuento) / 100;
+            $totalNeto           = $subtotalGeneral - $montoDescuento;
+
+            // 4. Empaquetar variables para la vista Blade
+            $data = [
+                'cliente'             => $cliente,
+                'articulos'           => $detallesPresupuesto,
+                'subtotal_general'    => $subtotalGeneral,
+                'porcentaje_descuento'=> $porcentajeDescuento,
+                'monto_descuento'     => $montoDescuento,
+                'total_neto'          => $totalNeto,
+                'observacion'         => $request->input('observacion'),
+                'fecha_emision'       => Carbon::now(),
+                'validez'             => Carbon::now()->addDays(5),
+                'generado_por'        => Auth::user()->name ?? 'Sistema'
+            ];
+
+            // 5. Renderizar y retornar como PDF optimizado
+            $pdf = Pdf::loadView('ventas.presupuesto_pdf', $data);
+            $pdf->setPaper('letter', 'portrait');
+
+            return $pdf->stream("Presupuesto_{$cliente->identificacion}.pdf");
+
+        } catch (\Exception $e) {
+            return back()->with('error', 'Ocurrió un error al generar el presupuesto: ' . $e->getMessage());
+        }
+    } 
 }

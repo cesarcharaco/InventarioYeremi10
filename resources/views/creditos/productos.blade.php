@@ -44,12 +44,63 @@
     .tabular-nums {
         font-variant-numeric: tabular-nums;
     }
+
+    /* ==========================================
+       ESTILOS DE ENCABEZADO FORMAL
+       ========================================== */
+    .header-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+    }
+    .company-title { 
+        color: #8b0000; 
+        font-size: 16px; 
+        font-weight: bold; 
+        text-transform: uppercase; 
+        margin: 0; 
+        line-height: 1.1; 
+    }
+    .company-subtitle { 
+        font-size: 10px; 
+        font-weight: bold; 
+        color: #222; 
+        margin-bottom: 4px; 
+    }
+    .company-info-text { 
+        font-size: 9px; 
+        color: #444; 
+        line-height: 1.3; 
+    }
+
+    .box-header-right { 
+        border: 1.5px solid #8b0000; 
+        border-radius: 6px; 
+        padding: 8px 12px; 
+        text-align: center; 
+        background: #fff; 
+    }
+    .box-header-right h4 { 
+        color: #8b0000; 
+        font-weight: bold; 
+        font-size: 11px; 
+        margin: 0 0 5px 0; 
+        border-bottom: 1px solid #8b0000; 
+        padding-bottom: 3px; 
+        text-transform: uppercase;
+    }
+    .box-header-right p { 
+        margin: 3px 0; 
+        font-size: 9px; 
+        text-align: left; 
+        font-weight: bold; 
+    }
 </style>
 @endpush
 
 @section('content')
 <main class="app-content">
-  <div class="app-title">
+  <div class="app-title d-print-none">
     <div>
       <h1><i class="fa fa-file-text-o"></i> Resumen de Cuenta Pendiente</h1>
       <p class="text-muted mb-0">
@@ -77,6 +128,32 @@
     </div>
 
     <div class="tile-body">
+      
+      <!-- ENCABEZADO FORMAL CORPORATIVO -->
+      <table class="header-table">
+          <tr>
+              <td style="width: 58%; vertical-align: top;">
+                  <h1 class="company-title">YERMOTORS REPUESTOS C.A.</h1>
+                  <div class="company-subtitle">Venta de Repuestos y Accesorios</div>
+                  <div class="company-info-text">
+                      <strong>RIF:</strong> J-50186803-4<br>
+                      <strong>Dirección:</strong> Calle Páez entre Bolívar y Guzmán Blanco, Casa S/N, Sector Centro, San José de Guaribe, Estado Guárico.<br>
+                      <strong>Teléfono:</strong> 0414-0863107
+                  </div>
+              </td>
+              
+              <td style="width: 42%; vertical-align: top;">
+                  <div class="box-header-right">
+                      <h4>ESTADO DE CUENTA</h4>
+                      <p><strong>FECHA:</strong> {{ \Carbon\Carbon::now()->format('d / m / Y') }}</p>
+                      <p><strong>HORA:</strong> {{ \Carbon\Carbon::now()->format('h:i A') }}</p>
+                      <p><strong>GENERADO POR:</strong> {{ auth()->user()->name ?? 'Sistema' }}</p>
+                  </div>
+              </td>
+          </tr>
+      </table>
+      <hr style="border-top: 1px solid #ddd; margin: 15px 0;">
+
       <div class="table-responsive">
         <table class="table table-bordered table-sm align-middle" style="border: 2px solid #333;">
           <thead class="bg-dark text-white text-center">
