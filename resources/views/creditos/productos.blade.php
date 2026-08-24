@@ -215,12 +215,12 @@
                 <td class="align-middle small">
                   @if($esAnticipo)
                     <span class="badge badge-info">ANTICIPO / SALDO DISPONIBLE</span>
-                  @elseif($esCreditoDirecto)
-                    <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">CRÉDITO DIRECTO</span>
                   @elseif(!empty($credito->observacion))
                     <strong>NOTA:</strong> {{ $credito->observacion }}
-                  @elseif(!empty($venta->observacion))
+                  @elseif(!empty($venta) && !empty($venta->observacion))
                     <strong>NOTA:</strong> {{ $venta->observacion }}
+                  @elseif($esCreditoDirecto)
+                    <span class="text-muted">Crédito directo</span>
                   @else
                     <i class="text-muted">Venta a crédito</i>
                   @endif
