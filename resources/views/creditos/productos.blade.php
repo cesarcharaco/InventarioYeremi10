@@ -217,6 +217,8 @@
                     <span class="badge badge-info">ANTICIPO / SALDO DISPONIBLE</span>
                   @elseif($esCreditoDirecto)
                     <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">CRÉDITO DIRECTO</span>
+                  @elseif(!empty($credito->observacion))
+                    <strong>NOTA:</strong> {{ $credito->observacion }}
                   @elseif(!empty($venta->observacion))
                     <strong>NOTA:</strong> {{ $venta->observacion }}
                   @else
