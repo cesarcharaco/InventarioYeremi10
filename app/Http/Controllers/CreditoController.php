@@ -1071,4 +1071,74 @@ class CreditoController extends Controller
             return redirect()->back()->with('error', 'Ocurrió un error al intentar eliminar el registro: ' . $e->getMessage());
         }
     }
+
+    public function historialPorFecha(Request $request, $id)
+    {
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin'    => 'required|date|after_or_equal:fecha_inicio',
+        ]);
+
+        $fechaInicio = $request->fecha_inicio . ' 00:00:00';
+        $fechaFin = $request->fecha_fin . ' 23:59:59';
+
+        $cliente = Cliente::findOrFail($id);
+
+        // 1. Créditos registrados en el rango de fechas (activos, pagados, anticipos)
+        $creditos = Credito::where('id_cliente', $id)
+            ->whereBetween('created_at', [$fechaInicio, $fechaFin])
+            ->with([
+                'venta.detalles.insumo',
+                'abonos.usuario',
+                'intereses.administrador'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 2. Abonos realizados dentro del rango de fechas (para trazabilidad financiera exacta)
+        $abonosPeriodo = AbonoCredito::whereHas('credito', function($q) use ($id) {
+                $q->where('id_cliente', $id);
+            })
+            ->whereBetween('created_at', [$fechaInicio, $fechaFin])
+            ->with(['usuario', 'credito'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 3. Intereses aplicados en el rango
+        $interesesPeriodo = CreditoInteres::whereHas('credito', function($q) use ($id) {
+                $q->where('id_cliente', $id);
+            })
+            ->whereBetween('aplicado_en', [$fechaInicio, $fechaFin])
+            ->with(['administrador', 'credito'])
+            ->orderBy('aplicado_en', 'desc')
+            ->get();
+
+        // 4. Métricas y totales del periodo
+        $montoTotalCreditos = $creditos->sum('monto_inicial');
+        $totalAbonadoPeriodo = $abonosPeriodo->where('estado', 'Realizado')->sum('monto_pagado_usd');
+        $totalInteresesPeriodo = $interesesPeriodo->where('estado', 'aplicado')->sum('monto_interes');
+
+        $empresa = Local::first();
+
+        // 5. Generar el PDF y enviarlo al navegador en línea (stream) para la pestaña nueva
+        $pdf = Pdf::loadView('creditos.historial_fechas', compact(
+            'cliente', 
+            'creditos', 
+            'abonosPeriodo', 
+            'interesesPeriodo',
+            'fechaInicio', 
+            'fechaFin', 
+            'montoTotalCreditos', 
+            'totalAbonadoPeriodo',
+            'totalInteresesPeriodo',
+            'empresa'
+        ));
+
+        // Opcional: configurar orientación vertical u horizontal si lo requieres
+        $pdf->setPaper('a4', 'portrait');
+
+        // stream() abre el visor nativo de PDF en la nueva pestaña del navegador
+        // return $pdf->stream('estado_cuenta_' . Str::slug($cliente->nombre) . '.pdf');
+        return $pdf->stream('estado_cuenta.pdf');
+    }
 }

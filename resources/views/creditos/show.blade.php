@@ -81,34 +81,44 @@
         </div>
     </div>
 
-    {{-- Barra de Acciones Rápidas --}}
+    {{-- Barra de Acciones Rápidas (Estilo AdminLTE Optimizado) --}}
     <div class="row mb-4">
         <div class="col-12">
             <div class="tile p-3 shadow-sm">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-success font-weight-bold" onclick="abrirModalAbono({{ $cliente->toJson() }})">
-                            <i class="fa fa-plus"></i> Registrar Abono
+                <div class="d-flex flex-wrap align-items-center justify-content-between">
+                    
+                    {{-- Grupo de Acciones Operativas Principales (Izquierda) --}}
+                    <div class="d-flex flex-wrap align-items-center mb-2 mb-md-0" style="gap: 8px;">
+                        <button class="btn btn-success font-weight-bold shadow-sm" onclick="abrirModalAbono({{ $cliente->toJson() }})">
+                            <i class="fa fa-plus-circle mr-1"></i> Registrar Abono
+                        </button>
+
+                        <button type="button" class="btn btn-primary font-weight-bold shadow-sm" onclick="abrirModalCreditoDirecto({{ $cliente->id }})">
+                            <i class="fa fa-cart-plus mr-1"></i> Crédito Directo
                         </button>
 
                         @if(auth()->user()->esAdmin())
-                            <button class="btn btn-warning font-weight-bold text-white" onclick="abrirModalInteres({{ $cliente->toJson() }})" title="Indexar a todos los créditos pendientes">
-                                <i class="fa fa-line-chart"></i> Indexar
+                            <button class="btn btn-warning font-weight-bold text-white shadow-sm" onclick="abrirModalInteres({{ $cliente->toJson() }})" title="Indexar a todos los créditos pendientes">
+                                <i class="fa fa-line-chart mr-1"></i> Indexar
                             </button>
                         @endif
-
-                        <a href="{{ route('creditos.productos', $cliente->id) }}" class="btn btn-info font-weight-bold">
-                            <i class="fa fa-list-ul"></i> Historial de Productos
-                        </a>
-
-                        <button type="button" class="btn btn-primary font-weight-bold" onclick="abrirModalCreditoDirecto({{ $cliente->id }})">
-                            <i class="fa fa-plus"></i> Agregar Crédito Directo
-                        </button>
                     </div>
 
-                    <a href="{{ route('creditos.pdf_estado_cuenta', $cliente->id) }}" class="btn btn-outline-dark font-weight-bold" target="_blank" title="Descargar Estado de Cuenta PDF">
-                        <i class="fas fa-file-pdf"></i> Imprimir Estado de Cuenta
-                    </a>
+                    {{-- Grupo de Reportes, Historiales y Búsqueda Avanzada (Derecha) --}}
+                    <div class="d-flex flex-wrap align-items-center" style="gap: 8px;">
+                        <a href="{{ route('creditos.productos', $cliente->id) }}" class="btn btn-outline-info font-weight-bold shadow-sm">
+                            <i class="fa fa-list-ul mr-1"></i> Productos
+                        </a>
+
+                        <button type="button" class="btn btn-outline-secondary font-weight-bold shadow-sm" data-toggle="modal" data-target="#modalHistorialFechas" title="Buscar registros anteriores y pagados">
+                            <i class="fa fa-calendar-alt mr-1"></i> Historial por Fecha
+                        </button>
+
+                        <a href="{{ route('creditos.pdf_estado_cuenta', $cliente->id) }}" class="btn btn-outline-dark font-weight-bold shadow-sm" target="_blank" title="Imprimir Estado de Cuenta PDF">
+                            <i class="fa fa-file-pdf mr-1"></i> Imprimir
+                        </a>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -414,6 +424,7 @@
 @include('creditos.modals.modal_interes')
 @include('creditos.modals.modal_credito_directo')
 @include('creditos.modals.modal_eliminar_credito')
+@include('creditos.modals.modal_historial_crediticio')
 @endsection
 
 @section('scripts')
@@ -761,6 +772,23 @@
 
         // Ejecutar al cargar
         validarCuadreMontos();
+    });
+    
+    // Validación del formulario de Historial Crediticio por Fecha
+    $('#formHistorialFechas').on('submit', function(e) {
+        let fechaInicio = new Date($('#fecha_inicio').val());
+        let fechaFin = new Date($('#fecha_fin').val());
+
+        if (fechaInicio > fechaFin) {
+            e.preventDefault();
+            Swal.fire({
+                icon: 'error',
+                title: 'Rango de fechas inválido',
+                text: 'La fecha de inicio no puede ser posterior a la fecha de fin.',
+                confirmButtonColor: '#343a40'
+            });
+            return false;
+        }
     });
 </script>
 @endsection

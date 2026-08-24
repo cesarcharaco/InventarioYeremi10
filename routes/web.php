@@ -177,9 +177,9 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('creditos')->group(function () {
         Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
         
-        // ⚠️ Importante: Colocamos directo-general AQUÍ para que no colisione con /{id}
-        Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
         
+        Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
+        Route::get('/{id}/historial-fechas', [CreditoController::class, 'historialPorFecha'])->name('creditos.historial_crediticio');
         Route::get('/{id}', [CreditoController::class, 'show'])->name('creditos.show');
         Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
         Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
