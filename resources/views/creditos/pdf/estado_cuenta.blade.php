@@ -310,10 +310,12 @@
             <td style="font-size: 8.5px;">
               @if($esAnticipo)
                 ANTICIPO / SALDO DISPONIBLE
-              @elseif($esCreditoDirecto)
-                CRÉDITO DIRECTO
-              @elseif(!empty($venta->observacion))
+              @elseif(!empty($credito->observacion))
+                <strong>NOTA:</strong> {{ $credito->observacion }}
+              @elseif(!empty($venta) && !empty($venta->observacion))
                 <strong>NOTA:</strong> {{ $venta->observacion }}
+              @elseif($esCreditoDirecto)
+                CRÉDITO DIRECTO / PRÉSTAMO
               @else
                 <em>Venta a crédito</em>
               @endif
