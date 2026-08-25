@@ -81,7 +81,9 @@
                             <tr>
                                 <td>
                                     <div class="font-weight-bold">{{ $cliente->nombre }}</div>
-                                    <small class="text-muted d-md-none">{{ $cliente->identificacion }}</small> 
+                                    @if(!empty($cliente->alias))
+                                        <small class="text-muted d-block">({{ $cliente->alias }})</small>
+                                    @endif
                                 </td>
                                 <td class="d-none d-md-table-cell text-muted">
                                     {{ $cliente->identificacion }}

@@ -41,31 +41,30 @@ class CreditoController extends Controller
 
        // Callback reutilizable para filtrar por estado y local
        $filtroCreditosActivos = function($qCredito) use ($user, $misLocales) {
-           // Incluimos tanto pendientes (deudas) como anticipos (saldos a favor)
            $qCredito->whereIn('estado', ['pendiente', 'anticipo']);
 
            if (!$user->esAdmin()) {
                $qCredito->where(function($q) use ($misLocales) {
-                   // Si proviene de una Venta, validamos el local
                    $q->whereHas('venta', function($qVenta) use ($misLocales) {
                        $qVenta->whereIn('id_local', $misLocales);
                    })
-                   // O si no tiene venta (ej: anticipo directo registrado por caja), 
-                   // permitimos su inclusión o filtramos por relación si aplica
                    ->orWhereNull('id_venta');
                });
            }
        };
 
-       // 2. Consulta principal: Clientes QUE TIENEN créditos pendientes O saldos a favor
+       // 2. Consulta principal: Cargar créditos e incluir saldo total pendiente
        $query = Cliente::whereHas('creditos', $filtroCreditosActivos)
+           ->with(['creditos' => $filtroCreditosActivos]) // Carga Eager Loading de créditos
            ->withSum(['creditos as saldo_total_pendiente' => $filtroCreditosActivos], 'saldo_pendiente');
 
-       // 3. Filtro de búsqueda por nombre o identificación
+       // 3. Filtro de búsqueda por nombre, identificación O ALIAS
        if ($request->filled('buscar')) {
-           $query->where(function($q) use ($request) {
-               $q->where('nombre', 'like', "%{$request->buscar}%")
-                 ->orWhere('identificacion', 'like', "%{$request->buscar}%");
+           $buscar = $request->buscar;
+           $query->where(function($q) use ($buscar) {
+               $q->where('nombre', 'like', "%{$buscar}%")
+                 ->orWhere('identificacion', 'like', "%{$buscar}%")
+                 ->orWhere('alias', 'like', "%{$buscar}%"); // <-- Se agrega la búsqueda por alias
            });
        }
 
