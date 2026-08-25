@@ -632,17 +632,24 @@
         let creditosPendientes = cliente.creditos ? cliente.creditos.filter(c => c.estado === 'pendiente') : [];
         let saldoTotal = creditosPendientes.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
 
+        // Validar que el cliente tenga al menos un crédito pendiente
+        if (creditosPendientes.length === 0) {
+            Swal.fire('Atención', 'El cliente no posee créditos pendientes para indexar.', 'warning');
+            return;
+        }
+
+        // Se usa el ID del CRÉDITO en lugar del ID del cliente
+        let creditoId = creditosPendientes[0].id; 
+
         $.ajax({
-            url: `/creditos/${cliente.id}/modal-interes`, 
+            url: `/creditos/${creditoId}/modal-interes`, 
             type: 'GET',
             success: function(html) {
                 $('#contenedor-modal-interes').remove();
                 $('body').append('<div id="contenedor-modal-interes">' + html + '</div>');
                 
-                if (creditosPendientes.length > 0) {
-                    let url = "{{ route('creditos.aplicarInteres', ':id') }}";
-                    $('#formAplicarInteres').attr('action', url.replace(':id', creditosPendientes[0].id));
-                }
+                // Asignar la ruta de acción directamente en JavaScript
+                $('#formAplicarInteres').attr('action', `/creditos/${creditoId}/aplicar-interes`);
                 
                 $('#saldo_base_global').text('$' + saldoTotal.toFixed(2));
                 $('#saldo_base_global').data('valor', saldoTotal);
