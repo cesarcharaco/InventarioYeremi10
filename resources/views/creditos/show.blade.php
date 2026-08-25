@@ -656,6 +656,166 @@
         });
     }
 
+        // =========================================================================
+        // CÁLCULO DINÁMICO PARA EL MODAL DE INDEXAR INTERÉS
+        // =========================================================================
+        $(document).on('input', '#input_porcentaje', function() {
+            // 1. Obtener el saldo base desde el data-valor (asignado al abrir el modal)
+            let saldoBase = parseFloat($('#saldo_base_global').data('valor')) || 0;
+            
+            // 2. Obtener el porcentaje actual escrito por el usuario
+            let porcentaje = parseFloat($(this).val()) || 0;
+
+            // 3. Referencias a los elementos del DOM
+            let btnConfirmar = $('#btn_confirmar_index');
+            let previewInteres = $('#preview_interes');
+            let previewTotal = $('#preview_total');
+
+            // 4. Validar y calcular
+            if (porcentaje > 0 && saldoBase > 0) {
+                let montoInteres = saldoBase * (porcentaje / 100);
+                let nuevoTotal = saldoBase + montoInteres;
+
+                // Actualizar la interfaz (redondeando a 2 decimales)
+                previewInteres.text('$' + montoInteres.toFixed(2));
+                previewTotal.text('$' + nuevoTotal.toFixed(2));
+
+                // Habilitar el botón de submit
+                btnConfirmar.prop('disabled', false);
+            } else {
+                // Resetear la vista si el usuario borra el input o coloca 0
+                previewInteres.text('$0.00');
+                previewTotal.text('$' + saldoBase.toFixed(2)); 
+                
+                // Volver a bloquear el botón
+                btnConfirmar.prop('disabled', true);
+            }
+        });
+
+    // =========================================================================
+    // ENVÍO DEL FORMULARIO VÍA AJAX PARA EVITAR REDIRECCIÓN
+    // =========================================================================
+    $(document).on('submit', '#formAplicarInteres', function(e) {
+        // 1. Evita que el navegador cambie de página (fundamental)
+        e.preventDefault(); 
+
+        let form = $(this);
+        let url = form.attr('action');
+        let formData = form.serialize();
+        let btnConfirmar = $('#btn_confirmar_index');
+
+        // 2. Cambiar estado del botón mientras procesa
+        btnConfirmar.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
+
+        // 3. Petición AJAX
+        $.ajax({
+            type: 'POST',
+            url: url,
+            data: formData,
+            success: function(response) {
+                if (response.success) {
+                    // Cerrar el modal de indexación actual (opcional, si usas Bootstrap)
+                    // $('#modalIndexacion').modal('hide'); 
+
+                    // 4. Mostrar el Modal de Confirmación 
+                    // Si usas SweetAlert2 (muy recomendado y común en estos paneles)
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Indexación Aplicada!',
+                            text: response.mensaje, // El mensaje que viene de tu controlador
+                            confirmButtonText: 'Aceptar',
+                            allowOutsideClick: false
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // 5. Recargar la vista show para actualizar la deuda
+                                location.reload(); 
+                            }
+                        });
+                    } else {
+                        // Alternativa si no tienes SweetAlert2 instalado
+                        alert('¡Éxito! ' + response.mensaje);
+                        location.reload();
+                    }
+                }
+            },
+            error: function(xhr) {
+                // Restaurar el botón si hay un error
+                btnConfirmar.prop('disabled', false).text('Aplicar');
+                
+                // Mostrar error
+                let errorMsg = 'Ocurrió un error al aplicar la indexación.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMsg = xhr.responseJSON.message;
+                }
+                
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('Error', errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+            }
+        });
+    });
+
+    // =========================================================================
+    // CONFIRMACIÓN Y ANULACIÓN DE INDEXACIÓN
+    // =========================================================================
+    function confirmarAnulacionInteres(url, monto) {
+        if (typeof Swal === 'undefined') {
+            alert('SweetAlert2 no está cargado.');
+            return;
+        }
+
+        Swal.fire({
+            title: '¿Anular Indexación?',
+            html: `Estás a punto de anular una indexación por <b>$${monto}</b>.<br><br>Ingresa una observación o motivo (opcional):`,
+            icon: 'warning',
+            input: 'text',
+            inputPlaceholder: 'Ej: Ajuste acordado con el cliente, error de cálculo...',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '<i class="fa fa-ban"></i> Sí, anular',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // 1. Mostrar estado de carga mientras el controlador procesa
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Anulando la indexación y recalculando saldos.',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                // 2. Crear un formulario dinámico para enviarlo por POST
+                let form = $('<form>', {
+                    'method': 'POST',
+                    'action': url
+                });
+
+                // 3. Agregar el token CSRF de Laravel
+                form.append($('<input>', {
+                    'type': 'hidden',
+                    'name': '_token',
+                    'value': '{{ csrf_token() }}'
+                }));
+
+                // 4. Agregar la observación capturada en el modal
+                form.append($('<input>', {
+                    'type': 'hidden',
+                    'name': 'observacion',
+                    'value': result.value || '' // Envía el texto o vacío si no escribió nada
+                }));
+
+                // 5. Adjuntar al DOM y enviar
+                $('body').append(form);
+                form.submit();
+            }
+        });
+    }
     function abrirModalCreditoDirecto(clienteId) {
         $('#formCreditoDirecto')[0].reset();
         $('#pin_autorizacion_directo').val('');
@@ -773,7 +933,7 @@
         // Ejecutar al cargar
         validarCuadreMontos();
     });
-    
+
     // Validación del formulario de Historial Crediticio por Fecha
     $('#formHistorialFechas').on('submit', function(e) {
         let fechaInicio = new Date($('#fecha_inicio').val());
