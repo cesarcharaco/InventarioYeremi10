@@ -173,31 +173,35 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/ventas/proximo-correlativo-nota', [VentaController::class, 'getProximoCorrelativo'])->name('ventas.correlativo');
     });
 
-    // --- MÓDULO DE CRÉDITOS ---
-    Route::prefix('creditos')->group(function () {
-        Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
-        
-        
-        Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
-        Route::get('/{id}/historial-fechas', [CreditoController::class, 'historialPorFecha'])->name('creditos.historial_crediticio');
-        Route::get('/{id}', [CreditoController::class, 'show'])->name('creditos.show');
-        Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
-        Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
-        Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
-        Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
-        Route::get('/{id}/modal-interes', [CreditoController::class, 'modalInteres'])->name('creditos.modalInteres');
-        Route::post('/{id}/aplicar-interes', [CreditoController::class, 'aplicarInteres'])->name('creditos.aplicarInteres');
-        Route::post('/interes/{id}/anular', [CreditoController::class, 'anularInteres'])->name('creditos.interes.anular');
-        Route::post('/cliente/{id_cliente}/procesar-reembolso', [CreditoController::class, 'procesarReembolso'])->name('creditos.procesarReembolso');
-        Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
-        Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])->name('creditos.pdf_estado_cuenta');
-        Route::post('/cliente/{id}/directo', [CreditoController::class, 'storeDirecto'])->name('creditos.directo.store');
-        Route::delete('/{id}', [CreditoController::class, 'destroy'])->name('creditos.destroy');
-    });
+  // --- MÓDULO DE CRÉDITOS ---
+  Route::prefix('creditos')->group(function () {
+      Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
+      Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
+      
+      // 1. Rutas GET específicas (Deben ir ANTES de /{id})
+      Route::get('/{id}/modal-interes', [CreditoController::class, 'modalInteres'])->name('creditos.modalInteres');
+      Route::get('/{id}/historial-fechas', [CreditoController::class, 'historialPorFecha'])->name('creditos.historial_crediticio');
+      Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
+      Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
+      Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])->name('creditos.pdf_estado_cuenta');
 
-    // Se excluyen index y show del resource para que no colisionen con el prefijo
-    Route::resource('creditos', CreditoController::class)->except(['index', 'show']);
+      // 2. Rutas POST
+      Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
+      Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
+      Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
+      Route::post('/{id}/aplicar-interes', [CreditoController::class, 'aplicarInteres'])->name('creditos.aplicarInteres');
+      Route::post('/interes/{id}/anular', [CreditoController::class, 'anularInteres'])->name('creditos.interes.anular');
+      Route::post('/cliente/{id_cliente}/procesar-reembolso', [CreditoController::class, 'procesarReembolso'])->name('creditos.procesarReembolso');
+      Route::post('/cliente/{id}/directo', [CreditoController::class, 'storeDirecto'])->name('creditos.directo.store');
 
+      // 3. Rutas comodín genéricas (Al final)
+      Route::get('/{id}', [CreditoController::class, 'show'])->name('creditos.show');
+      Route::delete('/{id}', [CreditoController::class, 'destroy'])->name('creditos.destroy');
+  });
+
+  // ❌ BORRAR ESTA LÍNEA QUE GENERABA LA DUPLICIDAD:
+  // Route::resource('creditos', CreditoController::class)->except(['index', 'show']);
+  
     // --- MÓDULO DE PROVEEDORES ---
     Route::prefix('proveedores')->group(function () {
         Route::get('/', [ProveedorController::class, 'index'])->name('proveedores.index');
