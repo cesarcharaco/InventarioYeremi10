@@ -81,12 +81,26 @@ class CreditoController extends Controller
     public function show($id)
     {
         // 1. Buscamos al cliente y cargamos sus créditos
-        $cliente = Cliente::with([
+        /*$cliente = Cliente::with([
             'creditos' => function($q) {
                 $q->with(['venta', 'abonos.usuario', 'intereses.administrador'])
                   ->orderBy('created_at', 'desc');
             }
-        ])->findOrFail($id);
+        ])->findOrFail($id);*/
+
+        $cliente = Cliente::with([
+                'creditos' => function($q) {
+                    $q->with([
+                        'venta', 
+                        'abonos' => function($qAbono) {
+                            // Se omiten los abonos anulados
+                            $qAbono->where('estado', '!=', 'Anulado')->with('usuario');
+                        }, 
+                        'intereses.administrador'
+                    ])
+                    ->orderBy('created_at', 'desc');
+                }
+            ])->findOrFail($id);
 
         // 2. Historial global (para las tablas de la vista)
         $historialAbonos = $cliente->creditos->flatMap(function($credito) {
