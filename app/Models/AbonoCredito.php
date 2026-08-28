@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
 class AbonoCredito extends Model
 {
     use HasFactory;
@@ -15,20 +16,14 @@ class AbonoCredito extends Model
         'id_credito',
         'id_user',
         'id_caja',
-        'monto_pagado_usd', // Total del abono expresado en USD para descontar de la deuda
-        
-        // Desglose para la caja (Montos brutos)
+        'monto_pagado_usd',
         'pago_usd_efectivo',
         'pago_bs_efectivo',
         'pago_punto_bs',
         'pago_pagomovil_bs',
-        
+        'detalles',
         'estado',
-        'created_at',
-        'updated_at'
     ];
-
-    // Dentro de class AbonoCredito extends Model
 
     /**
      * El abono pertenece a un crédito específico (la deuda que se está pagando)

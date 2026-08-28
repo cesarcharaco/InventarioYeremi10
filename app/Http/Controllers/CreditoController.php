@@ -143,22 +143,26 @@ class CreditoController extends Controller
             'monto_total_usd' => 'required|numeric|min:0.01',
             'fecha_abono'     => 'required|date'
         ]);
-        
-        $totalDesglose = ($request->pago_usd_efectivo ?? 0) + ($request->pago_bs_efectivo ?? 0) + 
-                         ($request->pago_punto_bs ?? 0) + ($request->pago_pagomovil_bs ?? 0);
+
+        $pagoUsdEfectivo = (float)($request->pago_usd_efectivo ?? 0);
+        $pagoBsEfectivo  = (float)($request->pago_bs_efectivo ?? 0);
+        $pagoPuntoBs     = (float)($request->pago_punto_bs ?? 0);
+        $pagoPagomovilBs = (float)($request->pago_pagomovil_bs ?? 0);
+
+        $totalDesglose = $pagoUsdEfectivo + $pagoBsEfectivo + $pagoPuntoBs + $pagoPagomovilBs;
 
         if ($totalDesglose <= 0) {
             return back()->with('error', 'Debe registrar al menos un valor en el desglose.');
         }
 
         try {
-            DB::transaction(function () use ($request, $id) {
+            DB::transaction(function () use ($request, $id, $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs) {
                 $creditoReferencia = Credito::findOrFail($id);
                 $cliente = $creditoReferencia->cliente;
                 $idCajaActiva = $this->obtenerCajaActiva();
                 
                 // Convertir la fecha recibida del modal
-                $fechaAbono = \Carbon\Carbon::parse($request->fecha_abono);
+                $fechaAbono = Carbon::parse($request->fecha_abono);
 
                 // 2. Buscamos TODOS los créditos pendientes de este cliente (Más viejos primero)
                 $creditos = Credito::where('id_cliente', $cliente->id)
@@ -167,7 +171,14 @@ class CreditoController extends Controller
                     ->lockForUpdate()
                     ->get();
 
-                $montoRestante = round($request->monto_total_usd, 2);
+                $montoTotalUSD = round($request->monto_total_usd, 2);
+                $montoRestante = $montoTotalUSD;
+
+                // Acumuladores para prorratear el desglose sin perder centavos por redondeo
+                $acumUsdEfectivo = 0;
+                $acumBsEfectivo  = 0;
+                $acumPuntoBs     = 0;
+                $acumPagomovilBs = 0;
 
                 // 3. Distribuir abono en las deudas activas
                 foreach ($creditos as $credito) {
@@ -176,15 +187,40 @@ class CreditoController extends Controller
                     $saldo = round($credito->saldo_pendiente, 2);
                     $abono = min($montoRestante, $saldo);
 
+                    $esUltimoRegistro = ($montoRestante - $abono <= 0);
+
+                    if ($esUltimoRegistro) {
+                        // El último abono toma el remanente exacto del desglose recibido
+                        $abonoUsdEfectivo = round($pagoUsdEfectivo - $acumUsdEfectivo, 2);
+                        $abonoBsEfectivo  = round($pagoBsEfectivo - $acumBsEfectivo, 2);
+                        $abonoPuntoBs     = round($pagoPuntoBs - $acumPuntoBs, 2);
+                        $abonoPagomovilBs = round($pagoPagomovilBs - $acumPagomovilBs, 2);
+                    } else {
+                        $proporcion       = $abono / $montoTotalUSD;
+                        $abonoUsdEfectivo = round($pagoUsdEfectivo * $proporcion, 2);
+                        $abonoBsEfectivo  = round($pagoBsEfectivo * $proporcion, 2);
+                        $abonoPuntoBs     = round($pagoPuntoBs * $proporcion, 2);
+                        $abonoPagomovilBs = round($pagoPagomovilBs * $proporcion, 2);
+
+                        $acumUsdEfectivo += $abonoUsdEfectivo;
+                        $acumBsEfectivo  += $abonoBsEfectivo;
+                        $acumPuntoBs     += $abonoPuntoBs;
+                        $acumPagomovilBs += $abonoPagomovilBs;
+                    }
+
                     AbonoCredito::create([
-                        'id_credito'       => $credito->id,
-                        'id_user'          => Auth::id(),
-                        'id_caja'          => $idCajaActiva,
-                        'monto_pagado_usd' => $abono,
-                        'detalles'         => 'Abono Global: ' . ($request->referencia ?? 'Sin referencia'),
-                        'estado'           => 'Realizado',
-                        'created_at'       => $fechaAbono,
-                        'updated_at'       => now(),
+                        'id_credito'        => $credito->id,
+                        'id_user'           => Auth::id(),
+                        'id_caja'           => $idCajaActiva,
+                        'monto_pagado_usd'  => $abono,
+                        'pago_usd_efectivo' => $abonoUsdEfectivo,
+                        'pago_bs_efectivo'  => $abonoBsEfectivo,
+                        'pago_punto_bs'     => $abonoPuntoBs,
+                        'pago_pagomovil_bs' => $abonoPagomovilBs,
+                        'detalles'          => 'Abono Global: ' . ($request->referencia ?? 'Sin referencia'),
+                        'estado'            => 'Realizado',
+                        'created_at'        => $fechaAbono,
+                        'updated_at'        => now(),
                     ]);
 
                     $credito->saldo_pendiente = round($saldo - $abono, 2);
@@ -201,6 +237,11 @@ class CreditoController extends Controller
 
                 // 4. MANEJO DEL EXCEDENTE (Saldo a favor / Anticipo)
                 if ($montoRestante > 0) {
+                    $excedenteUsdEfectivo = round($pagoUsdEfectivo - $acumUsdEfectivo, 2);
+                    $excedenteBsEfectivo  = round($pagoBsEfectivo - $acumBsEfectivo, 2);
+                    $excedentePuntoBs     = round($pagoPuntoBs - $acumPuntoBs, 2);
+                    $excedentePagomovilBs = round($pagoPagomovilBs - $acumPagomovilBs, 2);
+
                     $codigoAnticipo = 'ANT-' . strtoupper(Str::random(6));
 
                     $ventaAnticipo = new Venta();
@@ -234,14 +275,18 @@ class CreditoController extends Controller
                     ]);
 
                     AbonoCredito::create([
-                        'id_credito'       => $creditoAnticipo->id,
-                        'id_user'          => Auth::id(),
-                        'id_caja'          => $idCajaActiva,
-                        'monto_pagado_usd' => $montoRestante,
-                        'detalles'         => 'Excedente a favor: ' . ($request->referencia ?? 'Sin referencia'),
-                        'estado'           => 'Realizado',
-                        'created_at'       => $fechaAbono,
-                        'updated_at'       => now(),
+                        'id_credito'        => $creditoAnticipo->id,
+                        'id_user'           => Auth::id(),
+                        'id_caja'           => $idCajaActiva,
+                        'monto_pagado_usd'  => $montoRestante,
+                        'pago_usd_efectivo' => $excedenteUsdEfectivo,
+                        'pago_bs_efectivo'  => $excedenteBsEfectivo,
+                        'pago_punto_bs'     => $excedentePuntoBs,
+                        'pago_pagomovil_bs' => $excedentePagomovilBs,
+                        'detalles'          => 'Excedente a favor: ' . ($request->referencia ?? 'Sin referencia'),
+                        'estado'            => 'Realizado',
+                        'created_at'        => $fechaAbono,
+                        'updated_at'        => now(),
                     ]);
 
                     if ($cliente) {
@@ -298,7 +343,7 @@ class CreditoController extends Controller
                 // 2. Si es un CRÉDITO NORMAL DE VENTA
                 else {
                     // RE-CALCULO: Usamos el servicio para asegurar consistencia
-                    $service = new \App\Services\CreditoService();
+                    $service = new CreditoService();
                     $nuevoSaldo = $service->calcularSaldoReal($credito->id);
 
                     $credito->saldo_pendiente = $nuevoSaldo;
@@ -709,13 +754,15 @@ class CreditoController extends Controller
         $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
         $fechaCredito = Carbon::parse($request->fecha_credito);
 
+        $idCajaActiva = $this->obtenerCajaActiva();
+
         // 2. Registrar la VENTA obligatoria para obtener $venta->id
         $venta = new Venta();
         $venta->codigo_factura     = $codigoFactura;
         $venta->id_cliente         = $cliente->id;
         $venta->id_user            = auth()->id();
-        $venta->id_local           = auth()->user()->id_local ?? 1;
-        $venta->id_caja            = auth()->user()->id_caja ?? 1;
+        $venta->id_local           = auth()->user()->id_local ?? 3;
+        $venta->id_caja            = $idCajaActiva;
         
         $venta->pago_usd_efectivo  = 0.00;
         $venta->pago_bs_efectivo   = 0.00;
@@ -767,7 +814,7 @@ class CreditoController extends Controller
             AbonoCredito::create([
                 'id_credito'       => $credito->id,
                 'id_user'          => auth()->id(),
-                'id_caja'          => auth()->user()->id_caja ?? 1,
+                'id_caja'          => $idCajaActiva,
                 'monto_pagado_usd' => $descuento,
                 'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $anticipo->id . ')',
                 'estado'           => 'Realizado',
@@ -858,6 +905,8 @@ class CreditoController extends Controller
         try {
             $cliente = Cliente::findOrFail($request->cliente_id);
 
+            $idCajaActiva = $this->obtenerCajaActiva();
+
             // Generar un código de factura único
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
             $fechaCredito = Carbon::parse($request->fecha_credito);
@@ -867,8 +916,8 @@ class CreditoController extends Controller
             $venta->codigo_factura     = $codigoFactura;
             $venta->id_cliente         = $cliente->id;
             $venta->id_user            = auth()->id();
-            $venta->id_local           = auth()->user()->id_local ?? 1;
-            $venta->id_caja            = auth()->user()->id_caja ?? 1;
+            $venta->id_local           = auth()->user()->id_local ?? 3;
+            $venta->id_caja            = $idCajaActiva;
             
             $venta->pago_usd_efectivo  = 0.00;
             $venta->pago_bs_efectivo   = 0.00;
@@ -920,7 +969,7 @@ class CreditoController extends Controller
                 AbonoCredito::create([
                     'id_credito'       => $credito->id,
                     'id_user'          => auth()->id(),
-                    'id_caja'          => auth()->user()->id_caja ?? 1,
+                    'id_caja'          => $idCajaActiva,
                     'monto_pagado_usd' => $descuento,
                     'detalles'         => 'Abono automático aplicado desde Saldo a Favor (Ref #' . $anticipo->id . ')',
                     'estado'           => 'Realizado',
