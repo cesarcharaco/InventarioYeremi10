@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Credito;
 use App\Models\CreditoInteres;
 use App\Models\AbonoCredito;
+use App\Models\AbonoDetalle;
 use App\Models\CajaMovimiento;
 use Illuminate\Support\Facades\DB;
 
@@ -12,7 +13,7 @@ class CreditoService
 {
     /**
      * Recalcula el saldo pendiente real del crédito basado en el histórico.
-     * Solo suma intereses 'aplicado' y resta abonos 'Realizado'.
+     * Suma intereses 'aplicado' y resta montos aplicados en abonos 'Realizado'.
      */
     public function calcularSaldoReal(int $creditoId): float
     {
@@ -22,9 +23,12 @@ class CreditoService
             ->where('estado', 'aplicado')
             ->sum('monto_interes');
 
-        $totalAbonos = AbonoCredito::where('id_credito', $creditoId)
-            ->where('estado', 'Realizado')
-            ->sum('monto_pagado_usd');
+        // Suma los montos aplicados desde la tabla de detalles vinculada a cabeceras realizadas
+        $totalAbonos = AbonoDetalle::where('id_credito', $creditoId)
+            ->whereHas('abono', function ($query) {
+                $query->where('estado', 'Realizado');
+            })
+            ->sum('monto_aplicado_usd');
 
         return round(($credito->monto_inicial + $totalIntereses) - $totalAbonos, 2);
     }
@@ -72,6 +76,9 @@ class CreditoService
         });
     }
 
+    /**
+     * Procesa la aplicación o reembolso del saldo a favor de un cliente.
+     */
     public function procesarGestionSaldo(int $creditoId, string $accion, array $datos): array
     {
         return DB::transaction(function () use ($creditoId, $accion, $datos) {
@@ -81,22 +88,40 @@ class CreditoService
             if ($monto <= 0) return ['success' => false, 'message' => 'No hay saldo disponible'];
 
             if ($accion === 'aplicar') {
-                AbonoCredito::create([
-                    'id_credito' => $credito->id,
-                    'monto_pagado_usd' => $monto,
-                    'detalles' => 'Aplicación de saldo a favor: ' . ($datos['observacion'] ?? 'N/A'),
-                    'estado' => 'Realizado'
+                $idCajaActiva = $datos['id_caja'] ?? auth()->user()->id_caja ?? 1;
+
+                // 1. Crear cabecera de abono
+                $abonoCabecera = AbonoCredito::create([
+                    'id_cliente'        => $credito->id_cliente,
+                    'id_user'           => auth()->id(),
+                    'id_caja'           => $idCajaActiva,
+                    'monto_total_usd'   => $monto,
+                    'pago_usd_efectivo' => 0.00,
+                    'pago_bs_efectivo'  => 0.00,
+                    'pago_punto_bs'     => 0.00,
+                    'pago_pagomovil_bs' => 0.00,
+                    'detalles'          => 'Aplicación de saldo a favor: ' . ($datos['observacion'] ?? 'N/A'),
+                    'estado'            => 'Realizado'
                 ]);
-                $credito->saldo_pendiente -= $monto;
+
+                // 2. Crear el detalle imputado al crédito
+                AbonoDetalle::create([
+                    'id_abono'           => $abonoCabecera->id,
+                    'id_credito'         => $credito->id,
+                    'monto_aplicado_usd' => $monto,
+                ]);
+
+                $credito->saldo_pendiente = max(0, round($credito->saldo_pendiente - $monto, 2));
+                if ($credito->saldo_pendiente <= 0) {
+                    $credito->estado = 'pagado';
+                }
             } elseif ($accion === 'reembolso') {
-                /*AQUÍ ES DONDE FALTA LA MAGIA:
-                Debes insertar en tu tabla de movimientos de caja (egreso)*/
                 CajaMovimiento::create([
-                    'monto' => $monto,
-                    'tipo' => 'egreso',
-                    'metodo' => $datos['forma_salida'], // Viene del formulario
-                    'detalles' => $datos['referencia'],
-                    'id_user' => auth()->id()
+                    'monto'    => $monto,
+                    'tipo'     => 'egreso',
+                    'metodo'   => $datos['forma_salida'] ?? 'Efectivo USD',
+                    'detalles' => $datos['referencia'] ?? 'Reembolso de saldo a favor',
+                    'id_user'  => auth()->id()
                 ]);
             }
 

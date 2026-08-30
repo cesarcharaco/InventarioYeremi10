@@ -298,7 +298,7 @@ class CreditoController extends Controller
                 $abonoCabecera->update(['estado' => 'Anulado']);
 
                 // Recorrer los detalles vinculados a esta cabecera para recalcular saldos
-                foreach ($abonoCabecera->detalles as $detalle) {
+                foreach ($abonoCabecera->getRelation('detalles') as $detalle) {
                     $credito = $detalle->credito;
                     if (!$credito) continue;
 

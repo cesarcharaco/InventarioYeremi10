@@ -11,19 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('abonos_creditos', function (Blueprint $table) {
+        Schema::create('abonos_credito', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('id_credito')->constrained('creditos')->onDelete('cascade');
-            $table->foreignId('id_user')->constrained('users'); // Quién recibió el pago
-            $table->foreignId('id_caja')->constrained('cajas'); // <--- CRÍTICO: Entra a la jornada actual
+            $table->foreignId('id_cliente')->constrained('clientes');
+            $table->foreignId('id_user')->constrained('users');
+            $table->foreignId('id_caja')->constrained('cajas');
             
-            $table->decimal('monto_pagado_usd', 12, 2);
+            $table->decimal('monto_total_usd', 12, 2);
                     
-            // Desglose de cómo pagó el cliente (Efectivo, Bs, Pago Móvil, etc)
-            $table->decimal('pago_usd_efectivo', 12, 2)->default(0);
-            $table->decimal('pago_bs_efectivo', 12, 2)->default(0);
-            $table->decimal('pago_punto_bs', 12, 2)->default(0);
-            $table->decimal('pago_pagomovil_bs', 12, 2)->default(0);
+            // Desglose de cómo pagó el cliente (Efectivo, Bs, Pago Móvil, etc.)
+            $table->decimal('pago_usd_efectivo', 12, 2)->default(0.00);
+            $table->decimal('pago_bs_efectivo', 12, 2)->default(0.00);
+            $table->decimal('pago_punto_bs', 12, 2)->default(0.00);
+            $table->decimal('pago_pagomovil_bs', 12, 2)->default(0.00);
             
             $table->string('detalles')->nullable();
             $table->enum('estado', ['Realizado', 'Anulado'])->default('Realizado');
@@ -36,6 +36,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('abonos_creditos');
+        Schema::dropIfExists('abonos_credito');
     }
 };

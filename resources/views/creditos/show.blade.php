@@ -319,7 +319,7 @@
                                         </td>
                                         <td>
                                             <div class="d-flex flex-wrap" style="gap: 4px;">
-                                                @forelse($abono->getRelation('detalles') as $detalle)
+                                                @forelse($abono->getRelation('detalles') ?? [] as $detalle)
                                                     <span class="badge badge-light border" title="Monto aplicado al crédito: ${{ number_format($detalle->monto_aplicado_usd, 2) }}">
                                                         #{{ $detalle->id_credito }} (${{ number_format($detalle->monto_aplicado_usd, 2) }})
                                                     </span>
