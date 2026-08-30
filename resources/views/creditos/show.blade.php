@@ -290,12 +290,12 @@
                             <table class="table table-sm table-hover" id="tabla-historial-abonos">
                                 <thead class="thead-light">
                                     <tr>
-                                        <th>Fecha / Hora</th>
-                                        <th>Cajero</th>
-                                        <th class="d-md-table-cell">#Crédito</th>
-                                        <th class="d-md-table-cell text-right">Monto ($)</th>
-                                        <th class="d-md-table-cell">Forma de Pago</th>
-                                        <th class="d-md-table-cell">Detalles</th>
+                                        <th>N° Recibo / Fecha</th>
+                                        <th>Cajero / Caja</th>
+                                        <th>Créditos Afectados</th>
+                                        <th class="text-right">Monto Total ($)</th>
+                                        <th>Forma de Pago</th>
+                                        <th>Detalles / Nota</th>
                                         <th>Estado</th>
                                         @can('anular-abono') <th class="text-center">Acción</th> @endcan
                                     </tr>
@@ -303,21 +303,36 @@
                                 <tbody>
                                     @foreach($historialAbonos as $abono)
                                     @php
-                                        $esReembolso = $abono->monto_pagado_usd < 0;
+                                        $montoTotal = $abono->monto_total_usd ?? 0;
+                                        $esReembolso = $montoTotal < 0;
                                     @endphp
                                     <tr style="{{ $abono->estado === 'Anulado' ? 'opacity: 0.6; text-decoration: line-through;' : '' }}" class="{{ $esReembolso ? 'table-warning' : '' }}">
                                         <td class="small text-nowrap" data-order="{{ $abono->created_at->timestamp }}">
-                                            {{ $abono->created_at->format('d/m/Y h:i A') }}
+                                            <strong>#{{ str_pad($abono->id, 6, '0', STR_PAD_LEFT) }}</strong><br>
+                                            <span class="text-muted">{{ $abono->created_at->format('d/m/Y h:i A') }}</span>
                                         </td>
-                                        <td>{{ $abono->usuario->name ?? 'N/A' }}</td>
                                         <td>
-                                            <span class="badge badge-light border">ID: {{ $abono->id_credito }}</span>
+                                            <small class="d-block font-weight-bold">{{ $abono->usuario->name ?? 'N/A' }}</small>
+                                            @if($abono->caja)
+                                                <small class="text-muted"><i class="fa fa-cash-register"></i> {{ $abono->caja->nombre ?? 'Caja' }}</small>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-wrap" style="gap: 4px;">
+                                                @forelse($abono->getRelation('detalles') as $detalle)
+                                                    <span class="badge badge-light border" title="Monto aplicado al crédito: ${{ number_format($detalle->monto_aplicado_usd, 2) }}">
+                                                        #{{ $detalle->id_credito }} (${{ number_format($detalle->monto_aplicado_usd, 2) }})
+                                                    </span>
+                                                @empty
+                                                    <span class="badge badge-secondary">Sin desglose</span>
+                                                @endforelse
+                                            </div>
                                         </td>
                                         <td class="font-weight-bold text-right {{ $esReembolso ? 'text-danger' : 'text-success' }}" style="font-variant-numeric: tabular-nums;">
-                                            {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_pagado_usd), 2) }}
+                                            {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoTotal), 2) }}
                                         </td>
                                         <td>
-                                            <div class="d-flex flex-wrap gap-1">
+                                            <div class="d-flex flex-wrap" style="gap: 2px;">
                                                 @if(($abono->pago_usd_efectivo ?? 0) > 0)
                                                     <small class="badge badge-light border">Efe $: {{ number_format($abono->pago_usd_efectivo, 2) }}</small>
                                                 @endif
@@ -335,7 +350,9 @@
                                                 @endif
                                             </div>
                                         </td>
-                                        <td><small class="text-muted">{{ $abono->detalles ?? 'N/A' }}</small></td>
+                                        <td>
+                                            <small class="text-muted">{{ $abono->getAttribute('detalles') ?? 'Abono general' }}</small>
+                                        </td>
                                         <td>
                                             <span class="badge badge-{{ $abono->estado === 'Realizado' ? 'success' : 'danger' }}">
                                                 {{ $abono->estado }}
@@ -346,7 +363,7 @@
                                             @if($abono->estado === 'Realizado' && !$esReembolso)
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-danger"
-                                                        onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($abono->monto_pagado_usd, 2) }}')"
+                                                        onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($montoTotal, 2) }}')"
                                                         title="Anular Abono">
                                                     <i class="fa fa-ban"></i>
                                                 </button>

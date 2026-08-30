@@ -125,7 +125,7 @@
     </div>
 </main>
 
-@include('creditos.modals.abono_modal')
+
 @include('creditos.modals.modal_credito_directo_general')
 @endsection
 
