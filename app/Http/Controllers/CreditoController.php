@@ -274,6 +274,71 @@ class CreditoController extends Controller
         }
     }
 
+    public function editAbono($id)
+    {
+        if (Gate::denies('editar-abono')) {
+            return response()->json(['error' => 'No autorizado para editar abonos.'], 403);
+        }
+
+        $abono = AbonoCredito::with('cliente')->findOrFail($id);
+
+        if ($abono->estado === 'Anulado') {
+            return response()->json(['error' => 'No se puede editar un abono en estado anulado.'], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'abono' => [
+                'id' => $abono->id,
+                'fecha_abono' => $abono->fecha_abono ? $abono->fecha_abono->format('Y-m-d') : date('Y-m-d'),
+                'monto_total_usd' => $abono->monto_total_usd,
+                'referencia' => $abono->getAttribute('detalles'), // Columna física 'detalles'
+                'pago_usd_efectivo' => $abono->pago_usd_efectivo ?? 0,
+                'pago_bs_efectivo' => $abono->pago_bs_efectivo ?? 0,
+                'pago_punto_bs' => $abono->pago_punto_bs ?? 0,
+                'pago_pagomovil_bs' => $abono->pago_pagomovil_bs ?? 0,
+                'nombre_cliente' => $abono->cliente->nombre_razon_social ?? 'Cliente General'
+            ]
+        ]);
+    }
+
+    public function updateAbono(Request $request, $id)
+    {
+        if (Gate::denies('editar-abono')) {
+            return redirect()->back()->with('error', 'No autorizado para editar abonos.');
+        }
+
+        $request->validate([
+            'fecha_abono' => 'required|date',
+            'referencia' => 'nullable|string|max:500',
+            'pago_usd_efectivo' => 'nullable|numeric|min:0',
+            'pago_bs_efectivo' => 'nullable|numeric|min:0',
+            'pago_punto_bs' => 'nullable|numeric|min:0',
+            'pago_pagomovil_bs' => 'nullable|numeric|min:0',
+        ]);
+
+        try {
+            $abono = AbonoCredito::findOrFail($id);
+
+            if ($abono->estado === 'Anulado') {
+                return redirect()->back()->with('error', 'No se puede modificar un abono que ha sido anulado.');
+            }
+
+            $abono->update([
+                'fecha_abono' => $request->input('fecha_abono'),
+                'detalles' => $request->input('referencia'), // Columna física
+                'pago_usd_efectivo' => $request->input('pago_usd_efectivo', 0),
+                'pago_bs_efectivo' => $request->input('pago_bs_efectivo', 0),
+                'pago_punto_bs' => $request->input('pago_punto_bs', 0),
+                'pago_pagomovil_bs' => $request->input('pago_pagomovil_bs', 0),
+            ]);
+
+            return redirect()->back()->with('success', 'El abono ha sido actualizado correctamente.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Error al actualizar el abono: ' . $e->getMessage());
+        }
+    }
+    
     public function revalorizar(Request $request, $id)
     {
         $credito = Credito::findOrFail($id);

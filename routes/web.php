@@ -4,11 +4,8 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\SolicitantesController;
 use App\Http\Controllers\InsumosController;
-use App\Http\Controllers\PrestamosController;
 use App\Http\Controllers\IncidenciasController;
-use App\Http\Controllers\SalidaController;
 use App\Http\Controllers\LocalController;
 use App\Http\Controllers\ReportesController;
 use App\Http\Controllers\CategoriaController;
@@ -81,11 +78,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/local/{id}', [InsumosController::class, 'listarPorLocal'])->name('inventario.local');
     });
 
-    // 2. Rutas de integración con otros módulos (Préstamos)
-    Route::get('insumos/{id_gerencia}/buscar', [PrestamosController::class, 'buscar_insumos']);
-    Route::get('insumos/{id_insumo}/buscar_existencia', [PrestamosController::class, 'buscar_existencia']);
-    Route::post('/insumo/cambiar-estado', [InsumosController::class, 'cambiarEstadoInsumo'])->name('insumo.cambiarEstado');
-
     // 3. Resource estándar de Insumos
     Route::post('insumos/importar-oferta', [InsumosController::class, 'importar'])->name('insumos.importar');
     Route::post('/insumos/store-rapido', [InsumosController::class, 'storeRapido'])->name('insumos.store_rapido');
@@ -110,12 +102,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/anular/{id}', [DespachoController::class, 'anular'])->name('despacho.anular');
         Route::delete('/{id}', [DespachoController::class, 'destroy'])->name('despacho.destroy');
     });
-    Route::resource('solicitantes', SolicitantesController::class);
-    Route::post('solicitantes/cambiar_status', [SolicitantesController::class, 'cambiar_status'])->name('solicitantes.cambiar_status');
-    Route::post('prestamos/cambiar_status', [PrestamosController::class, 'cambiar_status'])->name('prestamos.cambiar_status');
-    Route::get('/prestamos/historial', [PrestamosController::class, 'historial'])->name('prestamos.historial');
-    Route::post('prestamos/deshacer', [PrestamosController::class, 'deshacer_prestamo'])->name('prestamos.deshacer');
-    Route::resource('prestamos', PrestamosController::class);
+    
 
     // --- SECCIÓN DE INCIDENCIAS ---
     Route::get('/incidencias/historial', [IncidenciasController::class, 'historial'])->name('incidencias.historial');
@@ -123,14 +110,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/incidencias/deshacer', [IncidenciasController::class, 'deshacer_incidencia'])->name('deshacer_incidencia');
     Route::resource('incidencias', IncidenciasController::class);
 
-    // --- SECCIÓN SALIDAS Y LOCALES ---
-    Route::get('/salidas/{id_local}/listar', [SalidaController::class, 'index'])->name('salidas.listar');
-    Route::get('/salidas/index2', [SalidaController::class, 'index2'])->name('salidas.index2');
-    Route::get('/salidas/seleccionar_local', [SalidaController::class, 'seleccionar_local'])->name('seleccionar_local');
-    Route::post('/salidas/create2', [SalidaController::class, 'create2'])->name('salidas.create2');
-    Route::get('/salidas/{id_local}/createl', [SalidaController::class, 'create3'])->name('salidas.createl');
-    Route::resource('salidas', SalidaController::class);
-    
+        
     Route::post('local/cambiar_status', [LocalController::class, 'cambiar_estado'])->name('local.cambiar_estado');
     Route::resource('local', LocalController::class);
     Route::get('/locales/{id}/vendedores', [CajaController::class, 'getVendedoresPorLocal'])->name('locales.vendedores');
@@ -186,6 +166,8 @@ Route::middleware(['auth'])->group(function () {
       Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])->name('creditos.pdf_estado_cuenta');
 
       // 2. Rutas POST
+      Route::get('/abonos/{id}/editar', [CreditoController::class, 'editAbono'])->name('abonos.edit');
+      Route::put('/abonos/{id}', [CreditoController::class, 'updateAbono'])->name('abonos.update');
       Route::post('/{id}/abono', [CreditoController::class, 'registrarAbono'])->name('creditos.abono');
       Route::post('/{id}/revalorizar', [CreditoController::class, 'revalorizar'])->name('creditos.revalorizar');
       Route::post('/abono/{id}/anular', [CreditoController::class, 'anularAbono'])->name('abonos.anular');
@@ -199,8 +181,7 @@ Route::middleware(['auth'])->group(function () {
       Route::delete('/{id}', [CreditoController::class, 'destroy'])->name('creditos.destroy');
   });
 
-  // ❌ BORRAR ESTA LÍNEA QUE GENERABA LA DUPLICIDAD:
-  // Route::resource('creditos', CreditoController::class)->except(['index', 'show']);
+  
   
     // --- MÓDULO DE PROVEEDORES ---
     Route::prefix('proveedores')->group(function () {

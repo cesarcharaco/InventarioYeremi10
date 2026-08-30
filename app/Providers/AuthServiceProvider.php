@@ -252,6 +252,12 @@ class AuthServiceProvider extends ServiceProvider
         return strtolower($user->role) === 'admin';
     });
 
+    // 5. Editar observaciones o vías de ingreso de un abono
+    Gate::define('editar-abono', function (User $user) {
+        $role = strtolower($user->role);
+        return in_array($role, ['admin', 'encargado']);
+    });
+    
     // Registro de Compras / Entradas de Almacén
     Gate::define('gestionar-entradas', function (User $user) {
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);

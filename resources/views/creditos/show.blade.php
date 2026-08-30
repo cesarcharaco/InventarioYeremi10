@@ -358,18 +358,33 @@
                                                 {{ $abono->estado }}
                                             </span>
                                         </td>
-                                        @can('anular-abono')
                                         <td class="text-center">
-                                            @if($abono->estado === 'Realizado' && !$esReembolso)
-                                                <button type="button"
-                                                        class="btn btn-sm btn-outline-danger"
-                                                        onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($montoTotal, 2) }}')"
-                                                        title="Anular Abono">
-                                                    <i class="fa fa-ban"></i>
-                                                </button>
-                                            @endif
+                                            <div class="btn-group" role="group">
+                                                {{-- BOTÓN EDITAR --}}
+                                                @can('editar-abono')
+                                                    @if($abono->estado === 'Realizado' && !$esReembolso)
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-warning"
+                                                                onclick="editarAbono({{ $abono->id }})"
+                                                                title="Editar Abono">
+                                                            <i class="fa fa-edit text-dark" style="opacity: 1;"></i>
+                                                        </button>
+                                                    @endif
+                                                @endcan
+
+                                                {{-- BOTÓN ANULAR --}}
+                                                @can('anular-abono')
+                                                    @if($abono->estado === 'Realizado' && !$esReembolso)
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-danger"
+                                                                onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($montoTotal, 2) }}')"
+                                                                title="Anular Abono">
+                                                            <i class="fa fa-ban text-danger" style="opacity: 1;"></i>
+                                                        </button>
+                                                    @endif
+                                                @endcan
+                                            </div>
                                         </td>
-                                        @endcan
                                     </tr>
                                     @endforeach
                                 </tbody>
@@ -435,6 +450,7 @@
 </main>
 
 @include('creditos.modals.abono_modal')
+@include('creditos.modals.modalEditarAbono')
 @include('creditos.modals.modal_anular_abono')
 @include('creditos.modals.modal_anular_interes')
 @include('creditos.modals.modal_gestion_saldo')
@@ -973,6 +989,120 @@
             });
             return false;
         }
+    });
+
+    function editarAbono(id) {
+        $.ajax({
+            url: `/creditos/abonos/${id}/editar`,
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                if (data.success) {
+                    let abono = data.abono;
+
+                    $('#edit_abono_id').text(abono.id);
+                    $('#edit_nombre_cliente').text(abono.nombre_cliente);
+                    $('#edit_fecha_abono').val(abono.fecha_abono);
+                    $('#edit_monto_total_usd').val(parseFloat(abono.monto_total_usd).toFixed(2));
+                    $('#edit_referencia').val(abono.referencia);
+                    
+                    $('#edit_pago_usd_efectivo').val(abono.pago_usd_efectivo);
+                    $('#edit_pago_bs_efectivo').val(abono.pago_bs_efectivo);
+                    $('#edit_pago_punto_bs').val(abono.pago_punto_bs);
+                    $('#edit_pago_pagomovil_bs').val(abono.pago_pagomovil_bs);
+
+                    // Asignar ruta dinámica al formulario de actualización
+                    $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
+
+                    // Ocultar alerta de error previa
+                    $('#error-desglose-edit').addClass('d-none');
+
+                    $('#modalEditarAbono').modal('show');
+                }
+            },
+            error: function(err) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: err.responseJSON?.error || 'No se pudieron cargar los datos del abono.',
+                    confirmButtonColor: '#d33'
+                });
+            }
+        });
+    }
+
+    $(document).ready(function() {
+
+        // Limpieza en tiempo real de la alerta de desglose al escribir en los inputs de edición
+        $(document).on('input', '.input-desglose-edit', function() {
+            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
+            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
+            let bsPunto     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
+            let bsPagoMovil = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
+
+            if ((usdEfectivo + bsEfectivo + bsPunto + bsPagoMovil) > 0) {
+                $('#error-desglose-edit').addClass('d-none');
+            }
+        });
+
+        // Validación y Confirmación previa al enviar
+        $('#formEditarAbono').on('submit', function(e) {
+            e.preventDefault();
+
+            let form = this;
+
+            // 1. Validar fecha
+            let fecha = $('#edit_fecha_abono').val();
+            if (!fecha) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Campo Requerido',
+                    text: 'Por favor, ingrese una fecha válida para el abono.',
+                    confirmButtonColor: '#f39c12'
+                });
+                return false;
+            }
+
+            // 2. Validar desglose mayor a 0
+            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
+            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
+            let bsPunto     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
+            let bsPagoMovil = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
+
+            let totalDesglose = usdEfectivo + bsEfectivo + bsPunto + bsPagoMovil;
+
+            if (totalDesglose <= 0) {
+                $('#error-desglose-edit').removeClass('d-none');
+                
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Desglose Inválido',
+                    text: 'Debe ingresar al menos un valor mayor a cero (0) en el desglose de pago.',
+                    confirmButtonColor: '#f39c12'
+                });
+                return false;
+            }
+
+            $('#error-desglose-edit').addClass('d-none');
+
+            // 3. Confirmación previa con Swal.fire
+            Swal.fire({
+                title: '¿Confirmar Edición?',
+                text: "Se actualizarán las observaciones y vías de ingreso de este abono.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#f39c12',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="fa fa-check"></i> Sí, actualizar',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+
     });
 </script>
 @endsection
