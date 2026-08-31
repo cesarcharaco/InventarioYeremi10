@@ -309,31 +309,156 @@ class CreditoController extends Controller
         }
 
         $request->validate([
-            'fecha_abono' => 'required|date',
-            'referencia' => 'nullable|string|max:500',
+            'fecha_abono'       => 'required|date',
+            'monto_total_usd'   => 'required|numeric|min:0.01',
+            'referencia'        => 'nullable|string|max:500',
             'pago_usd_efectivo' => 'nullable|numeric|min:0',
-            'pago_bs_efectivo' => 'nullable|numeric|min:0',
-            'pago_punto_bs' => 'nullable|numeric|min:0',
+            'pago_bs_efectivo'  => 'nullable|numeric|min:0',
+            'pago_punto_bs'     => 'nullable|numeric|min:0',
             'pago_pagomovil_bs' => 'nullable|numeric|min:0',
         ]);
-
+    
         try {
-            $abono = AbonoCredito::findOrFail($id);
+            DB::transaction(function () use ($request, $id) {
+                $abono = AbonoCredito::findOrFail($id);
 
-            if ($abono->estado === 'Anulado') {
-                return redirect()->back()->with('error', 'No se puede modificar un abono que ha sido anulado.');
-            }
+                if ($abono->estado === 'Anulado') {
+                    throw new \Exception('No se puede modificar un abono que ha sido anulado.');
+                }
 
-            $abono->update([
-                'fecha_abono' => $request->input('fecha_abono'),
-                'detalles' => $request->input('referencia'), // Columna física
-                'pago_usd_efectivo' => $request->input('pago_usd_efectivo', 0),
-                'pago_bs_efectivo' => $request->input('pago_bs_efectivo', 0),
-                'pago_punto_bs' => $request->input('pago_punto_bs', 0),
-                'pago_pagomovil_bs' => $request->input('pago_pagomovil_bs', 0),
-            ]);
+                $cliente = Cliente::findOrFail($abono->id_cliente);
+                $fechaAbono = Carbon::parse($request->fecha_abono);
+                $montoTotalUSD = round($request->monto_total_usd, 2);
 
-            return redirect()->back()->with('success', 'El abono ha sido actualizado correctamente.');
+                // ---------------------------------------------------------
+                // PASO 1: REVERTIR IMPACTO PREVIO
+                // ---------------------------------------------------------
+                $detallesPrevios = AbonoDetalle::where('id_abono', $abono->id)->get();
+
+                foreach ($detallesPrevios as $detalle) {
+                    $credito = Credito::lockForUpdate()->find($detalle->id_credito);
+                    if ($credito) {
+                        // Devolver el monto al crédito
+                        $credito->saldo_pendiente += $detalle->monto_aplicado_usd;
+                        
+                        if ($credito->saldo_pendiente > 0 && $credito->estado === 'pagado') {
+                            $credito->estado = 'pendiente';
+                            if ($credito->venta) {
+                                $credito->venta->update(['estado_pago' => 'Pendiente']);
+                            }
+                        }
+                        
+                        // Si era anticipo, limpiar saldo_a_favor
+                        if ($credito->estado === 'anticipo') {
+                            $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, abs($detalle->monto_aplicado_usd)));
+                        }
+                        
+                        $credito->save();
+                    }
+                }
+
+                // Eliminar detalles anteriores
+                AbonoDetalle::where('id_abono', $abono->id)->delete();
+
+                // ---------------------------------------------------------
+                // PASO 2: ACTUALIZAR CABECERA DEL ABONO
+                // ---------------------------------------------------------
+                $abono->monto_total_usd   = $montoTotalUSD;
+                $abono->pago_usd_efectivo = (float) $request->input('pago_usd_efectivo', 0);
+                $abono->pago_bs_efectivo  = (float) $request->input('pago_bs_efectivo', 0);
+                $abono->pago_punto_bs     = (float) $request->input('pago_punto_bs', 0);
+                $abono->pago_pagomovil_bs = (float) $request->input('pago_pagomovil_bs', 0);
+                $abono->detalles          = $request->input('referencia');
+                $abono->created_at        = $fechaAbono;
+                $abono->updated_at        = now();
+                $abono->save();
+
+                // ---------------------------------------------------------
+                // PASO 3: REAPLICAR MONTO SOBRE DEUDAS (FIFO)
+                // ---------------------------------------------------------
+                $montoRestante = $montoTotalUSD;
+
+                $creditosPendientes = Credito::where('id_cliente', $cliente->id)
+                    ->where('estado', 'pendiente')
+                    ->orderBy('created_at', 'asc')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($creditosPendientes as $credito) {
+                    if ($montoRestante <= 0) break;
+
+                    $saldo = round($credito->saldo_pendiente, 2);
+                    $montoAplicado = min($montoRestante, $saldo);
+
+                    AbonoDetalle::create([
+                        'id_abono'           => $abono->id,
+                        'id_credito'         => $credito->id,
+                        'monto_aplicado_usd' => $montoAplicado,
+                        'created_at'         => $fechaAbono,
+                        'updated_at'         => now(),
+                    ]);
+
+                    $credito->saldo_pendiente = round($saldo - $montoAplicado, 2);
+                    if ($credito->saldo_pendiente <= 0) {
+                        $credito->estado = 'pagado';
+                        if ($credito->venta) {
+                            $credito->venta->update(['estado_pago' => 'Pagado']);
+                        }
+                    }
+                    $credito->save();
+
+                    $montoRestante = round($montoRestante - $montoAplicado, 2);
+                }
+
+                // ---------------------------------------------------------
+                // PASO 4: MANEJO DEL EXCEDENTE (Anticipo) - IGUAL QUE REGISTRO
+                // ---------------------------------------------------------
+                if ($montoRestante > 0) {
+                    $idCajaActiva = $abono->id_caja;
+                    $codigoAnticipo = 'ANT-' . strtoupper(Str::random(6));
+
+                    $ventaAnticipo = new Venta();
+                    $ventaAnticipo->codigo_factura     = $codigoAnticipo;
+                    $ventaAnticipo->id_cliente         = $cliente->id;
+                    $ventaAnticipo->id_user            = $abono->id_user;
+                    $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
+                    $ventaAnticipo->id_caja            = $idCajaActiva;
+                    $ventaAnticipo->pago_usd_efectivo  = 0.00;
+                    $ventaAnticipo->pago_bs_efectivo   = 0.00;
+                    $ventaAnticipo->monto_credito_usd  = 0.00;
+                    $ventaAnticipo->total_usd          = 0.00;
+                    $ventaAnticipo->estado             = 'completada';
+                    $ventaAnticipo->observacion        = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo (edición)';
+                    $ventaAnticipo->created_at         = $fechaAbono;
+                    $ventaAnticipo->updated_at         = now();
+                    $ventaAnticipo->save();
+
+                    $creditoAnticipo = Credito::create([
+                        'id_cliente'        => $cliente->id,
+                        'id_venta'          => $ventaAnticipo->id,
+                        'monto_inicial'     => 0.00,
+                        'saldo_pendiente'   => -$montoRestante,
+                        'saldo_a_favor'     => $montoRestante,
+                        'fecha_vencimiento' => $fechaAbono,
+                        'estado'            => 'anticipo',
+                        'created_at'        => $fechaAbono,
+                        'updated_at'        => now(),
+                    ]);
+
+                    AbonoDetalle::create([
+                        'id_abono'           => $abono->id,
+                        'id_credito'         => $creditoAnticipo->id,
+                        'monto_aplicado_usd' => $montoRestante,
+                        'created_at'         => $fechaAbono,
+                        'updated_at'         => now(),
+                    ]);
+
+                    $cliente->increment('saldo_a_favor', $montoRestante);
+                }
+            });
+
+            return redirect()->back()->with('success', 'Abono actualizado correctamente. Las deudas y saldos a favor han sido recalculados.');
+
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Error al actualizar el abono: ' . $e->getMessage());
         }

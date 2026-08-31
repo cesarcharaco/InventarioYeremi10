@@ -32,7 +32,7 @@
                                 <label class="font-weight-bold text-primary">Monto Total Abonado (USD):</label>
                                 <div class="input-group">
                                     <div class="input-group-prepend"><span class="input-group-text">$</span></div>
-                                    <input type="number" step="0.01" id="edit_monto_total_usd" class="form-control form-control-lg" >
+                                    <input type="number" step="0.01" name="monto_total_usd" id="edit_monto_total_usd" class="form-control form-control-lg" >
                                 </div>
                                 <small class="text-muted d-block mt-1">
                                     <i class="fa fa-lock"></i> El monto abonado no se modifica para proteger los saldos de crédito procesados.

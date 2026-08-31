@@ -1003,19 +1003,27 @@
                     $('#edit_abono_id').text(abono.id);
                     $('#edit_nombre_cliente').text(abono.nombre_cliente);
                     $('#edit_fecha_abono').val(abono.fecha_abono);
-                    $('#edit_monto_total_usd').val(parseFloat(abono.monto_total_usd).toFixed(2));
-                    $('#edit_referencia').val(abono.referencia);
                     
-                    $('#edit_pago_usd_efectivo').val(abono.pago_usd_efectivo);
-                    $('#edit_pago_bs_efectivo').val(abono.pago_bs_efectivo);
-                    $('#edit_pago_punto_bs').val(abono.pago_punto_bs);
-                    $('#edit_pago_pagomovil_bs').val(abono.pago_pagomovil_bs);
+                    // El backend debe devolver 'detalles' (nombre de la columna en BD)
+                    // o mapearlo como 'referencia' en el JSON
+                    $('#edit_referencia').val(abono.detalles || abono.referencia || '');
+                    
+                    // Monto total es el de la cabecera
+                    $('#edit_monto_total_usd').val(parseFloat(abono.monto_total_usd).toFixed(2));
+                    
+                    // Desglose de métodos de pago (de la cabecera)
+                    $('#edit_pago_usd_efectivo').val(parseFloat(abono.pago_usd_efectivo || 0).toFixed(2));
+                    $('#edit_pago_bs_efectivo').val(parseFloat(abono.pago_bs_efectivo || 0).toFixed(2));
+                    $('#edit_pago_punto_bs').val(parseFloat(abono.pago_punto_bs || 0).toFixed(2));
+                    $('#edit_pago_pagomovil_bs').val(parseFloat(abono.pago_pagomovil_bs || 0).toFixed(2));
 
-                    // Asignar ruta dinámica al formulario de actualización
                     $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
-
-                    // Ocultar alerta de error previa
                     $('#error-desglose-edit').addClass('d-none');
+
+                    // Ejecutar validación de cuadre al cargar datos
+                    if (typeof validarCuadreMontosEdit === 'function') {
+                        validarCuadreMontosEdit();
+                    }
 
                     $('#modalEditarAbono').modal('show');
                 }
@@ -1031,27 +1039,92 @@
         });
     }
 
-    $(document).ready(function() {
+    // =========================================================================
+    // VALIDACIÓN DE CUADRE PARA EDICIÓN (igual que registro)
+    // =========================================================================
+    function validarCuadreMontosEdit() {
+        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
 
-        // Limpieza en tiempo real de la alerta de desglose al escribir en los inputs de edición
-        $(document).on('input', '.input-desglose-edit', function() {
-            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
-            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
-            let bsPunto     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
-            let bsPagoMovil = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
+        function getNum(input) {
+            if (!input) return 0;
+            const val = parseFloat(input.value);
+            return isNaN(val) ? 0 : val;
+        }
 
-            if ((usdEfectivo + bsEfectivo + bsPunto + bsPagoMovil) > 0) {
-                $('#error-desglose-edit').addClass('d-none');
+        const inputEditMontoTotal  = document.getElementById('edit_monto_total_usd');
+        const inputEditUsdEfectivo = document.getElementById('edit_pago_usd_efectivo');
+        const inputEditBsEfectivo  = document.getElementById('edit_pago_bs_efectivo');
+        const inputEditPuntoBs     = document.getElementById('edit_pago_punto_bs');
+        const inputEditPagoMovilBs = document.getElementById('edit_pago_pagomovil_bs');
+
+        const divErrorEdit  = document.getElementById('error-desglose-edit');
+        const btnSubmitEdit = document.querySelector('#formEditarAbono button[type="submit"]');
+
+        const montoObjetivoUSD = getNum(inputEditMontoTotal);
+        const usdEfectivo = getNum(inputEditUsdEfectivo);
+        const bsEfectivo  = getNum(inputEditBsEfectivo);
+        const puntoBs     = getNum(inputEditPuntoBs);
+        const pagoMovilBs = getNum(inputEditPagoMovilBs);
+
+        // Conversión igual que en el registro
+        const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
+        const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
+
+        const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
+        const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
+
+        if (estanCuadrados) {
+            if (divErrorEdit) divErrorEdit.classList.add('d-none');
+            if (btnSubmitEdit) btnSubmitEdit.disabled = false;
+        } else {
+            if (btnSubmitEdit) btnSubmitEdit.disabled = true;
+            if (divErrorEdit) {
+                divErrorEdit.classList.remove('d-none');
+                if (montoObjetivoUSD <= 0) {
+                    divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> El monto total debe ser mayor a cero.';
+                } else {
+                    divErrorEdit.innerHTML = `<i class="fa fa-exclamation-circle"></i> Discrepancia: desglose $${totalDesgloseUSD.toFixed(2)} vs monto $${montoObjetivoUSD.toFixed(2)}.`;
+                }
             }
-        });
+        }
+    }
 
-        // Validación y Confirmación previa al enviar
+    // =========================================================================
+    // EVENTOS DE VALIDACIÓN EN TIEMPO REAL
+    // =========================================================================
+    document.addEventListener('DOMContentLoaded', function () {
+        const inputsEdit = [
+            document.getElementById('edit_monto_total_usd'),
+            document.getElementById('edit_pago_usd_efectivo'),
+            document.getElementById('edit_pago_bs_efectivo'),
+            document.getElementById('edit_pago_punto_bs'),
+            document.getElementById('edit_pago_pagomovil_bs'),
+        ];
+
+        inputsEdit.forEach(input => {
+            if (!input) return;
+            ['keyup', 'input', 'change'].forEach(evt => {
+                input.addEventListener(evt, validarCuadreMontosEdit);
+            });
+            input.addEventListener('blur', function() {
+                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
+                    this.value = '0.00';
+                    validarCuadreMontosEdit();
+                }
+            });
+        });
+    });
+
+    // =========================================================================
+    // SUBMIT DEL FORMULARIO DE EDICIÓN
+    // =========================================================================
+    $(document).ready(function() {
         $('#formEditarAbono').on('submit', function(e) {
             e.preventDefault();
 
             let form = this;
 
-            // 1. Validar fecha
+            // Validar fecha
             let fecha = $('#edit_fecha_abono').val();
             if (!fecha) {
                 Swal.fire({
@@ -1063,32 +1136,42 @@
                 return false;
             }
 
-            // 2. Validar desglose mayor a 0
-            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
-            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
-            let bsPunto     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
-            let bsPagoMovil = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
-
-            let totalDesglose = usdEfectivo + bsEfectivo + bsPunto + bsPagoMovil;
-
-            if (totalDesglose <= 0) {
-                $('#error-desglose-edit').removeClass('d-none');
-                
+            // Validar monto > 0
+            let montoTotal = parseFloat($('#edit_monto_total_usd').val()) || 0;
+            if (montoTotal <= 0) {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Desglose Inválido',
-                    text: 'Debe ingresar al menos un valor mayor a cero (0) en el desglose de pago.',
+                    title: 'Monto inválido',
+                    text: 'El monto total del abono debe ser mayor a cero.',
                     confirmButtonColor: '#f39c12'
                 });
                 return false;
             }
 
-            $('#error-desglose-edit').addClass('d-none');
+            // Validar cuadre (segunda capa de seguridad)
+            const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
+            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
+            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
+            let puntoBs     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
+            let pagomovilBs = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
+            
+            let totalBsEnUsd = (bsEfectivo + puntoBs + pagomovilBs) / TASA_BCV;
+            let totalDesglose = usdEfectivo + totalBsEnUsd;
+            
+            if (Math.abs(montoTotal - totalDesglose) >= 0.01) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Desglose no cuadra',
+                    text: 'El desglose de pago no coincide con el monto total. Por favor verifique.',
+                    confirmButtonColor: '#f39c12'
+                });
+                return false;
+            }
 
-            // 3. Confirmación previa con Swal.fire
+            // Confirmación
             Swal.fire({
                 title: '¿Confirmar Edición?',
-                text: "Se actualizarán las observaciones y vías de ingreso de este abono.",
+                text: "Se recalcularán las deudas, anticipos y saldos a favor del cliente.",
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#f39c12',
@@ -1102,7 +1185,8 @@
                 }
             });
         });
-
     });
+    
+    
 </script>
 @endsection
