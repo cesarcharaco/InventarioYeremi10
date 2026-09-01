@@ -205,6 +205,43 @@
     if (x.type === "password") { x.type = "text"; } 
     else { x.type = "password"; }
   }
+
+  $(document).ready(function() {
+      const $input = $('input[name="identificacion"]');
+
+      // Formatear valor inicial si viene de old() o de la base de datos
+      let inicial = $input.val().replace(/\D/g, '').substring(0, 9);
+      if (inicial.length > 0) {
+          $input.val('V-' + inicial);
+      }
+
+      $input.on('input', function() {
+          // Extraer únicamente los dígitos numéricos y limitar a 9 números
+          let numeros = $(this).val().replace(/\D/g, '').substring(0, 9);
+
+          // Al escribir cualquier número, fija el prefijo V-
+          if (numeros.length > 0) {
+              $(this).val('V-' + numeros);
+          } else {
+              // Si borra todos los números, el prefijo permanece
+              $(this).val('V-');
+          }
+      });
+
+      // Bloquear que el cursor se posicione antes del prefijo 'V-'
+      $input.on('keydown click focus select', function() {
+          if (this.selectionStart < 2) {
+              this.setSelectionRange(2, 2);
+          }
+      });
+
+      // Evitar borrar el prefijo 'V-' con Backspace o Delete
+      $input.on('keydown', function(e) {
+          if ((e.key === 'Backspace' || e.key === 'Delete') && this.selectionStart <= 2 && this.selectionEnd <= 2) {
+              e.preventDefault();
+          }
+      });
+  });
 </script>
 
 @endsection

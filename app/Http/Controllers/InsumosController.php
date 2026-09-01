@@ -11,13 +11,15 @@ use App\Models\Gerencias;
 use Illuminate\Http\Request;
 use App\Http\Requests\InsumosRequest;
 use App\Http\Requests\InsumosUpdateRequest;
-use Illuminate\Support\Facades\DB; // Añadido al namespace
+use Illuminate\Support\Facades\DB; 
 use Illuminate\Support\Facades\Gate;
 use Yajra\DataTables\Facades\DataTables;
 use App\Imports\InsumosImport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Notifications\StockBajoNotification;
 use App\Models\User;
+use Picqer\Barcode\BarcodeGeneratorPNG;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class InsumosController extends Controller
 {
@@ -467,6 +469,9 @@ class InsumosController extends Controller
                     <a href="'.route('insumos.edit', $row->id).'" class="btn btn-info btn-sm"><i class="fa fa-edit"></i></a>
                     <button class="btn btn-success btn-sm" onclick="detalles(\''.$row->producto.'\',\''.addslashes($row->descripcion).'\',\''.$row->serial.'\','.$row->stock_min.','.$row->stock_max.','.$row->cantidad.',\''.$row->nombre_local.'\')" data-toggle="modal" data-target="#detalles"><i class="fa fa-eye"></i></button>
                     <button class="btn btn-danger btn-sm" onclick="eliminar('.$row->id.')" data-toggle="modal" data-target="#eliminar_insumo"><i class="fa fa-trash"></i></button>
+                    <a href="'.route('insumos.barcode_pdf', $row->id).'" target="_blank" class="btn btn-dark btn-sm" title="Imprimir Código de Barras">
+                        <i class="fa fa-barcode"></i>
+                    </a>
                 </div>';
             })
             ->rawColumns(['serial', 'producto', 'estado_global', 'estado_local', 'stock_min', 'stock_max', 'cantidad', 'nombre_local', 'acciones'])
@@ -560,5 +565,31 @@ class InsumosController extends Controller
                 'message' => 'Error al registrar insumo: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    public function generarCodigoBarrasPdf($id)
+    {
+        // 1. Buscar el insumo por su ID
+        $insumo = DB::table('insumos')->where('id', $id)->first();
+
+        if (!$insumo) {
+            abort(404, 'El insumo no existe.');
+        }
+
+        // 2. Generar la imagen del código de barras (CODE 128) en Base64
+        $generator = new BarcodeGeneratorPNG();
+        $barcodeBase64 = base64_encode(
+            $generator->getBarcode($insumo->serial, $generator::TYPE_CODE_128)
+        );
+
+        // 3. Definir cuántas etiquetas entran por hoja (ej. 24 etiquetas en grilla 3x8)
+        $cantidadEtiquetas = 24;
+
+        // 4. Cargar la vista y renderizar el PDF en tamaño Carta
+        $pdf = Pdf::loadView('inventario.insumos.pdf_barcode', compact('insumo', 'barcodeBase64', 'cantidadEtiquetas'))
+                  ->setPaper('letter', 'portrait');
+
+        // 5. Retornar el PDF en el navegador para vista previa/impresión
+        return $pdf->stream("etiquetas_{$insumo->serial}.pdf");
     }
 }
