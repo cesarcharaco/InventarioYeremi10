@@ -592,4 +592,65 @@ class InsumosController extends Controller
         // 5. Retornar el PDF en el navegador para vista previa/impresión
         return $pdf->stream("etiquetas_{$insumo->serial}.pdf");
     }
+
+    // 1. Cargar la vista principal del carrito
+    public function etiquetasView()
+    {
+        return view('inventario.insumos.etiquetas');
+    }
+
+    // 2. Buscador en tiempo real para el selector
+    public function buscarInsumosAjax(Request $request)
+    {
+        $search = trim($request->get('q'));
+
+        $insumos = DB::table('insumos')
+            ->where(function ($query) use ($search) {
+                $query->where('serial', 'LIKE', "%{$search}%")
+                      ->orWhere('producto', 'LIKE', "%{$search}%")
+                      ->orWhere('descripcion', 'LIKE', "%{$search}%");
+            })
+            ->select('id', 'serial', 'producto', 'descripcion')
+            ->limit(20)
+            ->get();
+
+        return response()->json($insumos);
+    }
+
+    // 3. Procesar el formulario del carrito y generar el PDF
+    public function generarCodigosBarrasPdfMultiple(Request $request)
+    {
+        $items = $request->input('items', []); // Array de ['id' => X, 'hojas' => Y]
+
+        if (empty($items)) {
+            return back()->with('error', 'No hay insumos en la cola de impresión.');
+        }
+
+        $generator = new BarcodeGeneratorPNG();
+        $listaImpresion = [];
+
+        foreach ($items as $item) {
+            $insumo = DB::table('insumos')->where('id', $item['id'])->first();
+            if ($insumo) {
+                $barcodeBase64 = base64_encode(
+                    $generator->getBarcode($insumo->serial, $generator::TYPE_CODE_128)
+                );
+
+                // Cada "hoja" contiene 24 stickers del mismo insumo
+                $hojas = max(1, intval($item['hojas'] ?? 1));
+
+                for ($h = 0; $h < $hojas; $h++) {
+                    $listaImpresion[] = [
+                        'insumo' => $insumo,
+                        'barcodeBase64' => $barcodeBase64
+                    ];
+                }
+            }
+        }
+
+        $pdf = Pdf::loadView('inventario.insumos.pdf_barcode_multiple', compact('listaImpresion'))
+                  ->setPaper('letter', 'portrait');
+
+        return $pdf->stream("etiquetas_lote.pdf");
+    }
 }

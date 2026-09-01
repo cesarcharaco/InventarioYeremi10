@@ -79,6 +79,13 @@ Route::middleware(['auth'])->group(function () {
 
         Route::post('cambiar-estado', [InsumosController::class, 'cambiarEstadoInsumo'])->name('insumo.cambiarEstado');
         Route::get('{id}/barcode-pdf', [InsumosController::class, 'generarCodigoBarrasPdf'])->name('insumos.barcode_pdf');
+
+        // Vista del Carrito de Etiquetas
+        Route::get('etiquetas', [InsumosController::class, 'etiquetasView'])->name('insumos.etiquetas');
+        // Búsqueda AJAX para el autocompletado del buscador
+        Route::get('buscar-ajax', [InsumosController::class, 'buscarInsumosAjax'])->name('insumos.buscar_ajax');
+        // Generación del PDF Múltiple
+        Route::post('barcode-pdf-multiple', [InsumosController::class, 'generarCodigosBarrasPdfMultiple'])->name('insumos.barcode_pdf_multiple');
     });
 
     // 3. Resource estándar de Insumos

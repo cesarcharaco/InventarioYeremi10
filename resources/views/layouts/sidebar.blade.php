@@ -47,6 +47,13 @@
                                 <p>Inventario</p>
                             </a>
                         </li>
+                        {{-- NUEVO ENLACE: Carrito de Etiquetas --}}
+                        <li class="nav-item">
+                            <a href="{{ route('insumos.etiquetas') }}" class="nav-link {{ Request::routeIs('insumos.etiquetas') ? 'active' : '' }}">
+                                <i class="fas fa-barcode nav-icon"></i>
+                                <p>Impresión de Etiquetas</p>
+                            </a>
+                        </li>
                         {{-- Solo perfiles autorizados para ver costos --}}
                         @can('ver-costos')
                         <li class="nav-item">

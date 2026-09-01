@@ -26,6 +26,9 @@
             <a class="btn btn-primary icon-btn pull-right" href="{{ route('insumos.create') }}">
               <i class="fa fa-plus"></i> Registrar insumo
             </a>
+            <a class="btn btn-dark icon-btn pull-right mr-2" href="{{ route('insumos.etiquetas') }}">
+              <i class="fa fa-barcode"></i> Carrito de Etiquetas
+            </a>
           </h2>
         </div>
         <div class="basic-tb-hd text-center">
