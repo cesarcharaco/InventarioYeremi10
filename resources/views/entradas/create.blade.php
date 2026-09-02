@@ -8,8 +8,30 @@
             <h1 class="m-0 text-dark"><i class="fas fa-cart-plus mr-2 text-primary"></i>Nueva Entrada</h1>
         </div>
     </div>
+
 @endsection
 
+@section('css')
+
+<style>
+    /* Forzar la altura y padding del Select2 para que coincida con los form-control */
+    .select2-container--default .select2-selection--single {
+        height: calc(2.25rem + 2px) !important;
+        padding: 0.375rem 0.75rem !important;
+        border: 1px solid #ced4da !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 1.5 !important;
+        padding-left: 0 !important;
+        color: #495057;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: calc(2.25rem + 2px) !important;
+        top: 0 !important;
+        right: 5px !important;
+    }
+</style>
+@endsection
 @section('content')
     @include('layouts.partials.flash-messages')
 
@@ -150,36 +172,59 @@
     let totalGeneral = 0;
 
     $(document).ready(function() {
-        // Inicializar Select2 con Template Personalizado
-        $('#select_insumo').select2({
-            placeholder: "Busque un insumo por nombre o descripción...",
-            allowClear: true,
-            templateResult: formatInsumo, // Cómo se ve en la lista desplegable
-        });
+       // Función de coincidencia personalizada para buscar por producto y descripción
+           function customMatcher(params, data) {
+               if ($.trim(params.term) === '') {
+                   return data;
+               }
 
-        // Función para dar formato a las opciones en la lista
-        function formatInsumo (insumo) {
-            if (!insumo.id) { return insumo.text; } // Si es el placeholder
+               if (typeof data.id === 'undefined') {
+                   return null;
+               }
 
-            // Obtenemos la descripción desde el data-attribute
-            let descripcion = $(insumo.element).data('descripcion') || 'Sin descripción';
-            
-            // Creamos un diseño HTML para la opción
-            let $insumo = $(
-                '<span>' +
-                    '<strong class="text-primary">' + insumo.text + '</strong><br>' +
-                    '<small class="text-muted"><i class="fas fa-info-circle mr-1"></i>' + descripcion + '</small>' +
-                '</span>'
-            );
-            
-            return $insumo;
-        };
-        // Al elegir un insumo, sugerir su costo actual
-        $('#select_insumo').on('change', function() {
-            let costo = $(this).find(':selected').data('costo');
-            $('#input_costo').val(costo);
-            $('#input_cantidad').focus();
-        });
+               let term = params.term.toLowerCase();
+               let producto = $(data.element).text().toLowerCase();
+               let descripcion = ($(data.element).data('descripcion') || '').toLowerCase();
+
+               if (producto.indexOf(term) > -1 || descripcion.indexOf(term) > -1) {
+                   return data;
+               }
+
+               return null;
+           }
+
+           // Inicializar Select2 con Template Personalizado y el Matcher integrado
+           $('#select_insumo').select2({
+               placeholder: "Busque un insumo por nombre o descripción...",
+               allowClear: true,
+               templateResult: formatInsumo,
+               matcher: customMatcher
+           });
+
+           // Función para dar formato a las opciones en la lista
+           function formatInsumo (insumo) {
+               if (!insumo.id) { return insumo.text; } // Si es el placeholder
+
+               // Obtenemos la descripción desde el data-attribute
+               let descripcion = $(insumo.element).data('descripcion') || 'Sin descripción';
+               
+               // Creamos un diseño HTML para la opción
+               let $insumo = $(
+                   '<span>' +
+                       '<strong class="text-primary">' + insumo.text + '</strong><br>' +
+                       '<small class="text-muted"><i class="fas fa-info-circle mr-1"></i>' + descripcion + '</small>' +
+                   '</span>'
+               );
+               
+               return $insumo;
+           };
+
+           // Al elegir un insumo, sugerir su costo actual
+           $('#select_insumo').on('change', function() {
+               let costo = $(this).find(':selected').data('costo');
+               $('#input_costo').val(costo);
+               $('#input_cantidad').focus();
+           });
 
         // Botón Agregar Item
         $('#btnAgregarItem').click(function() {
