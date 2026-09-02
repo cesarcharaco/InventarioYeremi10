@@ -36,8 +36,9 @@
         <div class="col-sm-4 invoice-col">
             <strong class="text-primary">PROVEEDOR</strong>
             <address>
-                <b class="h5">{{ $entrada->proveedor->nombre }}</b><br>
-                RIF: {{ $entrada->proveedor->rif }}<br>
+                {{-- Ajusta 'nombre' si tu columna se llama 'razón_social' o similar --}}
+                <b class="h5">{{ $entrada->proveedor->nombre ?? $entrada->proveedor->razon_social ?? 'N/D' }}</b><br>
+                RIF: {{ $entrada->proveedor->rif ?? 'N/A' }}<br>
                 Teléfono: {{ $entrada->proveedor->telefono ?? 'N/A' }}<br>
                 Email: {{ $entrada->proveedor->email ?? 'N/A' }}
             </address>
@@ -45,15 +46,16 @@
         <div class="col-sm-4 invoice-col border-left border-right">
             <strong class="text-success">DEPÓSITO DESTINO</strong>
             <address>
-                <b class="h5 text-uppercase">{{ $entrada->local->nombre }}</b><br>
-                Tipo: <span class="badge badge-info">{{ $entrada->local->tipo }}</span><br>
+                <b class="h5 text-uppercase">{{ $entrada->local->nombre ?? 'N/D' }}</b><br>
+                Tipo: <span class="badge badge-info">{{ $entrada->local->tipo ?? 'N/A' }}</span><br>
                 Estado: <span class="text-success">Recibido</span>
             </address>
         </div>
         <div class="col-sm-4 invoice-col text-right">
             <b>Entrada ID: #{{ str_pad($entrada->id, 6, '0', STR_PAD_LEFT) }}</b><br>
             <br>
-            <b>Registrado por:</b> {{ $entrada->user->name }}<br>
+            {{-- CORREGIDO: Se cambia $entrada->user por $entrada->usuario para coincidir con el Controller --}}
+            <b>Registrado por:</b> {{ $entrada->usuario->name ?? 'N/A' }}<br>
             <b>Total de Items:</b> {{ $entrada->detalles->count() }}
         </div>
     </div>
@@ -73,9 +75,10 @@
                     @foreach($entrada->detalles as $detalle)
                     <tr>
                         <td class="text-bold">{{ number_format($detalle->cantidad, 2) }}</td>
-                        <td>{{ $detalle->insumo->nombre }}</td>
-                        <td class="text-right text-muted">$ {{ number_format($detalle->costo_unitario, 2) }}</td>
-                        <td class="text-right text-bold text-dark">$ {{ number_format($detalle->cantidad * $detalle->costo_unitario, 2) }}</td>
+                        {{-- Ajusta 'nombre' por 'producto' si tu modelo Insumo usa esa columna --}}
+                        <td>{{ $detalle->insumo->nombre ?? $detalle->insumo->producto ?? 'N/D' }}</td>
+                        <td class="text-right text-muted">$ {{ number_format($detalle->costo_unitario_usd, 2) }}</td>
+                        <td class="text-right text-bold text-dark">$ {{ number_format($detalle->cantidad * $detalle->costo_unitario_usd, 2) }}</td>
                     </tr>
                     @endforeach
                 </tbody>
@@ -95,7 +98,7 @@
                 <table class="table table-borderless">
                     <tr>
                         <th style="width:50%" class="h5">TOTAL CARGA:</th>
-                        <td class="text-right text-orange h4 text-bold">$ {{ number_format($entrada->total_usd, 2) }}</td>
+                        <td class="text-right text-orange h4 text-bold">$ {{ number_format($entrada->total_costo_usd, 2) }}</td>
                     </tr>
                 </table>
             </div>
@@ -119,7 +122,6 @@
 
 @section('css')
 <style>
-    /* Estilos para que se vea bien al imprimir en papel */
     @media print {
         .btn, .main-footer, .main-sidebar, .breadcrumb {
             display: none !important;

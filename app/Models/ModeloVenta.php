@@ -55,4 +55,9 @@ class ModeloVenta extends Model
         // Nota: Asegúrate que el modelo se llame Insumo (singular) o Insumos (plural)
         return $this->hasMany(Insumos::class, 'modelo_venta_id');
     }
+
+    public function historicosInsumosRecepcion()
+    {
+        return $this->hasMany(HistoricoInsumoRecepcion::class, 'id_modelo_venta_anterior');
+    }
 }

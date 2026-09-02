@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DetalleEntrada extends Model
 {
@@ -25,6 +26,16 @@ class DetalleEntrada extends Model
     // Relación con el Insumo (Producto)
     public function insumo(): BelongsTo
     {
-        return $this->belongsTo(Insumo::class, 'id_insumo');
+        return $this->belongsTo(Insumos::class, 'id_insumo');
+    }
+
+    public function recepcionBuffer(): HasOne
+    {
+        return $this->hasOne(InsumoRecepcion::class, 'id_detalle_entrada');
+    }
+
+    public function historicosRecepcion()
+    {
+        return $this->hasMany(HistoricoInsumoRecepcion::class, 'id_detalle_entrada');
     }
 }

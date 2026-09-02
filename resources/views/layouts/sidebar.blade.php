@@ -105,6 +105,13 @@
                                 <p>Nueva Entrada (Carga)</p>
                             </a>
                         </li>
+                        {{-- NUEVA OPCIÓN DE BANDEJA DE CUARENTENA / RECEPCIÓN --}}
+                        <li class="nav-item">
+                            <a href="{{ route('entradas.recepcion') }}" class="nav-link {{ Request::is('entradas/recepcion*') ? 'active' : '' }}">
+                                <i class="fas fa-boxes nav-icon text-warning"></i>
+                                <p>Recepción / Cuarentena</p>
+                            </a>
+                        </li>
                         @endcan
                     </ul>
                 </li>

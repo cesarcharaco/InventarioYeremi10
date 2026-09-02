@@ -68,4 +68,14 @@ class Insumos extends Model
     {
         return $this->hasMany(DespachoDetalles::class, 'id_insumo');
     }
+
+    public function enRecepcion(): HasMany
+    {
+        return $this->hasMany(InsumoRecepcion::class, 'id_insumo');
+    }
+
+    public function historicosRecepcion()
+    {
+        return $this->hasMany(HistoricoInsumoRecepcion::class, 'id_insumo');
+    }
 }

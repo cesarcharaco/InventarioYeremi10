@@ -17,7 +17,8 @@ class EntradaAlmacen extends Model
         'nro_orden_entrega',
         'fecha_entrada',
         'total_costo_usd',
-        'observaciones'
+        'observaciones',
+        'estado'
     ];
 
     // Relación con el Proveedor

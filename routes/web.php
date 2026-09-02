@@ -208,10 +208,18 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/', [EntradaController::class, 'index'])->name('entradas.index');
         Route::get('/crear', [EntradaController::class, 'create'])->name('entradas.create');
         Route::post('/guardar', [EntradaController::class, 'store'])->name('entradas.store');
+        
+        // Nueva ruta para la bandeja de pendientes de recepción (Almacén X10)
+        Route::get('/recepcion/pendientes', [EntradaController::class, 'pendientesRecepcion'])->name('entradas.recepcion');
+        // Nueva ruta para procesar/aprobar un ítem o lote de recepción
+        Route::post('/recepcion/{id}/procesar', [EntradaController::class, 'procesarRecepcion'])->name('entradas.procesar');
+        // Ruta para revertir una recepción fraccionada y unificar de nuevo
+        Route::delete('/recepcion/revertir/{id}', [EntradaController::class, 'revertirRecepcion'])->name('entradas.revertir');
+
         Route::get('/{id}', [EntradaController::class, 'show'])->name('entradas.show');
         Route::delete('/{id}/anular', [EntradaController::class, 'destroy'])->name('entradas.anular');
     });
-
+    
     Route::get('generar_reporte', [ReportesController::class, 'store'])->name('generar_reporte');
     Route::resource('reportes', ReportesController::class);
 

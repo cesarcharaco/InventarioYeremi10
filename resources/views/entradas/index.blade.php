@@ -57,7 +57,7 @@
                                     </span>
                                 </td>
                                 <td class="text-orange">
-                                    ${{ number_format($entrada->total_usd, 2) }}
+                                    ${{ number_format($entrada->total_costo_usd, 2) }}
                                 </td>
                                 <td>
                                     <small><i class="fas fa-user mr-1"></i> {{ $entrada->usuario->name }}</small>

@@ -65,4 +65,9 @@ class Local extends Model
     {
         return $this->ofertas()->where('estado', true)->first();
     }
+
+    public function recepcionesPendientes(): HasMany
+    {
+        return $this->hasMany(InsumoRecepcion::class, 'id_local')->where('estado', 'PENDIENTE');
+    }
 }
