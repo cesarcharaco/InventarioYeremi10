@@ -14,4 +14,9 @@ class Categoria extends Model
     {
         return $this->hasMany(Insumos::class, 'categoria_id');
     }
+    public function promocionReglas()
+    {
+        return $this->hasMany(PromocionRegla::class, 'referencia_id')
+                    ->where('alcance', 'categoria');
+    }
 }

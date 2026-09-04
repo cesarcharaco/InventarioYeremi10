@@ -70,4 +70,9 @@ class Local extends Model
     {
         return $this->hasMany(InsumoRecepcion::class, 'id_local')->where('estado', 'PENDIENTE');
     }
+
+    public function promocionReglas(): HasMany
+    {
+        return $this->hasMany(PromocionRegla::class, 'local_id');
+    }
 }

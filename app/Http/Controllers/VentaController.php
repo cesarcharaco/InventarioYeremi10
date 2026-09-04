@@ -18,6 +18,7 @@ use App\Models\ConfigOfertas;
 use App\Models\User;
 use App\Models\Configuracion;
 use App\Models\Correlativo;
+use App\Models\PromocionRegla;
 use App\Notifications\StockBajoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -84,7 +85,7 @@ class VentaController extends Controller
 }
 
     
-    public function create()
+public function create()
 {
     if (Gate::denies('operar-caja')) {
         return redirect()->back()->with('error', 'No tienes permiso.');
@@ -118,7 +119,7 @@ class VentaController extends Controller
         return redirect()->route('home')->with('error', 'Actualizando valor de TASA BCV');
     }
 
-    // --- NUEVO: Obtener el correlativo para la vista ---
+    // --- Obtener el correlativo para la vista ---
     $ultimo = DB::table('ventas_info_adicional')
                 ->whereNotNull('correlativo_nota')
                 ->orderBy('id', 'desc')
@@ -127,21 +128,39 @@ class VentaController extends Controller
     $siguiente = $ultimo ? (intval($ultimo->correlativo_nota) + 1) : 1;
     $correlativo_sugerido = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
 
-    // --- NUEVO: Definir descuentos permitidos ---
+    // --- Definir descuentos permitidos ---
     $descuentos = [10, 15, 20, 25, 30, 35, 40, 45, 50];
 
-    // Carga de productos (Insumos) con stock en el local actual
-    /*$productos = Insumos::with(['existencias' => function($q) use ($local) {
-        $q->where('id_local', $local->id);
-    }])->whereHas('existencias', function($q) use ($local) {
-        $q->where('id_local', $local->id)->where('cantidad', '>', 0);
-    })->get();*/
+    // Carga de productos (Insumos) con stock y cálculo de ofertas activas para el local actual
+    $hoy = Carbon::today();
+    
     $productos = Insumos::with(['existencias' => function($q) use ($local) {
         $q->where('id_local', $local->id);
     }])
+    ->leftJoin('promociones_reglas as pr', function($join) use ($local, $hoy) {
+        $join->on('pr.local_id', '=', DB::raw($local->id))
+             ->where('pr.activo', '=', 1)
+             ->whereDate('pr.fecha_inicio', '<=', $hoy)
+             ->whereDate('pr.fecha_fin', '>=', $hoy)
+             ->where(function($q) {
+                 $q->where(function($sub) {
+                     $sub->where('pr.alcance', 'insumo')
+                         ->on('pr.referencia_id', '=', 'insumos.id');
+                 })->orWhere(function($sub) {
+                     $sub->where('pr.alcance', 'categoria')
+                         ->on('pr.referencia_id', '=', 'insumos.categoria_id');
+                 });
+             });
+    })
     ->whereHas('existencias', function($q) use ($local) {
         $q->where('id_local', $local->id)->where('cantidad', '>', 0);
     })
+    ->select(
+        'insumos.*',
+        DB::raw('COALESCE(pr.porcentaje_descuento, 0) as porcentaje_descuento'),
+        DB::raw('CASE WHEN pr.id IS NOT NULL THEN 1 ELSE 0 END as en_oferta'),
+        DB::raw('CASE WHEN pr.id IS NOT NULL THEN insumos.precio_venta_usd - (insumos.precio_venta_usd * pr.porcentaje_descuento / 100) ELSE insumos.precio_venta_usd END as precio_oferta')
+    )
     ->get();
 
     $clientes = Cliente::where('activo', 'activo')

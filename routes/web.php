@@ -25,6 +25,9 @@ use App\Http\Controllers\MovimientoCajaController;
 use App\Http\Controllers\InsumosMayoresController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CorrelativoController;
+use App\Http\Controllers\PromocionReglaController;
+
+
 /*
 |-------------------------------------------------------------------------- 
 | Web Routes
@@ -264,7 +267,23 @@ Route::middleware(['auth'])->group(function () {
 
 
 
-    
+    // Rutas Web Protegidas por Autenticación (ejemplo estándar con prefijo/middleware)
+    Route::middleware(['auth'])->prefix('admin')->group(function () {
+        // Listado y almacenamiento
+        Route::get('/promociones', [PromocionReglaController::class, 'index'])->name('promociones.index');
+        Route::post('/promociones', [PromocionReglaController::class, 'store'])->name('promociones.store');
+        
+        // Obtener datos individuales para el modal de edición o detalles (AJAX)
+        Route::get('/promociones/{id}', [PromocionReglaController::class, 'show'])->name('promociones.show');
+        Route::get('/promociones/{id}/edit', [PromocionReglaController::class, 'edit'])->name('promociones.edit');
+        
+        // Actualizar y eliminar
+        Route::put('/promociones/{id}', [PromocionReglaController::class, 'update'])->name('promociones.update');
+        Route::delete('/promociones/{id}', [PromocionReglaController::class, 'destroy'])->name('promociones.destroy');
+        
+        // Cambio rápido de estado (Toggle AJAX)
+        Route::patch('/promociones/{id}/toggle', [PromocionReglaController::class, 'toggleActivo'])->name('promociones.toggle');
+    });
 
     Route::middleware(['auth'])->group(function () {
         Route::resource('correlativos', CorrelativoController::class);

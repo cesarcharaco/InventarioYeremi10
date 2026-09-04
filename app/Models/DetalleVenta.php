@@ -14,7 +14,10 @@ class DetalleVenta extends Model
         'id_insumo',
         'cantidad',
         'precio_unitario',
-        'subtotal'
+        'subtotal',
+        'promocion_regla_id',
+        'precio_unitario',
+        'porcentaje_descuento_aplicado'
     ];
 
     // Relación con la venta cabecera
@@ -27,5 +30,10 @@ class DetalleVenta extends Model
     public function insumo(): BelongsTo
     {
         return $this->belongsTo(Insumos::class, 'id_insumo');
+    }
+
+    public function promocionRegla()
+    {
+        return $this->belongsTo(PromocionRegla::class, 'promocion_regla_id');
     }
 }

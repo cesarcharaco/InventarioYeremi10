@@ -325,6 +325,14 @@
                         <p>Configuraciones <i class="right fas fa-angle-left"></i></p>
                     </a>
                     <ul class="nav nav-treeview">
+                        @can('gestionar-promociones')
+                        <li class="nav-item">
+                            <a href="{{ route('promociones.index') }}" class="nav-link {{ Request::is('admin/promociones*') ? 'active' : '' }}">
+                                <i class="fas fa-percent nav-icon text-success"></i>
+                                <p>Reglas de Promoción</p>
+                            </a>
+                        </li>
+                        @endcan
                         @can('gestionar-locales')
                         <li class="nav-item">
                             <a href="{{ route('local.index') }}" class="nav-link {{ Request::is('local*') ? 'active' : '' }}">

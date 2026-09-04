@@ -78,4 +78,10 @@ class Insumos extends Model
     {
         return $this->hasMany(HistoricoInsumoRecepcion::class, 'id_insumo');
     }
+
+    public function promocionReglas()
+    {
+        return $this->hasMany(PromocionRegla::class, 'referencia_id')
+                    ->where('alcance', 'insumo');
+    }
 }

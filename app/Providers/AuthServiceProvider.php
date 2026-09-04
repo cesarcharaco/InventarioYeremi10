@@ -286,5 +286,10 @@ class AuthServiceProvider extends ServiceProvider
         ]);
     });
 
+    Gate::define('gestionar-promociones', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+    });
+    
     }
+
 }
