@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PromocionRegla;
 use App\Models\Categoria;
 use App\Models\Insumos;
-use App\Models\local;
+use App\Models\Local;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
