@@ -51,11 +51,11 @@ class Credito extends Model
     /**
      * Un crédito tiene muchos abonos realizados a lo largo del tiempo.
      */
-    public function abonos(): HasMany
+    public function abonos()
     {
-        return $this->hasMany(AbonoCredito::class, 'id_credito');
+        return $this->belongsToMany(AbonoCredito::class, 'abono_detalles', 'id_credito', 'id_abono')
+                  ->withPivot('monto_aplicado_usd');
     }
-
     // --- LÓGICA DE APOYO (Opcional pero recomendada) ---
 
     /**

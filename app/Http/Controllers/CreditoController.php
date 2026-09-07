@@ -782,7 +782,7 @@ class CreditoController extends Controller
         return $caja->id;
     }
 
-    public function listarProductos($id) 
+    public function listarProductos($id)  
     {
         $cliente = Cliente::findOrFail($id);
         
@@ -790,12 +790,23 @@ class CreditoController extends Controller
             ->whereIn('estado', ['pendiente', 'anticipo']) 
             ->with([
                 'venta.detalles.insumo', 
-                'detallesAbono.abono' => function($q) {
-                    $q->orderBy('created_at', 'asc');
+                'abonos' => function($q) {
+                    $q->where('estado', 'Realizado')
+                      ->orderBy('abonos_credito.created_at', 'asc');
+                },
+                'intereses' => function($q) {
+                    $q->where('estado', 'aplicado');
                 }
             ])
             ->orderBy('created_at', 'asc')
             ->get();
+        
+        // Asignamos el valor del pivot a la propiedad que la vista ya está consumiendo
+        foreach ($creditos as $credito) {
+            foreach ($credito->abonos as $abono) {
+                $abono->monto_pagado_usd = $abono->pivot->monto_aplicado_usd;
+            }
+        }
         
         return view('creditos.productos', compact('cliente', 'creditos'));
     }
@@ -804,30 +815,30 @@ class CreditoController extends Controller
     {
         $cliente = Cliente::findOrFail($cliente_id);
 
+        // Cargamos los créditos con la relación abonos configurada como belongsToMany
         $creditos = Credito::where('id_cliente', $cliente_id)
             ->whereIn('estado', ['pendiente', 'anticipo'])
+            ->with([
+                'venta.detalles.insumo',
+                'intereses' => function($q) {
+                    $q->where('estado', 'aplicado');
+                },
+                'abonos' => function($q) {
+                    $q->where('abonos_credito.estado', 'Realizado');
+                }
+            ])
             ->get();
 
         $creditosIds = $creditos->pluck('id');
 
-        // Historial global de cabeceras de abonos
-        $historialAbonos = AbonoCredito::where('id_cliente', $cliente_id)
-            ->with(['usuario', 'caja', 'detalles.credito'])
-            ->orderBy('created_at', 'desc')
-            ->get();
-
         $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
-            ->with(['administrador', 'credito'])
-            ->orderBy('aplicado_en', 'desc')
+            ->where('estado', 'aplicado')
             ->get();
 
         $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
-        
-        $totalIntereses = $historialIntereses
-            ->where('estado', 'aplicado')
-            ->sum('monto_interes');
+        $totalIntereses = $historialIntereses->sum('monto_interes');
 
-        // Suma total de abonos imputados a los créditos mediante AbonoDetalle
+        // Sumatoria exacta desde la tabla pivote abono_detalles[cite: 10]
         $totalAbonado = AbonoDetalle::whereIn('id_credito', $creditosIds)
             ->whereHas('abono', function($q) {
                 $q->where('estado', 'Realizado');
@@ -857,8 +868,6 @@ class CreditoController extends Controller
             'cliente',
             'creditos',
             'resumen',
-            'historialAbonos',
-            'historialIntereses',
             'empresa'
         ));
 
@@ -866,7 +875,7 @@ class CreditoController extends Controller
 
         return $pdf->stream("Estado_Cuenta_{$cliente->identificacion}.pdf");
     }
-
+    
     public function storeDirecto(Request $request, $cliente_id)
     {
         $request->validate([
