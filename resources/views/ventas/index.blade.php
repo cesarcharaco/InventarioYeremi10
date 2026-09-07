@@ -50,6 +50,7 @@
             <table class="table table-hover table-bordered" id="tabla-ventas">
               <thead>
                 <tr class="bg-primary text-white">
+                  <th class="d-none">Timestamp</th> {{-- Columna oculta 0 para orden cronológico exacto --}}
                   <th>Fecha/Hora</th>
                   <th>Factura</th>
                   <th>Cliente</th>
@@ -64,6 +65,7 @@
               <tbody>
                 @foreach($ventas as $v)
                 <tr>
+                  <td class="d-none">{{ $v->created_at->timestamp }}</td> {{-- Valor numérico oculto --}}
                   <td>{{ $v->created_at->format('d/m/Y h:i A') }}</td>
                   <td><span class="badge badge-secondary">{{ $v->codigo_factura }}</span></td>
                   <td><strong>{{ $v->cliente->nombre }}</strong></td>
@@ -106,47 +108,78 @@
 
 @section('scripts')
 <script type="text/javascript">
-  $(document).ready(function () {
-    // Usamos exactamente tu objeto de lenguaje de Insumos
-    var lenguajeEspanol = {
-        "decimal": "",
-        "emptyTable": "No hay información",
-        "info": "Mostrando _START_ a _END_ de _TOTAL_ entradas",
-        "infoEmpty": "Mostrando 0 a 0 de 0 entradas",
-        "infoFiltered": "(Filtrado de _MAX_ entradas totales)",
-        "thousands": ",",
-        "lengthMenu": "Mostrar _MENU_ entradas",
-        "loadingRecords": "Cargando...",
-        "processing": "Procesando...",
-        "search": "Buscar:",
-        "zeroRecords": "Sin resultados encontrados",
-        "paginate": { "first": "Primero", "last": "Último", "next": "Siguiente", "previous": "Anterior" }
-    };
+ $(document).ready(function () {
+     var lenguajeEspanol = {
+         "decimal": "",
+         "emptyTable": "No hay información",
+         "info": "Mostrando _START_ a _END_ de _TOTAL_ entradas",
+         "infoEmpty": "Mostrando 0 a 0 de 0 entradas",
+         "infoFiltered": "(Filtrado de _MAX_ entradas totales)",
+         "thousands": ",",
+         "lengthMenu": "Mostrar _MENU_ entradas",
+         "loadingRecords": "Cargando...",
+         "processing": "Procesando...",
+         "search": "Buscar:",
+         "zeroRecords": "Sin resultados encontrados",
+         "paginate": { "first": "Primero", "last": "Último", "next": "Siguiente", "previous": "Anterior" }
+     };
 
-    try {
-        $('#tabla-ventas').DataTable({
-            "responsive": true,
-            "language": lenguajeEspanol,
-            "destroy": true,
-            "order": [[ 0, "desc" ]] // Ordenar por fecha reciente
-        });
-    } catch (e) { console.log("Error en DataTable Ventas: ", e); }
-  });
+     try {
+         $('#tabla-ventas').DataTable({
+             "responsive": true,
+             "language": lenguajeEspanol,
+             "destroy": true,
+             "order": [[ 0, "desc" ]], // Ordena estrictamente por el timestamp numérico descendente
+             "columnDefs": [
+                 { "targets": 0, "visible": false, "searchable": false } // Oculta la columna del timestamp
+             ]
+         });
+     } catch (e) { console.log("Error en DataTable Ventas: ", e); }
+   });
 
-  function confirmarAnulacion(id) {
-    Swal.fire({
-        title: '¿Anular esta venta?',
-        text: "El stock se reintegrará automáticamente.",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        confirmButtonText: 'Sí, anular',
-        cancelButtonText: 'Cancelar'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = "{{ url('ventas/anular') }}/" + id;
-        }
-    });
-  }
+   function confirmarAnulacion(id) {
+       Swal.fire({
+           title: '¿Anular esta venta?',
+           text: "El stock se reintegrará automáticamente.",
+           icon: 'warning',
+           showCancelButton: true,
+           confirmButtonColor: '#d33',
+           confirmButtonText: 'Sí, anular',
+           cancelButtonText: 'Cancelar'
+       }).then((result) => {
+           if (result.isConfirmed) {
+               fetch(`/ventas/${id}/anular`, {
+                   method: 'POST',
+                   headers: {
+                       'Content-Type': 'application/json',
+                       'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                   }
+               })
+               .then(async response => {
+                   const data = await response.json();
+                   if (!response.ok) {
+                       throw new Error(data.message || 'Ocurrió un error en el servidor.');
+                   }
+                   return data;
+               })
+               .then(data => {
+                   Swal.fire({
+                       title: '¡Anulada!',
+                       text: data.message,
+                       icon: 'success'
+                   }).then(() => {
+                       window.location.reload(); // Recarga la página para reflejar los cambios
+                   });
+               })
+               .catch(error => {
+                   Swal.fire({
+                       title: 'Error',
+                       text: error.message,
+                       icon: 'error'
+                   });
+               });
+           }
+       });
+   }
 </script>
 @endsection

@@ -121,10 +121,11 @@ public function create()
 
     // --- Obtener el correlativo para la vista ---
     $ultimo = DB::table('ventas_info_adicional')
-                ->whereNotNull('correlativo_nota')
-                ->orderBy('id', 'desc')
-                ->first();
-    
+            ->where('tipo_documento', 'nota_entrega')
+            ->whereNotNull('correlativo_nota')
+            ->orderBy('id', 'desc')
+            ->first();
+
     $siguiente = $ultimo ? (intval($ultimo->correlativo_nota) + 1) : 1;
     $correlativo_sugerido = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
 
@@ -231,13 +232,24 @@ public function create()
 
         DB::beginTransaction();
         try {
-            $correlativoFiscal = null; // Variable para almacenar el objeto en caso de ser factura
+            $correlativoFiscal = null; 
+            $correlativoNota = null;
 
             // 1. Determinar el código (Factura, Nota de Entrega o Sin Documento)
             if ($request->tipo_documento === 'nota_entrega') {
                 
-                $codigo = 'NE-' . $request->correlativo_nota;
+                // Buscar y bloquear exclusivamente el último correlativo de tipo nota_entrega
+                $ultimoNota = DB::table('ventas_info_adicional')
+                    ->where('tipo_documento', 'nota_entrega')
+                    ->whereNotNull('correlativo_nota')
+                    ->orderBy('id', 'desc')
+                    ->lockForUpdate()
+                    ->first();
+            
+                $siguiente = $ultimoNota ? (intval($ultimoNota->correlativo_nota) + 1) : 1;
+                $correlativoNota = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
 
+                $codigo = 'NE-' . $correlativoNota;
             } elseif ($request->tipo_documento === 'factura') {
                 
                 // Buscar el siguiente correlativo fiscal disponible con bloqueo de fila
@@ -284,8 +296,8 @@ public function create()
             // 3. Extensión de información (Tabla: ventas_info_adicional)
             $venta->infoAdicional()->create([
                 'tipo_documento'       => $request->tipo_documento,
-                'correlativo_nota'     => $request->tipo_documento === 'factura' ? $correlativoFiscal->numero_factura : $request->correlativo_nota,
-                'numero_control'       => $correlativoFiscal ? $correlativoFiscal->numero_control : null, // Guardamos también el # de control si existe la columna
+                'correlativo_nota' => $request->tipo_documento === 'factura' ? $correlativoFiscal->numero_factura : $correlativoNota,
+                'numero_control'       => $correlativoFiscal ? $correlativoFiscal->numero_control : null, 
                 'porcentaje_descuento' => $request->porcentaje_descuento ?? 0,
                 'monto_descuento_usd'  => $request->monto_descuento_usd ?? 0,
                 'base_imponible_bs'    => $request->base_imponible_bs ?? 0,
@@ -308,15 +320,15 @@ public function create()
             // 5. Detalles de Venta y Descuento de Stock
             foreach ($request->articulos as $item) {
                 $venta->detalles()->create([
-                    'id_insumo'       => $item['id_insumo'],
-                    'cantidad'        => $item['cantidad'],
-                    'precio_unitario' => $item['precio_unitario'],
-                    'subtotal'        => $item['cantidad'] * $item['precio_unitario']
+                    'id_insumo'        => $item['id_insumo'],
+                    'cantidad'         => $item['cantidad'],
+                    'precio_unitario'  => $item['precio_unitario'],
+                    'subtotal'         => $item['cantidad'] * $item['precio_unitario']
                 ]);
 
                 $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
-                                     ->where('id_local', $local->id)
-                                     ->first();
+                                       ->where('id_local', $local->id)
+                                       ->first();
 
                 if (!$existencia || $existencia->cantidad < $item['cantidad']) {
                     throw new \Exception("Stock insuficiente para: " . $item['nombre']);
@@ -593,4 +605,65 @@ public function create()
             return back()->with('error', 'Ocurrió un error al generar el presupuesto: ' . $e->getMessage());
         }
     } 
+
+    public function anular($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $venta = Venta::with(['detalles', 'credito', 'infoAdicional'])->findOrFail($id);
+
+            if ($venta->estado === 'anulada') {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Esta venta ya se encuentra anulada.'
+                ], 422);
+            }
+
+            // 1. Cambiar el estado de la venta
+            $venta->estado = 'anulada';
+            $venta->save();
+
+            // 2. Devolver el stock al local correspondiente
+            foreach ($venta->detalles as $detalle) {
+                $insumoCantidad = DB::table('insumos_has_cantidades')
+                    ->where('id_insumo', $detalle->id_insumo)
+                    ->where('id_local', $venta->id_local)
+                    ->first();
+
+                if ($insumoCantidad) {
+                    DB::table('insumos_has_cantidades')
+                        ->where('id', $insumoCantidad->id)
+                        ->increment('cantidad', $detalle->cantidad);
+                }
+            }
+
+            // 3. Manejar créditos asociados si existen
+            if ($venta->credito) {
+                // Eliminar o ajustar el crédito asociado a la venta anulada
+                $venta->credito->delete();
+            }
+
+            // 4. Liberar o anular correlativo de factura/nota si aplica
+            if ($venta->infoAdicional && $venta->infoAdicional->correlativo_nota) {
+                DB::table('correlativos')
+                    ->where('venta_id', $venta->id)
+                    ->update(['estado' => 'anulado', 'venta_id' => null]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Venta anulada exitosamente y stock devuelto al inventario.'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false, 
+                'message' => 'Ocurrió un error al anular la venta: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

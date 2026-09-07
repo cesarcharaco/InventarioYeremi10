@@ -46,7 +46,7 @@
                   @if($promocion->alcance == 'categoria')
                     {{ $promocion->referencia->categoria ?? 'N/A' }}
                   @else
-                    (<em>{{ $promocion->referencia->serial ?? '' }}</em>) {{ $promocion->referencia->producto."-".$promocion->referencia->descripcion ?? 'N/A' }} 
+                    {{ $promocion->referencia->producto ?? 'N/A' }} (<em>{{ $promocion->referencia->serial ?? '' }}</em>)
                   @endif
                 </td>
                 <td>

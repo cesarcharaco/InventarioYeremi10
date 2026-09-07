@@ -162,6 +162,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/ventas/solicitar-pin', [VentaController::class, 'solicitarPin'])->name('ventas.solicitar_pin');
         Route::post('/ventas/verificar-pin', [VentaController::class, 'verificarPin'])->name('ventas.verificar_pin');
         Route::post('/ventas/presupuesto', [VentaController::class, 'generarPresupuesto'])->name('ventas.presupuesto');
+        Route::post('ventas/{id}/anular', [VentaController::class, 'anular'])->name('ventas.anular');
         Route::resource('ventas', VentaController::class);
         Route::get('/ventas/proximo-correlativo-nota', [VentaController::class, 'getProximoCorrelativo'])->name('ventas.correlativo');
     });
