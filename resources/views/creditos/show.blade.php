@@ -261,9 +261,7 @@
                                         </td>
                                         <td class="text-center">
                                             <button type="button" 
-                                                    class="btn btn-danger btn-sm btn-eliminar-credito" 
-                                                    data-toggle="modal" 
-                                                    data-target="#modalEliminarCredito"
+                                                    class="btn btn-danger btn-sm btn-modal-eliminar-nuevo" 
                                                     data-id="{{ $credito->id }}"
                                                     data-codigo="{{ $esAnticipo ? 'ANT-' . $credito->id : ($credito->venta->codigo_factura ?? 'CRD-' . $credito->id) }}"
                                                     data-monto="{{ number_format($credito->monto_inicial, 2) }}"
@@ -290,12 +288,12 @@
                             <table class="table table-sm table-hover" id="tabla-historial-abonos">
                                 <thead class="thead-light">
                                     <tr>
-                                        <th>N° Recibo / Fecha</th>
-                                        <th>Cajero / Caja</th>
-                                        <th>Créditos Afectados</th>
-                                        <th class="text-right">Monto Total ($)</th>
-                                        <th>Forma de Pago</th>
-                                        <th>Detalles / Nota</th>
+                                        <th>Fecha / Hora</th>
+                                        <th>Cajero</th>
+                                        <th class="d-md-table-cell">#Crédito</th>
+                                        <th class="d-md-table-cell text-right">Monto ($)</th>
+                                        <th class="d-md-table-cell">Forma de Pago</th>
+                                        <th class="d-md-table-cell">Detalles</th>
                                         <th>Estado</th>
                                         @can('anular-abono') <th class="text-center">Acción</th> @endcan
                                     </tr>
@@ -303,36 +301,21 @@
                                 <tbody>
                                     @foreach($historialAbonos as $abono)
                                     @php
-                                        $montoTotal = $abono->monto_total_usd ?? 0;
-                                        $esReembolso = $montoTotal < 0;
+                                        $esReembolso = $abono->monto_pagado_usd < 0;
                                     @endphp
                                     <tr style="{{ $abono->estado === 'Anulado' ? 'opacity: 0.6; text-decoration: line-through;' : '' }}" class="{{ $esReembolso ? 'table-warning' : '' }}">
                                         <td class="small text-nowrap" data-order="{{ $abono->created_at->timestamp }}">
-                                            <strong>#{{ str_pad($abono->id, 6, '0', STR_PAD_LEFT) }}</strong><br>
-                                            <span class="text-muted">{{ $abono->created_at->format('d/m/Y h:i A') }}</span>
+                                            {{ $abono->created_at->format('d/m/Y h:i A') }}
                                         </td>
+                                        <td>{{ $abono->usuario->name ?? 'N/A' }}</td>
                                         <td>
-                                            <small class="d-block font-weight-bold">{{ $abono->usuario->name ?? 'N/A' }}</small>
-                                            @if($abono->caja)
-                                                <small class="text-muted"><i class="fa fa-cash-register"></i> {{ $abono->caja->nombre ?? 'Caja' }}</small>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            <div class="d-flex flex-wrap" style="gap: 4px;">
-                                                @forelse($abono->getRelation('detalles') ?? [] as $detalle)
-                                                    <span class="badge badge-light border" title="Monto aplicado al crédito: ${{ number_format($detalle->monto_aplicado_usd, 2) }}">
-                                                        #{{ $detalle->id_credito }} (${{ number_format($detalle->monto_aplicado_usd, 2) }})
-                                                    </span>
-                                                @empty
-                                                    <span class="badge badge-secondary">Sin desglose</span>
-                                                @endforelse
-                                            </div>
+                                            <span class="badge badge-light border">ID: {{ $abono->id_credito }}</span>
                                         </td>
                                         <td class="font-weight-bold text-right {{ $esReembolso ? 'text-danger' : 'text-success' }}" style="font-variant-numeric: tabular-nums;">
-                                            {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoTotal), 2) }}
+                                            {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_pagado_usd), 2) }}
                                         </td>
                                         <td>
-                                            <div class="d-flex flex-wrap" style="gap: 2px;">
+                                            <div class="d-flex flex-wrap gap-1">
                                                 @if(($abono->pago_usd_efectivo ?? 0) > 0)
                                                     <small class="badge badge-light border">Efe $: {{ number_format($abono->pago_usd_efectivo, 2) }}</small>
                                                 @endif
@@ -350,41 +333,24 @@
                                                 @endif
                                             </div>
                                         </td>
-                                        <td>
-                                            <small class="text-muted">{{ $abono->getAttribute('detalles') ?? 'Abono general' }}</small>
-                                        </td>
+                                        <td><small class="text-muted">{{ $abono->detalles ?? 'N/A' }}</small></td>
                                         <td>
                                             <span class="badge badge-{{ $abono->estado === 'Realizado' ? 'success' : 'danger' }}">
                                                 {{ $abono->estado }}
                                             </span>
                                         </td>
+                                        @can('anular-abono')
                                         <td class="text-center">
-                                            <div class="btn-group" role="group">
-                                                {{-- BOTÓN EDITAR --}}
-                                                @can('editar-abono')
-                                                    @if($abono->estado === 'Realizado' && !$esReembolso)
-                                                        <button type="button"
-                                                                class="btn btn-sm btn-outline-warning"
-                                                                onclick="editarAbono({{ $abono->id }})"
-                                                                title="Editar Abono">
-                                                            <i class="fa fa-edit text-dark" style="opacity: 1;"></i>
-                                                        </button>
-                                                    @endif
-                                                @endcan
-
-                                                {{-- BOTÓN ANULAR --}}
-                                                @can('anular-abono')
-                                                    @if($abono->estado === 'Realizado' && !$esReembolso)
-                                                        <button type="button"
-                                                                class="btn btn-sm btn-outline-danger"
-                                                                onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($montoTotal, 2) }}')"
-                                                                title="Anular Abono">
-                                                            <i class="fa fa-ban text-danger" style="opacity: 1;"></i>
-                                                        </button>
-                                                    @endif
-                                                @endcan
-                                            </div>
+                                            @if($abono->estado === 'Realizado' && !$esReembolso)
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-danger"
+                                                        onclick="confirmarAnulacion('{{ route('abonos.anular', $abono->id) }}', '{{ number_format($abono->monto_pagado_usd, 2) }}')"
+                                                        title="Anular Abono">
+                                                    <i class="fa fa-ban"></i>
+                                                </button>
+                                            @endif
                                         </td>
+                                        @endcan
                                     </tr>
                                     @endforeach
                                 </tbody>
@@ -450,7 +416,6 @@
 </main>
 
 @include('creditos.modals.abono_modal')
-@include('creditos.modals.modalEditarAbono')
 @include('creditos.modals.modal_anular_abono')
 @include('creditos.modals.modal_anular_interes')
 @include('creditos.modals.modal_gestion_saldo')
@@ -505,25 +470,22 @@
         }
 
         if ($('#tabla-creditos').length) {
-            if ($.fn.DataTable.isDataTable('#tabla-creditos')) {
-                $('#tabla-creditos').DataTable().destroy();
+            if (!$.fn.DataTable.isDataTable('#tabla-creditos')) {
+                $('#tabla-creditos').DataTable({
+                    pageLength: 5,
+                    lengthMenu: [5, 10, 20],
+                    responsive: true,
+                    autoWidth: false,
+                    language: {
+                        search: "Buscar:",
+                        paginate: { next: "Sig", previous: "Ant" },
+                        info: "Mostrando _START_ a _END_ de _TOTAL_ créditos",
+                        emptyTable: "No hay créditos registrados para este cliente."
+                    },
+                    dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
+                    order: [[0, 'desc']]
+                });
             }
-
-            $('#tabla-creditos').DataTable({
-                destroy: true,
-                pageLength: 5,
-                lengthMenu: [5, 10, 20],
-                responsive: true,
-                autoWidth: false,
-                language: {
-                    search: "Buscar:",
-                    paginate: { next: "Sig", previous: "Ant" },
-                    info: "Mostrando _START_ a _END_ de _TOTAL_ créditos",
-                    emptyTable: "No hay créditos registrados para este cliente."
-                },
-                dom: '<"row"<"col-sm-12"f>>t<"row"<"col-sm-12"p>>',
-                order: [[0, 'desc']]
-            });
         }
 
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
@@ -868,30 +830,40 @@
         $('#modalCreditoDirecto').modal('show');
     }
 
-    $(document).ready(function() {
-        $('.btn-eliminar-credito').on('click', function() {
-            var id = $(this).data('id');
-            var codigo = $(this).data('codigo');
-            var monto = $(this).data('monto');
-            var saldo = $(this).data('saldo');
-            var tieneProductos = $(this).data('tieneproductos');
+    console.log("Cargado correctamente el script de eliminación.");
 
-            var actionUrl = "{{ url('creditos') }}/" + id;
-            $('#formEliminarCredito').attr('action', actionUrl);
+        $(document).off('click', '.btn-modal-eliminar-nuevo').on('click', '.btn-modal-eliminar-nuevo', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            console.log("¡Click detectado!");
+
+            var $btn = $(this);
+
+            var id = $btn.attr('data-id');
+            var codigo = $btn.attr('data-codigo');
+            var monto = $btn.attr('data-monto');
+            var saldo = $btn.attr('data-saldo');
+            var tieneProductos = $btn.attr('data-tieneproductos');
+
+            console.log("Datos extraídos:", { id, codigo, monto, saldo, tieneProductos });
+
+            $('#formEliminarCredito').attr('action', "{{ url('creditos') }}/" + id);
 
             $('#eliminar_credito_codigo').text(codigo);
             $('#eliminar_credito_monto').text(monto);
             $('#eliminar_credito_saldo').text(saldo);
 
-            if (tieneProductos == '1') {
+            if (tieneProductos === '1') {
                 $('#msg_retorno_stock').removeClass('d-none');
                 $('#msg_credito_directo').addClass('d-none');
             } else {
                 $('#msg_credito_directo').removeClass('d-none');
                 $('#msg_retorno_stock').addClass('d-none');
             }
+
+            $('#modalEliminarCredito').modal('show');
         });
-    });
 
     document.addEventListener('DOMContentLoaded', function () {
         // 1. Tasa BCV desde Laravel
@@ -990,203 +962,5 @@
             return false;
         }
     });
-
-    function editarAbono(id) {
-        $.ajax({
-            url: `/creditos/abonos/${id}/editar`,
-            type: 'GET',
-            dataType: 'json',
-            success: function(data) {
-                if (data.success) {
-                    let abono = data.abono;
-
-                    $('#edit_abono_id').text(abono.id);
-                    $('#edit_nombre_cliente').text(abono.nombre_cliente);
-                    $('#edit_fecha_abono').val(abono.fecha_abono);
-                    
-                    // El backend debe devolver 'detalles' (nombre de la columna en BD)
-                    // o mapearlo como 'referencia' en el JSON
-                    $('#edit_referencia').val(abono.detalles || abono.referencia || '');
-                    
-                    // Monto total es el de la cabecera
-                    $('#edit_monto_total_usd').val(parseFloat(abono.monto_total_usd).toFixed(2));
-                    
-                    // Desglose de métodos de pago (de la cabecera)
-                    $('#edit_pago_usd_efectivo').val(parseFloat(abono.pago_usd_efectivo || 0).toFixed(2));
-                    $('#edit_pago_bs_efectivo').val(parseFloat(abono.pago_bs_efectivo || 0).toFixed(2));
-                    $('#edit_pago_punto_bs').val(parseFloat(abono.pago_punto_bs || 0).toFixed(2));
-                    $('#edit_pago_pagomovil_bs').val(parseFloat(abono.pago_pagomovil_bs || 0).toFixed(2));
-
-                    $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
-                    $('#error-desglose-edit').addClass('d-none');
-
-                    // Ejecutar validación de cuadre al cargar datos
-                    if (typeof validarCuadreMontosEdit === 'function') {
-                        validarCuadreMontosEdit();
-                    }
-
-                    $('#modalEditarAbono').modal('show');
-                }
-            },
-            error: function(err) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: err.responseJSON?.error || 'No se pudieron cargar los datos del abono.',
-                    confirmButtonColor: '#d33'
-                });
-            }
-        });
-    }
-
-    // =========================================================================
-    // VALIDACIÓN DE CUADRE PARA EDICIÓN (igual que registro)
-    // =========================================================================
-    function validarCuadreMontosEdit() {
-        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
-
-        function getNum(input) {
-            if (!input) return 0;
-            const val = parseFloat(input.value);
-            return isNaN(val) ? 0 : val;
-        }
-
-        const inputEditMontoTotal  = document.getElementById('edit_monto_total_usd');
-        const inputEditUsdEfectivo = document.getElementById('edit_pago_usd_efectivo');
-        const inputEditBsEfectivo  = document.getElementById('edit_pago_bs_efectivo');
-        const inputEditPuntoBs     = document.getElementById('edit_pago_punto_bs');
-        const inputEditPagoMovilBs = document.getElementById('edit_pago_pagomovil_bs');
-
-        const divErrorEdit  = document.getElementById('error-desglose-edit');
-        const btnSubmitEdit = document.querySelector('#formEditarAbono button[type="submit"]');
-
-        const montoObjetivoUSD = getNum(inputEditMontoTotal);
-        const usdEfectivo = getNum(inputEditUsdEfectivo);
-        const bsEfectivo  = getNum(inputEditBsEfectivo);
-        const puntoBs     = getNum(inputEditPuntoBs);
-        const pagoMovilBs = getNum(inputEditPagoMovilBs);
-
-        // Conversión igual que en el registro
-        const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
-        const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
-
-        const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
-        const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
-
-        if (estanCuadrados) {
-            if (divErrorEdit) divErrorEdit.classList.add('d-none');
-            if (btnSubmitEdit) btnSubmitEdit.disabled = false;
-        } else {
-            if (btnSubmitEdit) btnSubmitEdit.disabled = true;
-            if (divErrorEdit) {
-                divErrorEdit.classList.remove('d-none');
-                if (montoObjetivoUSD <= 0) {
-                    divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> El monto total debe ser mayor a cero.';
-                } else {
-                    divErrorEdit.innerHTML = `<i class="fa fa-exclamation-circle"></i> Discrepancia: desglose $${totalDesgloseUSD.toFixed(2)} vs monto $${montoObjetivoUSD.toFixed(2)}.`;
-                }
-            }
-        }
-    }
-
-    // =========================================================================
-    // EVENTOS DE VALIDACIÓN EN TIEMPO REAL
-    // =========================================================================
-    document.addEventListener('DOMContentLoaded', function () {
-        const inputsEdit = [
-            document.getElementById('edit_monto_total_usd'),
-            document.getElementById('edit_pago_usd_efectivo'),
-            document.getElementById('edit_pago_bs_efectivo'),
-            document.getElementById('edit_pago_punto_bs'),
-            document.getElementById('edit_pago_pagomovil_bs'),
-        ];
-
-        inputsEdit.forEach(input => {
-            if (!input) return;
-            ['keyup', 'input', 'change'].forEach(evt => {
-                input.addEventListener(evt, validarCuadreMontosEdit);
-            });
-            input.addEventListener('blur', function() {
-                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
-                    this.value = '0.00';
-                    validarCuadreMontosEdit();
-                }
-            });
-        });
-    });
-
-    // =========================================================================
-    // SUBMIT DEL FORMULARIO DE EDICIÓN
-    // =========================================================================
-    $(document).ready(function() {
-        $('#formEditarAbono').on('submit', function(e) {
-            e.preventDefault();
-
-            let form = this;
-
-            // Validar fecha
-            let fecha = $('#edit_fecha_abono').val();
-            if (!fecha) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Campo Requerido',
-                    text: 'Por favor, ingrese una fecha válida para el abono.',
-                    confirmButtonColor: '#f39c12'
-                });
-                return false;
-            }
-
-            // Validar monto > 0
-            let montoTotal = parseFloat($('#edit_monto_total_usd').val()) || 0;
-            if (montoTotal <= 0) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Monto inválido',
-                    text: 'El monto total del abono debe ser mayor a cero.',
-                    confirmButtonColor: '#f39c12'
-                });
-                return false;
-            }
-
-            // Validar cuadre (segunda capa de seguridad)
-            const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
-            let usdEfectivo = parseFloat($('#edit_pago_usd_efectivo').val()) || 0;
-            let bsEfectivo  = parseFloat($('#edit_pago_bs_efectivo').val()) || 0;
-            let puntoBs     = parseFloat($('#edit_pago_punto_bs').val()) || 0;
-            let pagomovilBs = parseFloat($('#edit_pago_pagomovil_bs').val()) || 0;
-            
-            let totalBsEnUsd = (bsEfectivo + puntoBs + pagomovilBs) / TASA_BCV;
-            let totalDesglose = usdEfectivo + totalBsEnUsd;
-            
-            if (Math.abs(montoTotal - totalDesglose) >= 0.01) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Desglose no cuadra',
-                    text: 'El desglose de pago no coincide con el monto total. Por favor verifique.',
-                    confirmButtonColor: '#f39c12'
-                });
-                return false;
-            }
-
-            // Confirmación
-            Swal.fire({
-                title: '¿Confirmar Edición?',
-                text: "Se recalcularán las deudas, anticipos y saldos a favor del cliente.",
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#f39c12',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fa fa-check"></i> Sí, actualizar',
-                cancelButtonText: 'Cancelar',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    form.submit();
-                }
-            });
-        });
-    });
-    
-    
 </script>
 @endsection

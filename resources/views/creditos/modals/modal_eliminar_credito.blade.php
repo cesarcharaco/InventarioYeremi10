@@ -18,9 +18,9 @@
                     <p class="mb-2">¿Está seguro de que desea eliminar permanentemente este crédito?</p>
                     
                     <div class="card bg-light p-3 mb-3 border">
-                        <small class="text-muted d-block"><strong>Referencia:</strong> <span id="eliminar_credito_codigo"></span></small>
-                        <small class="text-muted d-block"><strong>Monto Original:</strong> $<span id="eliminar_credito_monto"></span></small>
-                        <small class="text-muted d-block"><strong>Saldo Pendiente:</strong> $<span id="eliminar_credito_saldo"></span></small>
+                        <small class="text-muted d-block"><strong>Referencia:</strong> <span id="eliminar_credito_codigo" class="text-dark font-weight-bold">---</span></small>
+                        <small class="text-muted d-block"><strong>Monto Original:</strong> $<span id="eliminar_credito_monto" class="text-dark font-weight-bold">0.00</span></small>
+                        <small class="text-muted d-block"><strong>Saldo Pendiente:</strong> $<span id="eliminar_credito_saldo" class="text-dark font-weight-bold">0.00</span></small>
                     </div>
 
                     {{-- Mensaje dinámico según tenga productos o sea crédito directo --}}

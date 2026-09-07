@@ -973,7 +973,7 @@ class CargaCreditosHistoricosSeeder extends Seeder
                             [
                                 'created_at' => '2026-06-26 10:00:00',
                                 'productos' => [
-                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 25.00],
+                                    ['id_insumo' => 1, 'cantidad' => 1, 'precio_unitario' => 23.00],
                                     ['id_insumo' => 2, 'cantidad' => 1, 'precio_unitario' => 16.00],
                                     ['id_insumo' => 3, 'cantidad' => 1, 'precio_unitario' => 9.00],
                                     ['id_insumo' => 4, 'cantidad' => 1, 'precio_unitario' => 7.00],
