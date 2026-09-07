@@ -272,24 +272,28 @@
         @endphp
 
         @forelse($creditos as $credito)
-          @php 
-            $esAnticipo = ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0);
-            $venta = $credito->venta; 
-            $esCreditoDirecto = (!$venta || $venta->detalles->isEmpty());
+            @php 
+              $esAnticipo = ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0);
+              $venta = $credito->venta; 
+              $esCreditoDirecto = (!$venta || $venta->detalles->isEmpty());
 
-            if ($esAnticipo) {
-                $totalSaldoAFavor += abs($credito->saldo_pendiente);
-            } else {
-                $totalDebeGeneral += $credito->monto_inicial;
-                
-                $abonosValidos = $credito->abonos ? $credito->abonos->where('estado', 'Realizado') : collect();
-                $totalAbonoGeneral += $abonosValidos->sum('monto_pagado_usd');
+              if ($esAnticipo) {
+                  $totalSaldoAFavor += abs($credito->saldo_pendiente);
+              } else {
+                  $totalDebeGeneral += $credito->monto_inicial;
+                  
+                  // Se calculan los abonos válidos a través de la relación maestro-detalle
+                  $abonosValidos = $credito->abonoDetalles ? $credito->abonoDetalles->filter(function($d) {
+                      return $d->abono && $d->abono->estado === 'Realizado';
+                  }) : collect();
+                  
+                  $totalAbonoGeneral += $abonosValidos->sum('monto_aplicado_usd');
 
-                $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
-                $montoIntereses = $interesesAplicados->sum('monto_interes');
-                $totalInteresesGeneral += $montoIntereses;
-            }
-          @endphp
+                  $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
+                  $montoIntereses = $interesesAplicados->sum('monto_interes');
+                  $totalInteresesGeneral += $montoIntereses;
+              }
+            @endphp
 
           <!-- CABECERA DEL REGISTRO -->
           <tr class="{{ $esAnticipo ? 'bg-anticipo font-bold' : 'bg-light-gray font-bold' }}">
@@ -323,80 +327,83 @@
           </tr>
 
           <!-- CONTENIDO SEGÚN TIPO -->
-          @if($esAnticipo)
-            <tr>
-              <td class="pl-4 text-info"><em>Monto registrado a favor del cliente para futuros pagos</em></td>
-              <td></td>
-              <td class="text-right font-bold text-info">
-                +${{ number_format(abs($credito->saldo_pendiente), 2) }}
-              </td>
-              <td style="color: #666; font-size: 8.5px;">A favor / Excedente</td>
-            </tr>
-          @elseif(!$esCreditoDirecto)
-            @foreach($venta->detalles as $detalle)
+            @if($esAnticipo)
               <tr>
-                <td class="pl-4">
-                  • {{ $detalle->insumo->producto ?? 'Producto N/A' }}
-                  @if(!empty($detalle->insumo->serial))
-                    <span style="color: #666; font-size: 8px;">(S/N: {{ $detalle->insumo->serial }})</span>
-                  @endif
-                  <span style="color: #666; font-size: 8px;">x{{ $detalle->cantidad }}</span>
+                <td class="pl-4 text-info"><em>Monto registrado a favor del cliente para futuros pagos</em></td>
+                <td></td>
+                <td class="text-right font-bold text-info">
+                  +${{ number_format(abs($credito->saldo_pendiente), 2) }}
                 </td>
+                <td style="color: #666; font-size: 8.5px;">A favor / Excedente</td>
+              </tr>
+            @elseif(!$esCreditoDirecto)
+              @foreach($venta->detalles as $detalle)
+                <tr>
+                  <td class="pl-4">
+                    • {{ $detalle->insumo->producto ?? 'Producto N/A' }}
+                    @if(!empty($detalle->insumo->serial))
+                      <span style="color: #666; font-size: 8px;">(S/N: {{ $detalle->insumo->serial }})</span>
+                    @endif
+                    <span style="color: #666; font-size: 8px;">x{{ $detalle->cantidad }}</span>
+                  </td>
+                  <td class="text-right text-muted" style="font-size: 8.5px;">
+                    ${{ number_format($detalle->precio_unitario * $detalle->cantidad, 2) }}
+                  </td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              @endforeach
+            @else
+              <tr>
+                <td class="pl-4" style="color: #6f42c1; font-style: italic;">Préstamo / Cargo directo registrado en cuenta</td>
                 <td class="text-right text-muted" style="font-size: 8.5px;">
-                  ${{ number_format($detalle->precio_unitario * $detalle->cantidad, 2) }}
+                  ${{ number_format($credito->monto_inicial, 2) }}
                 </td>
                 <td></td>
                 <td></td>
               </tr>
-            @endforeach
-          @else
-            <tr>
-              <td class="pl-4" style="color: #6f42c1; font-style: italic;">Préstamo / Cargo directo registrado en cuenta</td>
-              <td class="text-right text-muted" style="font-size: 8.5px;">
-                ${{ number_format($credito->monto_inicial, 2) }}
-              </td>
-              <td></td>
-              <td></td>
-            </tr>
-          @endif
+            @endif
 
           @if(!$esAnticipo)
             {{-- INDEXACIONES --}}
-            @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
-              @foreach($interesesAplicados as $interes)
-                <tr class="bg-interes">
-                  <td class="pl-4" style="font-size: 8.5px;">
-                    <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
-                    <span style="color: #666;">({{ $interes->aplicado_en ? $interes->aplicado_en->format('d/m/Y') : '' }})</span>
-                  </td>
-                  <td class="text-right font-bold text-danger">
-                    +${{ number_format($interes->monto_interes, 2) }}
-                  </td>
-                  <td></td>
-                  <td style="color: #666; font-size: 8.5px;">Ajuste de valor aplicado</td>
-                </tr>
-              @endforeach
-            @endif
+                @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
+                  @foreach($interesesAplicados as $interes)
+                    <tr class="bg-interes">
+                      <td class="pl-4" style="font-size: 8.5px;">
+                        <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
+                        <span style="color: #666;">({{ $interes->aplicado_en ? $interes->aplicado_en->format('d/m/Y') : '' }})</span>
+                      </td>
+                      <td class="text-right font-bold text-danger">
+                        +${{ number_format($interes->monto_interes, 2) }}
+                      </td>
+                      <td></td>
+                      <td style="color: #666; font-size: 8.5px;">Ajuste de valor aplicado</td>
+                    </tr>
+                  @endforeach
+                @endif
 
             {{-- ABONOS --}}
-            @if(isset($credito->abonos))
-              @foreach($credito->abonos->where('estado', 'Realizado') as $abono)
-                @php $esReembolso = $abono->monto_pagado_usd < 0; @endphp
-                <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
-                  <td class="pl-4" style="font-size: 8.5px;">
-                    <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $abono->codigo_recibo ?? 'ABN-' . $abono->id }}
-                    <span style="color: #666;">({{ $abono->created_at->format('d/m/Y h:i A') }})</span>
-                  </td>
-                  <td></td>
-                  <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
-                    {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_pagado_usd), 2) }}
-                  </td>
-                  <td style="color: #666; font-size: 8.5px;">
-                    {{ $abono->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
-                  </td>
-                </tr>
-              @endforeach
-            @endif
+           @if(isset($credito->abonos))
+             @foreach($credito->abonos as $abono)
+               @php 
+                 $montoAplicado = $abono->pivot->monto_aplicado_usd;
+                 $esReembolso = $montoAplicado < 0; 
+               @endphp
+               <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
+                 <td class="pl-4" style="font-size: 8.5px;">
+                   <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> ABN-{{ $abono->id }}
+                   <span style="color: #666;">({{ $abono->created_at->format('d/m/Y h:i A') }})</span>
+                 </td>
+                 <td></td>
+                 <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
+                   {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoAplicado), 2) }}
+                 </td>
+                 <td style="color: #666; font-size: 8.5px;">
+                   {{ $abono->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
+                 </td>
+               </tr>
+             @endforeach
+           @endif
 
             <!-- SUBTOTAL PENDIENTE DE ESTE CRÉDITO -->
             <tr class="bg-subtotal">

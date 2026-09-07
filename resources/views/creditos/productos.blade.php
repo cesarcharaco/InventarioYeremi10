@@ -45,9 +45,6 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* ==========================================
-       ESTILOS DE ENCABEZADO FORMAL
-       ========================================== */
     .header-table {
         width: 100%;
         border-collapse: collapse;
@@ -129,7 +126,6 @@
 
     <div class="tile-body">
       
-      <!-- ENCABEZADO FORMAL CORPORATIVO -->
       <table class="header-table">
           <tr>
               <td style="width: 58%; vertical-align: top;">
@@ -183,18 +179,15 @@
                 } else {
                     $totalDebeGeneral += $credito->monto_inicial;
                     
-                    // Suma de abonos válidos (descontando anulados y procesando reembolsos)
-                    $abonosValidos = $credito->abonos->where('estado', 'Realizado');
+                    $abonosValidos = $credito->abonos;
                     $totalAbonoGeneral += $abonosValidos->sum('monto_pagado_usd');
 
-                    // Suma de intereses/indexaciones aplicadas
                     $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
                     $montoIntereses = $interesesAplicados->sum('monto_interes');
                     $totalInteresesGeneral += $montoIntereses;
                 }
               @endphp
 
-              <!-- CABECERA DEL REGISTRO -->
               <tr class="{{ $esAnticipo ? 'table-info font-weight-bold' : 'table-secondary font-weight-bold' }}">
                 <td>
                   @if($esAnticipo)
@@ -227,9 +220,7 @@
                 </td>
               </tr>
 
-              <!-- CONTENIDO SEGÚN TIPO DE REGISTRO -->
               @if($esAnticipo)
-                <!-- ANTICIPO / SALDO A FAVOR -->
                 <tr>
                   <td class="pl-4 text-info">
                     <em>Monto registrado a favor del cliente para futuros pagos</em>
@@ -241,7 +232,6 @@
                   <td class="small italic text-muted">A favor / Excedente</td>
                 </tr>
               @elseif(!$esCreditoDirecto)
-                <!-- VENTA CON PRODUCTOS -->
                 @foreach($venta->detalles as $detalle)
                   <tr>
                     <td class="pl-4">
@@ -259,7 +249,6 @@
                   </tr>
                 @endforeach
               @else
-                <!-- CRÉDITO DIRECTO -->
                 <tr>
                   <td class="pl-4 text-italic" style="color: #6f42c1;">
                     <em>Préstamo / Cargo directo registrado en cuenta</em>
@@ -273,7 +262,6 @@
               @endif
 
               @if(!$esAnticipo)
-                <!-- HISTORIAL DE INDEXACIONES / INTERESES -->
                 @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
                   @foreach($interesesAplicados as $interes)
                     <tr class="table-warning">
@@ -291,8 +279,7 @@
                   @endforeach
                 @endif
 
-                <!-- HISTORIAL DE ABONOS -->
-                @foreach($credito->abonos->where('estado', 'Realizado') as $abono)
+                @foreach($credito->abonos as $abono)
                   @php $esReembolso = $abono->monto_pagado_usd < 0; @endphp
                   <tr class="{{ $esReembolso ? 'table-warning' : 'table-success' }}">
                     <td class="pl-4 small">
@@ -310,7 +297,6 @@
                   </tr>
                 @endforeach
 
-                <!-- SUBTOTAL DE DEUDA RESTANTE DE ESTE CRÉDITO -->
                 <tr class="bg-light">
                   <td class="text-right font-weight-bold small text-uppercase">SALDO PENDIENTE ESTE CRÉDITO:</td>
                   <td colspan="2" class="text-right font-weight-bold {{ $credito->saldo_pendiente > 0 ? 'text-danger' : 'text-success' }} tabular-nums">
@@ -320,7 +306,6 @@
                 </tr>
               @endif
 
-              <!-- SEPARADOR -->
               <tr><td colspan="4" class="bg-white p-1"></td></tr>
 
             @empty
@@ -334,7 +319,6 @@
 
           </tbody>
 
-          <!-- PIE DE PÁGINA CON RESUMEN FINANCIERO CONSOLIDADO -->
           @if($creditos->isNotEmpty())
           @php
             $deudaTotalGeneral = $totalDebeGeneral + $totalInteresesGeneral;
