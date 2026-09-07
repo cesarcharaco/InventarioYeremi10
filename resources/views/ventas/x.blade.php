@@ -1,3 +1,26 @@
+ALTER TABLE `detalle_ventas` 
+ADD COLUMN `promocion_regla_id` BIGINT UNSIGNED NULL AFTER `id_insumo`,
+ADD COLUMN `porcentaje_descuento_aplicado` DECIMAL(5,2) NULL AFTER `precio_unitario`,
+ADD CONSTRAINT `detalle_ventas_promocion_regla_id_foreign` 
+FOREIGN KEY (`promocion_regla_id`) REFERENCES `promociones_reglas` (`id`) 
+ON DELETE SET NULL;
+
+CREATE TABLE `promociones_reglas` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `local_id` BIGINT UNSIGNED NOT NULL,
+  `nombre` VARCHAR(255) NOT NULL,
+  `alcance` ENUM('categoria', 'grupo', 'insumo') NOT NULL,
+  `referencia_id` BIGINT UNSIGNED NOT NULL,
+  `porcentaje_descuento` DECIMAL(5,2) NOT NULL,
+  `activo` TINYINT(1) NOT NULL DEFAULT 1,
+  `fecha_inicio` DATE NOT NULL,
+  `fecha_fin` DATE NOT NULL,
+  `created_at` TIMESTAMP NULL DEFAULT NULL,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL,
+  CONSTRAINT `fk_promociones_reglas_local` FOREIGN KEY (`local_id`) REFERENCES `local` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 @section('scripts')
 <script>
 $(document).ready(function() {
