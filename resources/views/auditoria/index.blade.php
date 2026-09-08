@@ -30,6 +30,30 @@
       </div>
     </div>
 
+    {{-- SECCIÓN DE FILTROS POR FECHA --}}
+    <div class="row mb-4 p-3 bg-light border rounded">
+      <div class="col-md-4">
+        <div class="form-group mb-0">
+          <label for="fecha_inicio" class="font-weight-bold">Fecha Desde:</label>
+          <input type="date" id="fecha_inicio" class="form-control">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="form-group mb-0">
+          <label for="fecha_fin" class="font-weight-bold">Fecha Hasta:</label>
+          <input type="date" id="fecha_fin" class="form-control">
+        </div>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="button" id="btnFiltrar" class="btn btn-primary mr-2">
+          <i class="fa fa-filter"></i> Filtrar
+        </button>
+        <button type="button" id="btnLimpiar" class="btn btn-secondary">
+          <i class="fa fa-undo"></i> Limpiar
+        </button>
+      </div>
+    </div>
+
     <div class="row">
       <div class="col-md-12">
         <div class="tile">
@@ -62,23 +86,23 @@
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title"><i class="fa fa-eye"></i> Detalles del Registro de Auditoría</h5>
+        <h5 class="modal-title"><i class="fa fa-exchange-alt"></i> Comparativa de Cambios en el Registro</h5>
         <button class="close text-white" type="button" data-dismiss="modal"><span>×</span></button>
       </div>
       <div class="modal-body">
-        <div class="row">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="font-weight-bold text-danger">Valores Anteriores:</label>
-              <pre id="det_valores_anteriores" class="bg-light p-3 border rounded" style="white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto;"></pre>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="font-weight-bold text-success">Valores Nuevos:</label>
-              <pre id="det_valores_nuevos" class="bg-light p-3 border rounded" style="white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto;"></pre>
-            </div>
-          </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped" id="tabla-comparativa-audit" style="width: 100%;">
+            <thead>
+              <tr class="bg-dark text-white">
+                <th>Campo Modificado</th>
+                <th class="text-danger">Valor Anterior</th>
+                <th class="text-success">Valor Nuevo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Se llena dinámicamente con JavaScript -->
+            </tbody>
+          </table>
         </div>
       </div>
       <div class="modal-footer">
@@ -87,6 +111,7 @@
     </div>
   </div>
 </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -94,7 +119,7 @@
   $(document).ready(function () {
     var lenguajeEspanol = {
         "decimal": "",
-        "emptyTable": "No hay información de auditoría disponible",
+        "emptyTable": "No hay información de auditoría disponible para este rango de fechas",
         "info": "Mostrando _START_ a _END_ de _TOTAL_ entradas",
         "infoEmpty": "Mostrando 0 a 0 de 0 entradas",
         "infoFiltered": "(Filtrado de _MAX_ entradas totales)",
@@ -108,12 +133,17 @@
         }
     };
 
-    $('#tabla-auditoria').DataTable({
+    var table = $('#tabla-auditoria').DataTable({
         "processing": true,
         "serverSide": true,
         "ajax": {
             "url": "{{ route('auditoria.data') }}",
-            "type": "GET"
+            "type": "GET",
+            "data": function (d) {
+                // Se envían los valores de las fechas al servidor en cada petición Ajax
+                d.fecha_inicio = $('#fecha_inicio').val();
+                d.fecha_fin = $('#fecha_fin').val();
+            }
         },
         "columns": [
             { "data": "accion", "className": "text-center" },
@@ -127,17 +157,61 @@
         "autoWidth": false,
         "pageLength": 10,
         "searchDelay": 500,
-        "order": [[3, 'desc']] // Ordenar por ejecutado_en más reciente
+        "order": [[3, 'desc']]
+    });
+
+    // Validar y ejecutar el filtro al hacer clic en "Filtrar"
+    $('#btnFiltrar').click(function () {
+        let fechaInicio = $('#fecha_inicio').val();
+        let fechaFin = $('#fecha_fin').val();
+
+        // Validación: Verificar que si ambas fechas están llenas, la inicial no sea mayor a la final
+        if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+            alert('Error: La "Fecha Desde" no puede ser posterior a la "Fecha Hasta".');
+            return;
+        }
+
+        // Recargar la tabla aplicando los nuevos parámetros de fecha
+        table.ajax.reload();
+    });
+
+    // Limpiar filtros y recargar la tabla
+    $('#btnLimpiar').click(function () {
+        $('#fecha_inicio').val('');
+        $('#fecha_fin').val('');
+        table.ajax.reload();
     });
   });
 
   function detallesAuditoria(data) {
-    // Formatear JSON si existe, de lo contrario mostrar texto plano o 'N/D'
-    let anteriores = data.anteriores ? JSON.stringify(JSON.parse(data.anteriores), null, 2) : 'Sin registros anteriores (INSERT)';
-    let nuevos = data.nuevos ? JSON.stringify(JSON.parse(data.nuevos), null, 2) : 'Sin registros nuevos (DELETE)';
+      let anteriores = data.anteriores ? JSON.parse(data.anteriores) : {};
+      let nuevos = data.nuevos ? JSON.parse(data.nuevos) : {};
 
-    $("#det_valores_anteriores").text(anteriores);
-    $("#det_valores_nuevos").text(nuevos);
-  }
+      // Obtener todas las llaves (campos) únicas de ambos objetos
+      let keys = [...new Set([...Object.keys(anteriores), ...Object.keys(nuevos)])];
+      let html = '';
+
+      if (keys.length === 0) {
+          html = '<tr><td colspan="3" class="text-center text-muted">No hay datos registrados para esta acción.</td></tr>';
+      } else {
+          keys.forEach(key => {
+              let valAnt = anteriores[key] !== undefined ? anteriores[key] : '<span class="text-muted font-italic">No existía</span>';
+              let valNue = nuevos[key] !== undefined ? nuevos[key] : '<span class="text-muted font-italic">Eliminado</span>';
+
+              // Opcional: Resaltar visualmente la fila si el valor cambió
+              let rowClass = (valAnt !== valNue) ? 'table-warning' : '';
+
+              html += `
+                  <tr class="${rowClass}">
+                      <td><strong>${key}</strong></td>
+                      <td class="text-danger">${valAnt}</td>
+                      <td class="text-success font-weight-bold">${valNue}</td>
+                  </tr>
+              `;
+          });
+      }
+
+      $('#tabla-comparativa-audit tbody').html(html);
+    }
 </script>
 @endsection
