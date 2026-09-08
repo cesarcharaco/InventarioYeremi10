@@ -26,7 +26,7 @@ use App\Http\Controllers\InsumosMayoresController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CorrelativoController;
 use App\Http\Controllers\PromocionReglaController;
-
+use App\Http\Controllers\AuditoriaSistemaController;
 
 /*
 |-------------------------------------------------------------------------- 
@@ -288,5 +288,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::middleware(['auth'])->group(function () {
         Route::resource('correlativos', CorrelativoController::class);
+    });
+    // Auditoría del sistema
+    Route::middleware(['auth'])->group(function () {
+        Route::get('/auditoria-sistema', [AuditoriaSistemaController::class, 'index'])->name('auditoria.index');
+        Route::get('/auditoria-sistema/data', [AuditoriaSistemaController::class, 'getData'])->name('auditoria.data');
     });
 });

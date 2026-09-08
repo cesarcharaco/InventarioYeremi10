@@ -392,6 +392,15 @@
                             </a>
                         </li>
                         @endcan
+
+                        @can('gestionar-auditoria-sistema')
+                        <li class="nav-item">
+                        <a href="{{ route('auditoria.index') }}" class="nav-link {{ Request::is('auditoria-sistema*') ? 'active' : '' }}">
+                            <i class="fas fa-shield-alt nav-icon text-warning"></i>
+                            <p>Auditoría del Sistema</p>
+                        </a>
+                        </li>
+                        @endcan
                     </ul>
                 </li>
                 @endif

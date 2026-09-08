@@ -290,6 +290,9 @@ class AuthServiceProvider extends ServiceProvider
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
     });
     
+    Gate::define('gestionar-auditoria-sistema', function (User $user) {
+        return $user->role === User::ROLE_SUPERADMIN;
+    });
     }
 
 }
