@@ -815,26 +815,31 @@ class CreditoController extends Controller
     {
         $cliente = Cliente::findOrFail($cliente_id);
 
-        // Cargamos los créditos con la relación abonos configurada como belongsToMany
+        // Créditos ordenados cronológicamente de más antiguo a más reciente
         $creditos = Credito::where('id_cliente', $cliente_id)
             ->whereIn('estado', ['pendiente', 'anticipo'])
             ->with([
                 'venta.detalles.insumo',
                 'intereses' => function($q) {
-                    $q->where('estado', 'aplicado');
+                    $q->where('estado', 'aplicado')
+                      ->orderBy('aplicado_en', 'asc'); // Ordenar indexaciones por fecha
                 },
                 'abonos' => function($q) {
-                    $q->where('abonos_credito.estado', 'Realizado');
+                    $q->where('abonos_credito.estado', 'Realizado')
+                      ->orderBy('abonos_credito.created_at', 'asc'); // Ordenar abonos por fecha
                 }
             ])
+            ->orderBy('created_at', 'asc') // Ordenar créditos principales por fecha
             ->get();
 
         $creditosIds = $creditos->pluck('id');
 
         $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
             ->where('estado', 'aplicado')
+            ->orderBy('aplicado_en', 'asc') // Asegurar orden en el historial global si se usa
             ->get();
 
+                
         $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
         $totalIntereses = $historialIntereses->sum('monto_interes');
 
