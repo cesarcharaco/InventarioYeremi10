@@ -787,19 +787,20 @@ class CreditoController extends Controller
         $cliente = Cliente::findOrFail($id);
         
         $creditos = Credito::where('id_cliente', $id)
-            ->whereIn('estado', ['pendiente', 'anticipo']) 
-            ->with([
-                'venta.detalles.insumo', 
-                'abonos' => function($q) {
-                    $q->where('estado', 'Realizado')
-                      ->orderBy('abonos_credito.created_at', 'asc');
-                },
-                'intereses' => function($q) {
-                    $q->where('estado', 'aplicado');
-                }
-            ])
-            ->orderBy('created_at', 'asc')
-            ->get();
+                ->whereIn('estado', ['pendiente', 'anticipo'])
+                ->with([
+                    'venta.detalles.insumo',
+                    'intereses' => function($q) {
+                        $q->where('estado', 'aplicado')
+                          ->orderBy('aplicado_en', 'asc'); // Ordenar indexaciones por fecha
+                    },
+                    'abonos' => function($q) {
+                        $q->where('abonos_credito.estado', 'Realizado')
+                          ->orderBy('abonos_credito.created_at', 'asc'); // Ordenar abonos por fecha
+                    }
+                ])
+                ->orderBy('created_at', 'asc') // Ordenar créditos principales por fecha
+                ->get();
         
         // Asignamos el valor del pivot a la propiedad que la vista ya está consumiendo
         foreach ($creditos as $credito) {
@@ -839,7 +840,7 @@ class CreditoController extends Controller
             ->orderBy('aplicado_en', 'asc') // Asegurar orden en el historial global si se usa
             ->get();
 
-                
+
         $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
         $totalIntereses = $historialIntereses->sum('monto_interes');
 
