@@ -41,4 +41,17 @@ class AuditoriaObserver
             'ejecutado_en'   => now(),
         ]);
     }
+
+    public function deleted($model): void
+    {
+        DB::table('auditoria_sistema')->insert([
+            'tabla_afectada'     => $model->getTable(),
+            'accion'             => 'DELETE',
+            'registro_id'        => $model->getKey(),
+            'valores_anteriores' => json_encode($model->getAttributes()),
+            'valores_nuevos'     => null,
+            'id_user'            => Auth::id(),
+            'ejecutado_en'       => now(),
+        ]);
+    }
 }
