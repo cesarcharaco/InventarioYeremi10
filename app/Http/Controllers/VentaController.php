@@ -340,7 +340,7 @@ public function create()
                 $nuevaCantidad = $existencia->fresh()->cantidad;
 
                 if ($nuevaCantidad <= $insumoBase->stock_min) {
-                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
                     $detalles = [
                         'titulo'  => '¡Stock Agotándose!',
                         'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
@@ -393,7 +393,7 @@ public function create()
                     'tasa_cambio_origen'=> $tasa_bcv
                 ]);
 
-                $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
                 $detalles = [
                     'titulo'  => '💸 Nueva Venta a Crédito',
                     'mensaje' => "Se otorgó un crédito de {$request->monto_credito_usd}$ a {$request->cliente_nombre}.",
@@ -464,20 +464,33 @@ public function create()
             ]
         );
 
-        // --- NOTIFICACIÓN AL GERENTE ---
-            $gerentes = User::whereIn('role', ['admin'])->get();
-            $detalles = [
-                'titulo'  => '🔐 Solicitud de PIN',
-                'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para una venta de {$request->monto_total}$",
-                'url'     => '#', // O al dashboard de autorizaciones si tienes uno
-                'icono'   => 'fas fa-key text-warning'
-            ];
+        // --- NOTIFICACIÓN AL SUPERADMIN Y AL ENCARGADO DEL LOCAL ESPECÍFICO ---
+        
+        // Obtenemos los IDs de los usuarios asignados a este local mediante la tabla pivot[cite: 15]
+        $usuariosLocalIds = DB::table('users_has_local')
+            ->where('id_local', $local->id)
+            ->pluck('id_user');
 
-            foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
-            }
+        // Filtramos al SuperAdmin (respaldo global) y al encargado asignado específicamente a este local
+        $destinatarios = User::where('role', User::ROLE_SUPERADMIN)
+            ->orWhere(function($query) use ($usuariosLocalIds) {
+                $query->where('role', User::ROLE_ENCARGADO)
+                      ->whereIn('id', $usuariosLocalIds);
+            })
+            ->get();
 
-        return response()->json(['success' => true, 'message' => 'PIN generado en Dashboard']);
+        $detalles = [
+            'titulo'  => '🔐 Solicitud de PIN',
+            'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para una venta de {$request->monto_total}$",
+            'url'     => '#', 
+            'icono'   => 'fas fa-key text-warning'
+        ];
+
+        foreach ($destinatarios as $destinatario) {
+            $destinatario->notify(new StockBajoNotification($detalles));
+        }
+
+        return response()->json(['success' => true, 'message' => 'PIN generado y enviado al encargado del local.']);
     }
 
     public function verificarPin(Request $request)

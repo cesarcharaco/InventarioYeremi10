@@ -94,7 +94,7 @@ class ClienteController extends Controller
                 $user->locales()->attach($datos['id_local'], ['status' => 'activo']);
                 Cliente::create($datos);
 
-                $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
                 $detalles = [
                     'titulo'  => '🆕 Nuevo Mayorista Pendiente',
                     'mensaje' => "El cliente {$datos['nombre']} se ha registrado y espera activación.",

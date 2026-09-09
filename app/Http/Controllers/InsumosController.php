@@ -212,7 +212,7 @@ class InsumosController extends Controller
 
                     // Evaluamos contra la variable recién asignada
                     if ($cantidadLocal <= ($request->stock_min ?? 0)) {
-                        $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                        $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
                         $detalles = [
                             'titulo'  => '¡Stock Inicial Bajo!',
                             'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$cantidadLocal}) en un local.",
@@ -295,7 +295,7 @@ class InsumosController extends Controller
             foreach ($stocksLocales as $stockLocal) {
                 if ($stockLocal->cantidad <= $request->stock_min) {
                     // Notificar a los administradores/gerentes
-                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
                     $detalles = [
                         'titulo'  => 'Stock Crítico tras Actualización',
                         'mensaje' => "El producto {$request->producto} está por debajo del nuevo mínimo en {$stockLocal->nombre}.",
@@ -533,7 +533,7 @@ class InsumosController extends Controller
             // 5. Notificación Protegida
             if ($cantidadInicial <= $stockMinimo) {
                 try {
-                    $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
                     $detalles = [
                         'titulo'  => '¡Stock Inicial Bajo!',
                         'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$cantidadInicial}) en el local.",

@@ -98,7 +98,7 @@
 
     @endif
 
-  {{-- SECCIÓN DE PINES: Solo visible para administradores --}}
+  {{-- SECCIÓN DE PINES: Solo visible para administradores y encargados --}}
   @can('ver-autorizaciones')
   <div class="row mb-3">
       <div class="col-md-12">

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
-
+use App\Models\User;
 class NotificationController extends Controller
 {
     /**
@@ -35,7 +35,17 @@ class NotificationController extends Controller
      */
     public function index()
     {
-        $notifications = auth()->user()->notifications()->paginate(15);
+        $user = auth()->user();
+        $query = $user->notifications();
+
+        // Filtro adicional opcional por rol si deseas bloquear visualmente ciertas alertas históricas
+        if ($user->role === User::ROLE_VENDEDOR) {
+            // Los vendedores solo ven notificaciones comerciales o de ventas, excluyendo auditoría interna
+            $query->where('data->tipo', '!=', 'auditoria');
+        }
+
+        $notifications = $query->paginate(15);
+        
         return view('notifications.index', compact('notifications'));
     }
 

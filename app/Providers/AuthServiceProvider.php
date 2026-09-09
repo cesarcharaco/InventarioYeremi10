@@ -219,9 +219,9 @@ class AuthServiceProvider extends ServiceProvider
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
         });
 
-        Gate::define('ver-autorizaciones', function ($user) {
-            // Ajusta esto según tu lógica (ej: si es rol 'admin' o un ID específico)
-            return $user->role === 'admin'; 
+        Gate::define('ver-autorizaciones', function (User $user) {
+            $role = strtolower($user->role);
+            return in_array($role, ['admin', 'encargado']) || in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
         });
 
     // --- MÓDULO DE CRÉDITOS ---

@@ -1019,7 +1019,7 @@ class CreditoController extends Controller
                 $anticipo->save();
             }
 
-            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+            $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
             $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito Directo',
                 'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",
@@ -1184,7 +1184,7 @@ class CreditoController extends Controller
                 $anticipo->save();
             }
 
-            $gerentes = User::whereIn('role', ['admin', 'gerente'])->get();
+            $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
             $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito Directo',
                 'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",

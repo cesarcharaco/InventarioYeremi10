@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Despachos;       // Modelo en plural
-use App\Models\DespachoDetalles; // Modelo en plural
+use App\Models\Despachos;       
+use App\Models\DespachoDetalles; 
 use App\Models\Local;
-use App\Models\Insumos;         // Modelo en plural
-use App\Models\InsumosC;        // Modelo para insumos_has_cantidades
+use App\Models\Insumos;         
+use App\Models\InsumosC;        
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Models\User;

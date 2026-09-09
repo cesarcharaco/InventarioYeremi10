@@ -10,6 +10,8 @@ use App\Models\Configuracion;
 use App\Models\AutorizacionPin;
 use Illuminate\Support\Facades\Http;
 use App\Services\TasaCambioService;
+use Illuminate\Support\Facades\DB;
+use App\Models\User;
 class HomeController extends Controller
 {
     /**
@@ -88,21 +90,33 @@ class HomeController extends Controller
     
     public function getPinesAjax()
     {
-        // Opcional: Seguridad extra por código
-        if (!auth()->user()->hasRole('admin')) { // Ajusta según tu sistema de roles
+        $user = auth()->user();
+
+        // Validar permisos usando las constantes del modelo User
+        if (!in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO])) {
             return response()->json([], 403);
         }
 
-        $pines = AutorizacionPin::with('local')
+        $query = AutorizacionPin::with('local')
             ->where('estado', 'activo')
-            ->where('updated_at', '>=', now()->subMinutes(15))
-            ->orderBy('updated_at', 'desc')
-            ->get();
+            ->where('updated_at', '>=', now()->subMinutes(15));
+
+        // Si es Encargado (y no Superadmin), filtrar exclusivamente por su tienda activa
+        if ($user->role === User::ROLE_ENCARGADO) {
+            $localesDelEncargado = DB::table('users_has_local')
+                ->where('id_user', $user->id)
+                ->where('status', 'activo')
+                ->pluck('id_local');
+
+            $query->whereIn('id_local', $localesDelEncargado);
+        }
+
+        $pines = $query->orderBy('updated_at', 'desc')->get();
 
         $data = $pines->map(function($auth) {
             return [
                 'id'           => $auth->id,
-                'local_nombre' => $auth->local->nombre,
+                'local_nombre' => optional($auth->local)->nombre,
                 'pin'          => $auth->pin,
                 'vendedor'     => $auth->vendedor,
                 'monto'        => number_format($auth->monto, 2),
