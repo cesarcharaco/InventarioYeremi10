@@ -53,7 +53,7 @@ class AuthServiceProvider extends ServiceProvider
 
         // Solo Admin/SuperAdmin pueden cambiar datos sensibles (Precios, Nombres, Seriales)
         Gate::define('editar-datos-maestros', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
         });
 
         // Anular Historial/Incidencias: Solo el SuperAdmin (Dueño)
