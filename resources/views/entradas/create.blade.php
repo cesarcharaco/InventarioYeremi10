@@ -228,58 +228,64 @@
 
         // Botón Agregar Item
         $('#btnAgregarItem').click(function() {
-            let id_insumo = $('#select_insumo').val();
-            let nombre = $('#select_insumo').find(':selected').data('nombre');
-            let cantidad = parseFloat($('#input_cantidad').val());
-            let costo = parseFloat($('#input_costo').val());
+                    let id_insumo = $('#select_insumo').val();
+                    let $selectedOption = $('#select_insumo').find(':selected');
+                    let nombre = $selectedOption.data('nombre');
+                    let descripcion = $selectedOption.data('descripcion') || ''; // Capturamos la descripción
+                    let cantidad = parseFloat($('#input_cantidad').val());
+                    let costo = parseFloat($('#input_costo').val());
 
-            if (!id_insumo || isNaN(cantidad) || cantidad <= 0 || isNaN(costo)) {
-                Swal.fire('Atención', 'Por favor complete los datos del insumo correctamente.', 'warning');
-                return;
-            }
+                    if (!id_insumo || isNaN(cantidad) || cantidad <= 0 || isNaN(costo)) {
+                        Swal.fire('Atención', 'Por favor complete los datos del insumo correctamente.', 'warning');
+                        return;
+                    }
 
-            let subtotal = cantidad * costo;
-            
-            // Construir fila
-            let fila = `
-                <tr id="fila_${contador}">
-                    <td>
-                        <input type="hidden" name="items[${contador}][id_insumo]" value="${id_insumo}">
-                        ${nombre}
-                    </td>
-                    <td>
-                        <input type="hidden" name="items[${contador}][cantidad]" value="${cantidad}">
-                        ${cantidad}
-                    </td>
-                    <td>
-                        <input type="hidden" name="items[${contador}][costo_unitario]" value="${costo}">
-                        $ ${costo.toFixed(2)}
-                    </td>
-                    <td class="text-bold">
-                        $ ${subtotal.toFixed(2)}
-                    </td>
-                    <td>
-                        <button type="button" class="btn btn-danger btn-xs" onclick="eliminarFila(${contador}, ${subtotal})">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
+                    let subtotal = cantidad * costo;
+                    
+                    // Estructura condicional para mostrar la descripción si existe
+                    let htmlDescripcion = descripcion ? `<br><small class="text-muted"><i class="fas fa-info-circle mr-1"></i>${descripcion}</small>` : '';
 
-            $('#tabla_items tbody').append(fila);
-            $('#vacio_msg').hide();
-            
-            // Actualizar Totales
-            actualizarTotal(subtotal);
-            
-            // Limpiar campos
-            $('#select_insumo').val(null).trigger('change');
-            $('#input_cantidad').val('');
-            $('#input_costo').val('');
-            contador++;
-            evaluarBoton();
-        });
-    });
+                    // Construir fila incluyendo la descripción
+                    let fila = `
+                        <tr id="fila_${contador}">
+                            <td>
+                                <input type="hidden" name="items[${contador}][id_insumo]" value="${id_insumo}">
+                                <strong>${nombre}</strong>
+                                ${htmlDescripcion}
+                            </td>
+                            <td>
+                                <input type="hidden" name="items[${contador}][cantidad]" value="${cantidad}">
+                                ${cantidad}
+                            </td>
+                            <td>
+                                <input type="hidden" name="items[${contador}][costo_unitario]" value="${costo}">
+                                $ ${costo.toFixed(2)}
+                            </td>
+                            <td class="text-bold">
+                                $ ${subtotal.toFixed(2)}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-xs" onclick="eliminarFila(${contador}, ${subtotal})">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+
+                    $('#tabla_items tbody').append(fila);
+                    $('#vacio_msg').hide();
+                    
+                    // Actualizar Totales
+                    actualizarTotal(subtotal);
+                    
+                    // Limpiar campos
+                    $('#select_insumo').val(null).trigger('change');
+                    $('#input_cantidad').val('');
+                    $('#input_costo').val('');
+                    contador++;
+                    evaluarBoton();
+                });
+            });
 
     function actualizarTotal(monto) {
         totalGeneral += monto;

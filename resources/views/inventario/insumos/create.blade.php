@@ -40,7 +40,7 @@
           <div class="col-md-6">
             <div class="form-group">
               <label>Descripción</label>
-              <input class="form-control" name="description" value="{{ old('descripcion') }}">
+              <input class="form-control" name="descripcion" value="{{ old('descripcion') }}">
             </div>
           </div>
         </div>
