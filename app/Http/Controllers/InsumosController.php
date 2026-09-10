@@ -249,80 +249,81 @@ class InsumosController extends Controller
     }
 
     public function update(Request $request, $id)
-    {
-        $this->authorize('gestionar-insumos');
-        try {
-            DB::beginTransaction();
+        {
+            $this->authorize('gestionar-insumos');
+            try {
+                DB::beginTransaction();
 
-            $insumoActual = Insumos::findOrFail($id);
-            $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
-            
-            if ($request->filled('serial') && $request->serial !== $insumoActual->serial) {
-                // 1. Prioridad: Serial manual escrito/escaneado por el usuario
-                $serialFinal = $request->serial;
-            } elseif ($insumoActual->categoria_id != $request->categoria_id) {
-                // 2. Cambió la categoría y no escribió manual: Regenera por categoría
-                $serialFinal = $this->generarSerialInsumo($request->categoria_id);
-            } else {
-                // 3. Sin cambios en categoría ni serial manual: Mantiene el existente
-                $serialFinal = $insumoActual->serial;
-            }
+                $insumoActual = Insumos::findOrFail($id);
+                $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
+                
+                if ($request->filled('serial') && $request->serial !== $insumoActual->serial) {
+                    // 1. Prioridad: Serial manual escrito/escaneado por el usuario
+                    $serialFinal = $request->serial;
+                } elseif ($insumoActual->categoria_id != $request->categoria_id) {
+                    // 2. Cambió la categoría y no escribió manual: Regenera por categoría
+                    $serialFinal = $this->generarSerialInsumo($request->categoria_id);
+                } else {
+                    // 3. Sin cambios en categoría ni serial manual: Mantiene el existente
+                    $serialFinal = $insumoActual->serial;
+                }
 
-            $costo = $insumoActual->costo;
-            $p_usd  = $costo / $modelo->factor_bcv;
-            $p_bs   = $p_usd * $modelo->tasa_bcv;
-            $p_usdt = $costo / $modelo->factor_usdt;
+                $costo = $insumoActual->costo;
+                
+                // Reemplazamos la división manual por el método seguro del modelo
+                $precios = $modelo->calcularPrecios($costo);
 
-            $insumoActual->update([
-                'producto'          => $request->producto,
-                'descripcion'       => $request->descripcion,
-                'categoria_id'      => $request->categoria_id,
-                'modelo_venta_id'   => $request->modelo_venta_id,
-                'serial'            => $serialFinal,
-                'precio_venta_usd'  => $p_usd,
-                'precio_venta_bs'   => $p_bs,
-                'precio_venta_usdt' => $p_usdt,
-                'stock_min'         => $request->stock_min, // Actualizado en insumos
-                'stock_max'         => $request->stock_max, // Actualizado en insumos
-            ]);
-            // --- LÓGICA DE NOTIFICACIÓN AUTOMÁTICA AL ACTUALIZAR ---
-            // Consultamos las cantidades actuales en todos los locales para este insumo
-            $stocksLocales = DB::table('insumos_has_cantidades')
-                ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
-                ->where('id_insumo', $id)
-                ->get();
+                $insumoActual->update([
+                    'producto'          => $request->producto,
+                    'descripcion'       => $request->descripcion,
+                    'categoria_id'      => $request->categoria_id,
+                    'modelo_venta_id'   => $request->modelo_venta_id,
+                    'serial'            => $serialFinal,
+                    'precio_venta_usd'  => $precios['precio_venta_usd'],
+                    'precio_venta_bs'   => $precios['precio_venta_bs'],
+                    'precio_venta_usdt' => $precios['precio_venta_usdt'],
+                    'stock_min'         => $request->stock_min, // Actualizado en insumos
+                    'stock_max'         => $request->stock_max, // Actualizado en insumos
+                ]);
 
-            foreach ($stocksLocales as $stockLocal) {
-                if ($stockLocal->cantidad <= $request->stock_min) {
-                    // Notificar a los administradores/gerentes
-                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
-                    $detalles = [
-                        'titulo'  => 'Stock Crítico tras Actualización',
-                        'mensaje' => "El producto {$request->producto} está por debajo del nuevo mínimo en {$stockLocal->nombre}.",
-                        'url'     => route('insumos.index'),
-                        'icono'   => 'fas fa-sync-alt'
-                    ];
+                // --- LÓGICA DE NOTIFICACIÓN AUTOMÁTICA AL ACTUALIZAR ---
+                // Consultamos las cantidades actuales en todos los locales para este insumo
+                $stocksLocales = DB::table('insumos_has_cantidades')
+                    ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
+                    ->where('id_insumo', $id)
+                    ->get();
 
-                    foreach ($gerentes as $gerente) {
-                        $gerente->notify(new StockBajoNotification($detalles));
+                foreach ($stocksLocales as $stockLocal) {
+                    if ($stockLocal->cantidad <= $request->stock_min) {
+                        // Notificar a los administradores/gerentes
+                        $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
+                        $detalles = [
+                            'titulo'  => 'Stock Crítico tras Actualización',
+                            'mensaje' => "El producto {$request->producto} está por debajo del nuevo mínimo en {$stockLocal->nombre}.",
+                            'url'     => route('insumos.index'),
+                            'icono'   => 'fas fa-sync-alt'
+                        ];
+
+                        foreach ($gerentes as $gerente) {
+                            $gerente->notify(new StockBajoNotification($detalles));
+                        }
                     }
                 }
-            }
-            // -------------------------------------------------------
-            DB::commit();
-            
-            $mensaje = "Insumo actualizado correctamente.";
-            if ($serialFinal != $insumoActual->serial) {
-                $mensaje .= " Se ha generado un nuevo serial: " . $serialFinal;
-            }
+                // -------------------------------------------------------
+                DB::commit();
+                
+                $mensaje = "Insumo actualizado correctamente.";
+                if ($serialFinal != $insumoActual->serial) {
+                    $mensaje .= " Se ha generado un nuevo serial: " . $serialFinal;
+                }
 
-            return redirect()->route('insumos.index')->with('success', $mensaje);
+                return redirect()->route('insumos.index')->with('success', $mensaje);
 
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Error al actualizar: ' . $e->getMessage());
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return back()->with('error', 'Error al actualizar: ' . $e->getMessage());
+            }
         }
-    }
 
     public function destroy(Request $request)
     {

@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\InsumosMayor;
+use App\Models\Insumos;
+use App\Models\InsumosC;
+use App\Models\Local;
 use Illuminate\Http\Request;
 use App\Imports\InsumosImport;
 use App\Models\ListasOferta;
