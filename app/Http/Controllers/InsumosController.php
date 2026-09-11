@@ -420,7 +420,23 @@ class InsumosController extends Controller
                 'insumos_has_cantidades.estado_local',
                 'local.nombre as nombre_local'
             ]);
+        // --- APLICACIÓN DE FILTROS PERSONALIZADOS ---
+        if ($request->filled('filtro_producto')) {
+            $query->where('insumos.producto', 'LIKE', '%' . $request->filtro_producto . '%');
+        }
 
+        if ($request->filled('filtro_estado_general')) {
+            $query->where('insumos.estado', $request->filtro_estado_general);
+        }
+
+        if ($request->filled('filtro_estado_local')) {
+            $query->where('insumos_has_cantidades.estado_local', $request->filtro_estado_local);
+        }
+
+        if ($request->filled('filtro_ubicacion')) {
+            $query->where('local.nombre', $request->filtro_ubicacion);
+        }
+        // ------------------------------------------
         return DataTables::of($query)
             // --- MAPEADO DE BÚSQUEDA: ESTO ELIMINA LOS ERRORES DE LAS IMÁGENES ---
             ->filterColumn('estado_global', function($q, $kw) {

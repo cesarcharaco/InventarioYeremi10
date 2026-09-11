@@ -34,14 +34,54 @@
         <div class="basic-tb-hd text-center">
           @include('layouts.partials.flash-messages')
         </div>
-        <form action="{{ route('insumos.importar') }}" method="POST" enctype="multipart/form-data">
+        <!-- <form action="{{ route('insumos.importar') }}" method="POST" enctype="multipart/form-data">
             @csrf
             <div class="form-group">
                 <label>Seleccionar Archivo (CSV/Excel)</label>
                 <input type="file" name="archivo" class="form-control" required>
             </div>
             <button type="submit" class="btn btn-primary">Procesar Oferta</button>
-        </form>
+        </form> -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="form-group">
+              <label><strong>Filtrar por Producto:</strong></label>
+              <input type="text" id="filtro_producto" class="form-control form-control-sm" placeholder="Escribe para filtrar producto...">
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label><strong>Estado General:</strong></label>
+              <select id="filtro_estado_general" class="form-control form-control-sm">
+                <option value="">Todos los estados</option>
+                <option value="En Venta">En Venta</option>
+                <option value="Suspendido">Suspendido</option>
+                <option value="No Disponible">No Disponible</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label><strong>Estado Local:</strong></label>
+              <select id="filtro_estado_local" class="form-control form-control-sm">
+                <option value="">Todos los estados</option>
+                <option value="Disponible">Disponible</option>
+                <option value="Suspendido">Suspendido</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label><strong>Ubicación (Local):</strong></label>
+              <select id="filtro_ubicacion" class="form-control form-control-sm">
+                <option value="">Todas las ubicaciones</option>
+                @foreach(\App\Models\Local::all() as $loc)
+                  <option value="{{ $loc->nombre }}">{{ $loc->nombre }}</option>
+                @endforeach
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -195,35 +235,49 @@
         }
     };
 
-    // 2. Inicialización de DataTable
-    $('#tabla-insumos').DataTable({
-        "processing": true,
-        "serverSide": true,
-        "ajax": {
-            "url": "{{ route('insumos.data') }}",
-            "type": "GET"
-        },
-        "columns": [
-            { "data": "serial" },
-            { "data": "producto" },
-            { "data": "descripcion" },
-            { "data": "estado_global", "className": "text-center" },
-            { "data": "estado_local", "className": "text-center" },
-            { "data": "stock_min", "className": "text-center" },
-            { "data": "stock_max", "className": "text-center" },
-            { "data": "cantidad", "className": "text-center" },
-            { "data": "nombre_local" },
-            { "data": "acciones", "orderable": false, "searchable": false }
-        ],
-        "language": lenguajeEspanol,
-        "responsive": true,
-        "autoWidth": false,
-        "pageLength": 10,
-        "searchDelay": 500,
-        "order": [[1, 'asc']] // Ordenar por Producto por defecto
-    });
-  });
+    
+    // 2. Inicialización de DataTable con soporte para los nuevos filtros
+      var table = $('#tabla-insumos').DataTable({
+          "processing": true,
+          "serverSide": true,
+          "ajax": {
+              "url": "{{ route('insumos.data') }}",
+              "type": "GET",
+              "data": function (d) {
+                  d.filtro_producto = $('#filtro_producto').val();
+                  d.filtro_estado_general = $('#filtro_estado_general').val();
+                  d.filtro_estado_local = $('#filtro_estado_local').val();
+                  d.filtro_ubicacion = $('#filtro_ubicacion').val();
+              }
+          },
+          "columns": [
+              { "data": "serial" },
+              { "data": "producto" },
+              { "data": "descripcion" },
+              { "data": "estado_global", "className": "text-center" },
+              { "data": "estado_local", "className": "text-center" },
+              { "data": "stock_min", "className": "text-center" },
+              { "data": "stock_max", "className": "text-center" },
+              { "data": "cantidad", "className": "text-center" },
+              { "data": "nombre_local" },
+              { "data": "acciones", "orderable": false, "searchable": false }
+          ],
+          "language": lenguajeEspanol,
+          "responsive": true,
+          "autoWidth": false,
+          "pageLength": 10,
+          "searchDelay": 500,
+          "order": [[1, 'asc']]
+      });
 
+      // Eventos para rediseñar la tabla al cambiar los filtros sin perder paginación
+      $('#filtro_producto').on('keyup change', function () {
+          table.ajax.reload();
+      });
+      $('#filtro_estado_general, #filtro_estado_local, #filtro_ubicacion').on('change', function () {
+          table.ajax.reload();
+      });
+  });
   // Funciones auxiliares (Eliminar, Detalles, Estados)
   function eliminar(id) {
     $("#id_insumo").val(id);
