@@ -83,99 +83,106 @@ class DespachoController extends Controller
      * Procesa y guarda el despacho en la base de datos (Salida de Depósito)
      */
     public function store(Request $request)
-    {
-        Gate::authorize('crear-despacho');
+        {
+            Gate::authorize('crear-despacho');
 
-        $user = auth()->user();
+            $user = auth()->user();
 
-        // Validar si el usuario es encargado y está intentando despachar desde un local ajeno[cite: 1]
-        if ($user->role === User::ROLE_ENCARGADO) {
-            $esSuLocal = DB::table('users_has_local')
-                ->where('id_user', $user->id)
-                ->where('id_local', $request->id_local_origen)
-                ->exists();
+            // Validar si el usuario es encargado y está intentando despachar desde un local ajeno[cite: 15]
+            if ($user->role === User::ROLE_ENCARGADO) {
+                $esSuLocal = DB::table('users_has_local')
+                    ->where('id_user', $user->id)
+                    ->where('id_local', $request->id_local_origen)
+                    ->exists();
 
-            if (!$esSuLocal) {
-                return redirect()->back()->with('error', 'No tienes autorización para despachar mercancía desde este local de origen.')->withInput();
+                if (!$esSuLocal) {
+                    return redirect()->back()->with('error', 'No tienes autorización para despachar mercancía desde este local de origen.')->withInput();
+                }
             }
-        }
-          
-        $request->validate([
-            'id_local_origen'  => 'required|different:id_local_destino',
-            'id_local_destino' => 'required',
-            'transportado_por' => 'required|string|max:100',
-            'id_insumo'        => 'required|array',
-            'id_insumo.*'      => 'required|exists:insumos,id',
-            'cantidad'         => 'required|array',
-            'cantidad.*'       => 'required|integer|min:1',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            // 1. Crear la Cabecera del Despacho (En Tránsito)[cite: 1]
-            $despacho = Despachos::create([
-                'codigo'           => $request->codigo,
-                'id_local_origen'  => $request->id_local_origen,
-                'id_local_destino' => $request->id_local_destino,
-                'transportado_por' => $request->transportado_por,
-                'vehiculo_placa'   => $request->vehiculo_placa,
-                'observacion'      => $request->observacion,
-                'estado'           => 'En Tránsito',
-                'fecha_despacho'   => Carbon::now(),
+              
+            $request->validate([
+                'id_local_origen'  => 'required|different:id_local_destino',
+                'id_local_destino' => 'required',
+                'transportado_por' => 'required|string|max:100',
+                'id_insumo'        => 'required|array',
+                'id_insumo.*'      => 'required|exists:insumos,id',
+                'cantidad'         => 'required|array',
+                'cantidad.*'       => 'required|integer|min:1',
             ]);
 
-            // 2. Procesar cada Insumo enviado[cite: 1]
-            foreach ($request->id_insumo as $key => $insumo_id) {
-                $cantidadADespachar = $request->cantidad[$key];
+            // Validación añadida: Verificar que el local o depósito de destino tenga al menos un usuario asignado
+            $tieneUsuariosDestino = DB::table('users_has_local')
+                ->where('id_local', $request->id_local_destino)
+                ->exists();
 
-                $registroOrigen = InsumosC::where('id_local', $request->id_local_origen)
-                    ->where('id_insumo', $insumo_id)
-                    ->first();
+            if (!$tieneUsuariosDestino) {
+                return redirect()->back()->with('error', 'No es posible generar el despacho porque no hay usuario asignado a dicho local o depósito.')->withInput();
+            }
 
-                $item = Insumos::find($insumo_id);
-                $nombreItem = $item ? $item->producto : "ID: $insumo_id";
+            try {
+                DB::beginTransaction();
 
-                if (!$registroOrigen || $registroOrigen->cantidad < $cantidadADespachar) {
-                    throw new \Exception("Stock insuficiente para: $nombreItem en el depósito de origen.");
-                }
-
-                if ($registroOrigen->estado_local !== 'Disponible') {
-                    throw new \Exception("El insumo $nombreItem se encuentra SUSPENDIDO en este local.");
-                }
-
-                $registroOrigen->decrement('cantidad', $cantidadADespachar);
-
-                DespachoDetalles::create([
-                    'id_despacho'         => $despacho->id,
-                    'id_insumo'           => $insumo_id,
-                    'cantidad_enviada'    => $cantidadADespachar,
-                    'cantidad_recibida'   => 0, 
+                // 1. Crear la Cabecera del Despacho (En Tránsito)[cite: 15]
+                $despacho = Despachos::create([
+                    'codigo'           => $request->codigo,
+                    'id_local_origen'  => $request->id_local_origen,
+                    'id_local_destino' => $request->id_local_destino,
+                    'transportado_por' => $request->transportado_por,
+                    'vehiculo_placa'   => $request->vehiculo_placa,
+                    'observacion'      => $request->observacion,
+                    'estado'           => 'En Tránsito',
+                    'fecha_despacho'   => Carbon::now(),
                 ]);
+
+                // 2. Procesar cada Insumo enviado[cite: 15]
+                foreach ($request->id_insumo as $key => $insumo_id) {
+                    $cantidadADespachar = $request->cantidad[$key];
+
+                    $registroOrigen = InsumosC::where('id_local', $request->id_local_origen)
+                        ->where('id_insumo', $insumo_id)
+                        ->first();
+
+                    $item = Insumos::find($insumo_id);
+                    $nombreItem = $item ? $item->producto : "ID: $insumo_id";
+
+                    if (!$registroOrigen || $registroOrigen->cantidad < $cantidadADespachar) {
+                        throw new \Exception("Stock insuficiente para: $nombreItem en el depósito de origen.");
+                    }
+
+                    if ($registroOrigen->estado_local !== 'Disponible') {
+                        throw new \Exception("El insumo $nombreItem se encuentra SUSPENDIDO en este local.");
+                    }
+
+                    $registroOrigen->decrement('cantidad', $cantidadADespachar);
+
+                    DespachoDetalles::create([
+                        'id_despacho'         => $despacho->id,
+                        'id_insumo'           => $insumo_id,
+                        'cantidad_enviada'    => $cantidadADespachar,
+                        'cantidad_recibida'   => 0, 
+                    ]);
+                }
+
+                // ==========================================
+                // 3. ENVÍO DE NOTIFICACIONES A DESTINO[cite: 15]
+                // ==========================================
+                $userIdsDestino = DB::table('users_has_local')
+                    ->where('id_local', $despacho->id_local_destino)
+                    ->pluck('id_user');
+
+                if ($userIdsDestino->isNotEmpty()) {
+                    $usuariosARecibir = User::whereIn('id', $userIdsDestino)->get();
+                    Notification::send($usuariosARecibir, new DespachoNotification($despacho, 'creado'));
+                }
+                
+                DB::commit();
+                return redirect()->route('despacho.index')->with('success', 'Despacho emitido con éxito. Notificación enviada al personal de destino.');
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                return redirect()->back()->with('error', $e->getMessage())->withInput();
             }
-
-            // ==========================================
-            // 3. ENVÍO DE NOTIFICACIONES A DESTINO
-            // ==========================================
-            // Buscamos los IDs de todos los usuarios vinculados al local/depósito receptor
-            $userIdsDestino = DB::table('users_has_local')
-                ->where('id_local', $despacho->id_local_destino)
-                ->pluck('id_user');
-
-            if ($userIdsDestino->isNotEmpty()) {
-                $usuariosARecibir = User::whereIn('id', $userIdsDestino)->get();
-                // Le pasamos el despacho y el tipo 'creado'
-                Notification::send($usuariosARecibir, new DespachoNotification($despacho, 'creado'));
-            }
-
-            DB::commit();
-            return redirect()->route('despacho.index')->with('success', 'Despacho emitido con éxito. Notificación enviada al personal de destino.');
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            return redirect()->back()->with('error', $e->getMessage())->withInput();
         }
-    }
     /**
      * Función privada para gestionar el stock en la ubicación de destino
      */
