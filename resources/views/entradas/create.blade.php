@@ -30,6 +30,10 @@
         top: 0 !important;
         right: 5px !important;
     }
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #63E2F7 !important;
+        color: #0f172a !important; /* Texto oscuro para garantizar alto contraste y legibilidad */
+    }
 </style>
 @endsection
 @section('content')
@@ -203,17 +207,15 @@
 
            // Función para dar formato a las opciones en la lista
            function formatInsumo (insumo) {
-               if (!insumo.id) { return insumo.text; } // Si es el placeholder
+               if (!insumo.id) { return insumo.text; }
 
-               // Obtenemos la descripción desde el data-attribute
                let descripcion = $(insumo.element).data('descripcion') || 'Sin descripción';
                
-               // Creamos un diseño HTML para la opción
                let $insumo = $(
-                   '<span>' +
-                       '<strong class="text-primary">' + insumo.text + '</strong><br>' +
-                       '<small class="text-muted"><i class="fas fa-info-circle mr-1"></i>' + descripcion + '</small>' +
-                   '</span>'
+                   '<div class="insumo-item"><strong>' +
+                       '<span class="titulo-insumo">' + insumo.text + '</span><br>' +
+                       '<span class="detalle-insumo"><i class="fas fa-info-circle mr-1"></i>' + descripcion + '</span>' +
+                   '</strong></div>'
                );
                
                return $insumo;
