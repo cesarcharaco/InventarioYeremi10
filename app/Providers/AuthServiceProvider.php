@@ -28,7 +28,7 @@ class AuthServiceProvider extends ServiceProvider
         
         // Gestión de Proveedores: Solo Admin y Encargado
         Gate::define('gestionar-proveedores', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
         });
 
         // Gestión de Compras
