@@ -175,146 +175,152 @@ class EntradaController extends Controller
     }
 
     public function procesarRecepcion(Request $request, $id)
-    {
-        if (Gate::denies('gestionar-entradas')) {
-            return redirect()->back()->with('error', 'Acceso denegado.');
-        }
-
-        $request->validate([
-            'cant_aprobar' => 'required|numeric|min:0',
-            'cant_retenido' => 'required|numeric|min:0',
-            'cant_rechazado' => 'required|numeric|min:0',
-            'costo_unitario' => 'required_if:cant_aprobar,>,0|nullable|numeric|min:0',
-            'modelo_venta_id' => 'required_if:cant_aprobar,>,0|nullable|exists:modelos_venta,id',
-            'observacion_recepcion' => 'nullable|string'
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            $recepcionOriginal = InsumoRecepcion::with('detalleEntrada.entrada', 'insumo')->findOrFail($id);
-            $detalleId = $recepcionOriginal->id_detalle_entrada;
-            $idInsumo = $recepcionOriginal->id_insumo;
-            $idLocal = $recepcionOriginal->id_local;
-
-            // Obtener todos los registros previos asociados a este detalle para calcular el total exacto de la factura
-            $recepcionesAnteriores = InsumoRecepcion::where('id_detalle_entrada', $detalleId)->get();
-            $totalFactura = $recepcionesAnteriores->sum('cantidad');
-
-            $cantAprobar = floatval($request->cant_aprobar);
-            $cantRetenido = floatval($request->cant_retenido);
-            $cantRechazado = floatval($request->cant_rechazado);
-
-            // Validar que la suma coincida exactamente con lo que llegó en la factura
-            if (round($cantAprobar + $cantRetenido + $cantRechazado, 2) !== round($totalFactura, 2)) {
-                return redirect()->back()->with('error', 'La suma de las cantidades distribuidas no coincide con el total de la factura.');
+        {
+            if (Gate::denies('gestionar-entradas')) {
+                return redirect()->back()->with('error', 'Acceso denegado.');
             }
 
-            // 1. REVERSIÓN DE STOCK: Descontar del inventario real lo que se había aprobado previamente
-            foreach ($recepcionesAnteriores as $recAnt) {
-                if ($recAnt->estado === 'PROCESADO') {
-                    $stock = InsumosC::where('id_insumo', $recAnt->id_insumo)->where('id_local', $recAnt->id_local)->first();
-                    if ($stock) {
-                        $stock->decrement('cantidad', $recAnt->cantidad);
+            $request->validate([
+                'cant_aprobar' => 'required|numeric|min:0',
+                'cant_retenido' => 'required|numeric|min:0',
+                'cant_rechazado' => 'required|numeric|min:0',
+                'costo_unitario' => 'required_if:cant_aprobar,>,0|nullable|numeric|min:0',
+                'modelo_venta_id' => 'required_if:cant_aprobar,>,0|nullable|exists:modelos_venta,id',
+                'observacion_recepcion' => 'nullable|string'
+            ]);
+
+            try {
+                DB::beginTransaction();
+
+                $recepcionOriginal = InsumoRecepcion::with('detalleEntrada.entrada', 'insumo')->findOrFail($id);
+                $detalleId = $recepcionOriginal->id_detalle_entrada;
+                $idInsumo = $recepcionOriginal->id_insumo;
+                $idLocal = $recepcionOriginal->id_local;
+
+                // Obtener todos los registros previos asociados a este detalle[cite: 13]
+                $recepcionesAnteriores = InsumoRecepcion::where('id_detalle_entrada', $detalleId)->get();
+                $totalFactura = (float) $recepcionesAnteriores->sum('cantidad');
+
+                $cantAprobar = floatval($request->cant_aprobar);
+                $cantRetenido = floatval($request->cant_retenido);
+                $cantRechazado = floatval($request->cant_rechazado);
+
+                // Validación segura de totales evitando conflictos de tipos float vs int
+                $sumaDistribuida = round($cantAprobar + $cantRetenido + $cantRechazado, 2);
+                $sumaTotalFactura = round($totalFactura, 2);
+
+                if ($sumaDistribuida != $sumaTotalFactura) {
+                    return redirect()->back()->with('error', 'La suma de las cantidades distribuidas no coincide con el total de la factura.');
+                }
+
+                // 1. REVERSIÓN DE STOCK[cite: 13]
+                foreach ($recepcionesAnteriores as $recAnt) {
+                    if ($recAnt->estado === 'PROCESADO') {
+                        $stock = InsumosC::where('id_insumo', $recAnt->id_insumo)
+                                         ->where('id_local', $recAnt->id_local)
+                                         ->first();
+                        if ($stock) {
+                            $stock->decrement('cantidad', $recAnt->cantidad);
+                        }
                     }
                 }
-            }
 
-            // 2. GESTIÓN DEL HISTÓRICO: Guardar la "foto" original o restaurar el estado base maestro usando Eloquent
-            $historico = HistoricoInsumoRecepcion::where('id_detalle_entrada', $detalleId)->first();
-            if (!$historico) {
-                $insumoMaestro = Insumos::find($idInsumo);
-                HistoricoInsumoRecepcion::create([
-                    'id_detalle_entrada' => $detalleId,
-                    'id_insumo' => $idInsumo,
-                    'costo_anterior' => $insumoMaestro->costo ?? 0,
-                    'id_modelo_venta_anterior' => $insumoMaestro->modelo_venta_id ?? null,
-                ]);
-            } else {
-                Insumos::where('id', $idInsumo)->update([
-                    'costo' => $historico->costo_anterior,
-                    'modelo_venta_id' => $historico->id_modelo_venta_anterior
-                ]);
-            }
-
-            // 3. ELIMINAR los registros fragmentados anteriores de la recepción
-            InsumoRecepcion::where('id_detalle_entrada', $detalleId)->delete();
-
-            $costoFinal = $request->costo_unitario ?? 0;
-
-            // 4. CREAR LOS NUEVOS REGISTROS SEGÚN LA DISTRIBUCIÓN ACTUALIZADA
-            if ($cantAprobar > 0) {
-                $stock = InsumosC::where('id_insumo', $idInsumo)->where('id_local', $idLocal)->first();
-                if ($stock) {
-                    $stock->increment('cantidad', $cantAprobar);
-                } else {
-                    InsumosC::create([
+                // 2. GESTIÓN DEL HISTÓRICO[cite: 13]
+                $historico = HistoricoInsumoRecepcion::where('id_detalle_entrada', $detalleId)->first();
+                if (!$historico) {
+                    $insumoMaestro = Insumos::find($idInsumo);
+                    HistoricoInsumoRecepcion::create([
+                        'id_detalle_entrada' => $detalleId,
                         'id_insumo' => $idInsumo,
-                        'id_local' => $idLocal,
-                        'cantidad' => $cantAprobar
+                        'costo_anterior' => $insumoMaestro->costo ?? 0,
+                        'id_modelo_venta_anterior' => $insumoMaestro->modelo_venta_id ?? null,
+                    ]);
+                } else {
+                    Insumos::where('id', $idInsumo)->update([
+                        'costo' => $historico->costo_anterior,
+                        'modelo_venta_id' => $historico->id_modelo_venta_anterior
                     ]);
                 }
 
-                Insumos::where('id', $idInsumo)->update([
-                    'costo' => $costoFinal,
-                    'modelo_venta_id' => $request->modelo_venta_id
-                ]);
+                // 3. ELIMINAR los registros fragmentados anteriores[cite: 13]
+                InsumoRecepcion::where('id_detalle_entrada', $detalleId)->delete();
 
-                InsumoRecepcion::create([
-                    'id_detalle_entrada' => $detalleId,
-                    'id_insumo' => $idInsumo,
-                    'id_local' => $idLocal,
-                    'cantidad' => $cantAprobar,
-                    'costo_unitario_usd' => $costoFinal,
-                    'estado' => 'PROCESADO',
-                    'observacion_recepcion' => $request->observacion_recepcion
-                ]);
+                $costoFinal = $request->costo_unitario ?? 0;
+
+                // 4. CREAR LOS NUEVOS REGISTROS[cite: 13]
+                if ($cantAprobar > 0) {
+                    $stock = InsumosC::firstOrCreate(
+                        [
+                            'id_insumo' => $idInsumo,
+                            'id_local' => $idLocal
+                        ],
+                        [
+                            'cantidad' => 0
+                        ]
+                    );
+                    
+                    $stock->increment('cantidad', $cantAprobar);
+
+                    Insumos::where('id', $idInsumo)->update([
+                        'costo' => $costoFinal,
+                        'modelo_venta_id' => $request->modelo_venta_id
+                    ]);
+
+                    InsumoRecepcion::create([
+                        'id_detalle_entrada' => $detalleId,
+                        'id_insumo' => $idInsumo,
+                        'id_local' => $idLocal,
+                        'cantidad' => $cantAprobar,
+                        'costo_unitario_usd' => $costoFinal,
+                        'estado' => 'PROCESADO',
+                        'observacion_recepcion' => $request->observacion_recepcion
+                    ]);
+                }
+
+                if ($cantRetenido > 0) {
+                    InsumoRecepcion::create([
+                        'id_detalle_entrada' => $detalleId,
+                        'id_insumo' => $idInsumo,
+                        'id_local' => $idLocal,
+                        'cantidad' => $cantRetenido,
+                        'costo_unitario_usd' => $costoFinal,
+                        'estado' => 'RETENIDO',
+                        'observacion_recepcion' => $request->observacion_recepcion
+                    ]);
+                }
+
+                if ($cantRechazado > 0) {
+                    InsumoRecepcion::create([
+                        'id_detalle_entrada' => $detalleId,
+                        'id_insumo' => $idInsumo,
+                        'id_local' => $idLocal,
+                        'cantidad' => $cantRechazado,
+                        'costo_unitario_usd' => $costoFinal,
+                        'estado' => 'RECHAZADO',
+                        'observacion_recepcion' => $request->observacion_recepcion
+                    ]);
+                }
+
+                // 5. Verificar estado general de la entrada[cite: 13]
+                $entradaAlmacen = $recepcionOriginal->detalleEntrada->entrada;
+                $pendientesRestantes = InsumoRecepcion::whereHas('detalleEntrada', function($q) use ($entradaAlmacen) {
+                    $q->where('id_entrada', $entradaAlmacen->id);
+                })->whereIn('estado', ['PENDIENTE', 'RETENIDO'])->count();
+
+                if ($pendientesRestantes === 0) {
+                    $entradaAlmacen->update(['estado' => 'APROBADO']);
+                } else {
+                    $entradaAlmacen->update(['estado' => 'PENDIENTE']);
+                }
+
+                DB::commit();
+                return redirect()->route('entradas.recepcion')->with('success', 'Recepción procesada y actualizada correctamente.');
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                return redirect()->back()->with('error', 'Error al procesar la recepción: ' . $e->getMessage());
             }
-
-            if ($cantRetenido > 0) {
-                InsumoRecepcion::create([
-                    'id_detalle_entrada' => $detalleId,
-                    'id_insumo' => $idInsumo,
-                    'id_local' => $idLocal,
-                    'cantidad' => $cantRetenido,
-                    'costo_unitario_usd' => $costoFinal,
-                    'estado' => 'RETENIDO',
-                    'observacion_recepcion' => $request->observacion_recepcion
-                ]);
-            }
-
-            if ($cantRechazado > 0) {
-                InsumoRecepcion::create([
-                    'id_detalle_entrada' => $detalleId,
-                    'id_insumo' => $idInsumo,
-                    'id_local' => $idLocal,
-                    'cantidad' => $cantRechazado,
-                    'costo_unitario_usd' => $costoFinal,
-                    'estado' => 'RECHAZADO',
-                    'observacion_recepcion' => $request->observacion_recepcion
-                ]);
-            }
-
-            // 5. Verificar estado general de la entrada
-            $entradaAlmacen = $recepcionOriginal->detalleEntrada->entrada;
-            $pendientesRestantes = InsumoRecepcion::whereHas('detalleEntrada', function($q) use ($entradaAlmacen) {
-                $q->where('id_entrada', $entradaAlmacen->id);
-            })->whereIn('estado', ['PENDIENTE', 'RETENIDO'])->count();
-
-            if ($pendientesRestantes === 0) {
-                $entradaAlmacen->update(['estado' => 'APROBADO']);
-            } else {
-                $entradaAlmacen->update(['estado' => 'PENDIENTE']);
-            }
-
-            DB::commit();
-            return redirect()->route('entradas.recepcion')->with('success', 'Recepción procesada y actualizada correctamente.');
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            return redirect()->back()->with('error', 'Error al procesar la recepción: ' . $e->getMessage());
         }
-    }
 
     public function revertirRecepcion($idDetalleEntrada)
     {
