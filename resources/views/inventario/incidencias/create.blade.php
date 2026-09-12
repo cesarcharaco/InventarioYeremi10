@@ -1,9 +1,32 @@
 @extends('layouts.app')
 @section('title') Registro de Incidencia @endsection
+@section('css')
 
+<style>
+    /* Forzar la altura y padding del Select2 para que coincida con los form-control */
+    .select2-container--default .select2-selection--single {
+        height: calc(2.25rem + 2px) !important;
+        padding: 0.375rem 0.75rem !important;
+        border: 1px solid #ced4da !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 1.5 !important;
+        padding-left: 0 !important;
+        color: #495057;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: calc(2.25rem + 2px) !important;
+        top: 0 !important;
+        right: 5px !important;
+    }
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #63E2F7 !important;
+        color: #0f172a !important; /* Texto oscuro para garantizar alto contraste y legibilidad */
+    }
+</style>
+@endsection
 @section('content')
 <main class="app-content">
-  {{-- Bloque de seguridad: Solo quienes tienen permiso de registro --}}
   @cannot('registrar-incidencia')
     <div class="tile text-center">
         <h1 class="text-danger"><i class="fa fa-ban"></i> Acceso No Autorizado</h1>
@@ -22,7 +45,6 @@
         <li class="breadcrumb-item">Registro de Incidencia</li>
       </ul>
   </div>
-  
 
   <div class="tile mb-4">
     <div class="row">
@@ -38,19 +60,23 @@
             <form action="{{ route('incidencias.store') }}" method="post" id="form_incidencia" data-parsley-validate>
               @csrf
               <div class="row">
-                <div class="col-lg-12">                  
+                <div class="col-md-6">                  
                   <div class="form-group">
-                    <label class="control-label">Seleccione Insumo y Ubicación <b style="color: red;">*</b></label>
-                    <select name="id_insumoc" id="id_insumoc" class="form-control select2" required>
-                      <option value="">-- Seleccione un insumo --</option>
-                      @foreach($insumos as $key)
-                        {{-- Usamos id_insumoc que es el ID de la tabla puente --}}
-                        @if(auth()->user()->esAdmin() || auth()->user()->local_id == $key->local_id)
-                        <option value="{{ $key->id_insumoc }}" data-max="{{ $key->cantidad }}">
-                          {{ $key->producto }} | Serial: {{ $key->serial }} | Ubicación: {{ $key->local_nombre }} | Disponible: {{ $key->cantidad }}
-                        </option>
-                        @endif
+                    <label class="control-label">Seleccione Local / Depósito <b style="color: red;">*</b></label>
+                    <select name="id_local" id="id_local" class="form-control select2" required>
+                      <option value="">-- Seleccione un local --</option>
+                      @foreach($locales as $local)
+                        <option value="{{ $local->id }}">{{ $local->nombre }}</option>
                       @endforeach
+                    </select>
+                  </div>
+                </div>
+
+                <div class="col-md-6">                  
+                  <div class="form-group">
+                    <label class="control-label">Seleccione Insumo <b style="color: red;">*</b></label>
+                    <select name="id_insumoc" id="id_insumoc" class="form-control select2" required disabled>
+                      <option value="">-- Primero seleccione un local --</option>
                     </select>
                   </div>
                 </div> 
@@ -117,9 +143,12 @@
 @section('scripts')
 <script type="text/javascript">
 $(document).ready(function() {
-    // 1. Instancias de componentes
+    $('.select2').select2();
+    $('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
+
     const ui = {
         cantidad:    $("#cantidad"),
+        local:       $("#id_local"),
         insumo:      $("#id_insumoc"),
         tipo:        $("#tipo"),
         obs:         $("#observacion"),
@@ -127,8 +156,35 @@ $(document).ready(function() {
         btnSubmit:   $("#registrar")
     };
 
-    $('.select2').select2();
-    $('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
+    const allInsumos = @json($insumos);
+
+    ui.local.on('change', function() {
+        const localId = $(this).val();
+        
+        ui.insumo.empty().append('<option value="">-- Seleccione un insumo --</option>');
+        
+        if (localId) {
+            const filtrados = allInsumos.filter(item => item.id_local == localId);
+            
+            filtrados.forEach(item => {
+                const option = new Option(
+                    `Serial: ${item.serial} | ${item.producto} | ${item.descripcion} | Disponible: ${item.cantidad}`, 
+                    item.id_insumoc, 
+                    false, 
+                    false
+                );
+                $(option).attr('data-max', item.cantidad);
+                ui.insumo.append(option);
+            });
+            
+            ui.insumo.prop('disabled', false);
+        } else {
+            ui.insumo.prop('disabled', true);
+        }
+        
+        ui.insumo.trigger('change');
+        validateForm();
+    });
 
     const validateForm = () => {
         const selected = ui.insumo.find(':selected');
@@ -139,7 +195,7 @@ $(document).ready(function() {
         let error = "";
         let isInvalid = false;
 
-        if (ui.insumo.val() === "") {
+        if (ui.local.val() === "" || ui.insumo.val() === "") {
             isInvalid = true;
         } else if (val <= 0) {
             error = "La cantidad debe ser mayor a 0";
@@ -149,7 +205,6 @@ $(document).ready(function() {
             isInvalid = true;
         }
 
-        // Validación de observación si es "Otro"
         if (tipo === 'Otro' && ui.obs.val().trim().length < 5) {
             isInvalid = true;
             ui.obs.addClass('is-invalid');

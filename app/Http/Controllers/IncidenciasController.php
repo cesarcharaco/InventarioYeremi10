@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Incidencias;
 use App\Models\Insumos;
+use App\Models\Local;
+use App\Models\User;
 use App\Models\InsumosC; // Este representa a insumos_has_cantidades
 use App\Models\HistorialIncidencias;
 use Illuminate\Http\Request;
@@ -33,10 +35,22 @@ class IncidenciasController extends Controller
         return view('inventario.incidencias.index', compact('incidencias'));
     }
 
+    
     public function create()
     {
         Gate::authorize('registrar-incidencia');
-        // Traemos los insumos con su ubicación y stock actual
+
+        $user = auth()->user();
+        
+        // Administradores y almacenistas pueden ver y registrar en cualquier local o depósito
+        if ($user->esAdmin() || $user->hasRole(User::ROLE_ALMACENISTA)) {
+            $locales = Local::all();
+        } else {
+            // Los encargados solo tienen acceso a su tienda/local asignado[cite: 20]
+            $locales = $user->local()->wherePivot('status', 'activo')->get();
+        }
+
+        // Traemos todos los insumos con su ubicación y stock actual para filtrarlos dinámicamente en la vista
         $insumos = DB::table('insumos_has_cantidades')
             ->join('insumos', 'insumos_has_cantidades.id_insumo', '=', 'insumos.id')
             ->join('local', 'insumos_has_cantidades.id_local', '=', 'local.id')
@@ -44,14 +58,16 @@ class IncidenciasController extends Controller
                 'insumos.id as id_real_insumo', 
                 'insumos.producto', 
                 'insumos.serial',
+                'insumos.descripcion',
                 'local.nombre as local_nombre',
                 'insumos_has_cantidades.cantidad',
-                'insumos_has_cantidades.id as id_insumoc' // El ID de la relación
+                'insumos_has_cantidades.id as id_insumoc',
+                'insumos_has_cantidades.id_local'
             )
             ->get();
         
         $hoy = date('Y-m-d');
-        return view('inventario.incidencias.create', compact('insumos', 'hoy'));
+        return view('inventario.incidencias.create', compact('locales', 'insumos', 'hoy'));
     }
 
     public function store(Request $request)
@@ -107,24 +123,38 @@ class IncidenciasController extends Controller
     }
     public function edit($id)
     {
-        Gate::authorize('gestionar-insumos');
-        $incidencia = Incidencias::findOrFail($id);
+        Gate::authorize('registrar-incidencia');
         
-        // Obtenemos los insumos con su ubicación para el select
-        $insumos = InsumosC::join('insumos', 'insumos_has_cantidades.id_insumo', '=', 'insumos.id')
+        $incidencia = Incidencias::findOrFail($id);
+        $user = auth()->user();
+        
+        // Administradores y almacenistas pueden ver y gestionar cualquier local o depósito
+        if ($user->esAdmin() || $user->hasRole(User::ROLE_ALMACENISTA)) {
+            $locales = Local::all();
+        } else {
+            // Los encargados solo tienen acceso a su tienda/local asignado[cite: 20]
+            $locales = $user->local()->wherePivot('status', 'activo')->get();
+        }
+
+        // Traemos todos los insumos con su ubicación, descripción y stock actual
+        $insumos = DB::table('insumos_has_cantidades')
+            ->join('insumos', 'insumos_has_cantidades.id_insumo', '=', 'insumos.id')
             ->join('local', 'insumos_has_cantidades.id_local', '=', 'local.id')
             ->select(
-                'insumos_has_cantidades.id as id_insumoc',
-                'insumos.producto',
+                'insumos.id as id_real_insumo', 
+                'insumos.producto', 
                 'insumos.serial',
                 'insumos.descripcion',
+                'local.nombre as local_nombre',
+                'local.id as id_local', // <--- ¡Asegúrate de incluir esto para mapear el ID del local!
                 'insumos_has_cantidades.cantidad',
-                'local.nombre as local_nombre'
+                'insumos_has_cantidades.id as id_insumoc'
             )
             ->get();
 
-        return view('inventario.incidencias.edit', compact('incidencia', 'insumos'));
+        return view('inventario.incidencias.edit', compact('incidencia', 'locales', 'insumos'));
     }
+        
     public function update(Request $request, $id)
     {
         Gate::authorize('gestionar-insumos');

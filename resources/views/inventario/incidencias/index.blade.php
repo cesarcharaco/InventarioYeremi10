@@ -41,6 +41,7 @@
             <table class="table table-hover table-bordered" id="sampleTable">
               <thead>
                 <tr>
+                  <th>Código</th>
                   <th>Insumo</th>
                   <th>Serial</th>
                   <th>Tipo</th>
@@ -52,9 +53,10 @@
               <tbody>
                 @foreach($incidencias as $key)
                 <tr>
-                  <td>{{ $key->producto }} ({{ $key->descripcion }})</td>
+                  <td>{{ $key->codigo }}</td>
+                  <td><strong>{{ $key->producto }}:</strong> ({{ $key->descripcion }})</td>
                   <td>{{ $key->serial }}</td>
-                  <td>{{ $key->tipo }}</td>
+                  <td>{{ $key->tipo }}:{{ $key->observacion }}</td>
                   <td>{{ $key->cantidad }}</td>
                   <td>{{ $key->fecha_incidencia }}</td>
                     
@@ -104,6 +106,48 @@
 @endsection
 @section('scripts')
 <script type="text/javascript">
+
+  $(document).ready(function() {
+      $.ajaxSetup({
+          headers: {
+              'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+          }
+      });
+
+      // Configuración de idioma local para DataTable
+      var lenguajeEspanol = {
+          "decimal": "",
+          "emptyTable": "No hay registros de despachos disponibles",
+          "info": "Mostrando _START_ a _END_ de _TOTAL_ entradas",
+          "infoEmpty": "Mostrando 0 a 0 de 0 entradas",
+          "infoFiltered": "(Filtrado de _MAX_ entradas totales)",
+          "infoPostFix": "",
+          "thousands": ",",
+          "lengthMenu": "Mostrar _MENU_ entradas",
+          "loadingRecords": "Cargando...",
+          "processing": "Procesando...",
+          "search": "Buscar:",
+          "zeroRecords": "Sin resultados encontrados",
+          "paginate": {
+              "first": "Primero",
+              "last": "Último",
+              "next": "Siguiente",
+              "previous": "Anterior"
+          }
+      };
+
+      // Inicialización de DataTable
+      try {
+          $('#sampleTable').DataTable({
+              "responsive": true,
+              "autoWidth": false,
+              "language": lenguajeEspanol,
+              "order": [[ 1, "desc" ]] // Ordenar por fecha descendente por defecto
+          });
+      } catch (e) {
+          console.log("Error en DataTable: ", e);
+      }
+  });
   function eliminar_incidencia(id_incidencia) {
     $("#id_incidencia").val(id_incidencia);
   }
