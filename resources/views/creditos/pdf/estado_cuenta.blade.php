@@ -224,18 +224,14 @@
     <div class="section-heading">RESUMEN GENERAL</div>
     <table class="resumen-table">
         <tr>
-            <td class="resumen-label">Monto Original Inicial:</td>
-            <td class="resumen-val">${{ number_format($resumen['monto_inicial'], 2) }}</td>
-            <td class="resumen-label">Total Abonado:</td>
-            <td class="resumen-val text-success">- ${{ number_format($resumen['total_abonado'], 2) }}</td>
-        </tr>
-        <tr>
-            <td class="resumen-label">Intereses / Indexaciones:</td>
-            <td class="resumen-val text-warning">+ ${{ number_format($resumen['total_intereses'], 2) }}</td>
             <td class="resumen-label" style="background-color: #ffe3e3;">Saldo Deuda Pendiente:</td>
             <td class="resumen-val text-danger" style="background-color: #ffe3e3; font-size: 11px;">
                 ${{ number_format($resumen['saldo_pendiente'], 2) }}
             </td>
+            <td class="resumen-label">Total Abonado:</td>
+            <td class="resumen-val text-success">- ${{ number_format($resumen['total_abonado'], 2) }}</td>
+            <td class="resumen-label">Intereses:</td>
+            <td class="resumen-val text-warning">+ ${{ number_format($resumen['total_intereses'], 2) }}</td>
         </tr>
         
         @if($resumen['saldo_a_favor'] > 0)
@@ -435,8 +431,11 @@
         $deudaRestante = $deudaTotalGeneral - $totalAbonoGeneral;
         $balanceFinal = $deudaRestante - $totalSaldoAFavor;
       @endphp
-      <tfoot class="bg-footer font-bold" style="font-size: 9.5px;">
+      <tfoot class="font-bold" style="font-size: 9.5px;">
         <tr>
+          <td colspan="4" class="text-center text-info">RESUMEN GENERAL</td>
+        </tr>
+        <!-- <tr>
           <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
           <td class="text-right text-warning">${{ number_format($totalDebeGeneral, 2) }}</td>
           <td class="text-right text-success">${{ number_format($totalAbonoGeneral, 2) }}</td>
@@ -461,7 +460,7 @@
           <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }}">
             ${{ number_format(abs($balanceFinal), 2) }}
           </td>
-        </tr>
+        </tr> -->
       </tfoot>
       @endif
     </table>

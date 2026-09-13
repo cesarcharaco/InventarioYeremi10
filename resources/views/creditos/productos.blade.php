@@ -323,6 +323,7 @@
           @php
             $deudaTotalGeneral = $totalDebeGeneral + $totalInteresesGeneral;
             $deudaRestante = $deudaTotalGeneral - $totalAbonoGeneral;
+            $deudamenosabono=$totalDebeGeneral - $totalAbonoGeneral;
             $balanceFinal = $deudaRestante - $totalSaldoAFavor;
           @endphp
           <tfoot class="bg-dark text-white font-weight-bold" style="font-size: 0.95em;">
@@ -330,7 +331,7 @@
               <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
               <td class="text-right text-warning tabular-nums">${{ number_format($totalDebeGeneral, 2) }}</td>
               <td class="text-right text-success tabular-nums">${{ number_format($totalAbonoGeneral, 2) }}</td>
-              <td class="text-right">TOTAL ABONADO NETO</td>
+              <td class="text-right text-info tabular-nums">TOTAL CON ABONOS: ${{ number_format($deudamenosabono, 2) }}</td>
             </tr>
             @if($totalInteresesGeneral > 0)
             <tr>
