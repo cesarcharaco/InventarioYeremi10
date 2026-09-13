@@ -84,4 +84,9 @@ class Insumos extends Model
         return $this->hasMany(PromocionRegla::class, 'referencia_id')
                     ->where('alcance', 'insumo');
     }
+
+    public function fotos() { 
+
+        return $this->hasMany(InsumoFoto::class, 'insumo_id'); 
+    }
 }

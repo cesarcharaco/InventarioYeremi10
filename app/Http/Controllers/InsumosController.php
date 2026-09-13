@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Insumos;
 use App\Models\InsumosC;
+use App\Models\InsumoFoto;
 use App\Models\Local;
 use App\Models\Categoria;
 use App\Models\ModeloVenta;
@@ -484,6 +485,7 @@ class InsumosController extends Controller
                 return '
                 <div class="btn-group">
                     <a href="'.route('insumos.edit', $row->id).'" class="btn btn-info btn-sm"><i class="fa fa-edit"></i></a>
+                    <a href="'.route('insumos.album', $row->id).'" class="btn btn-warning btn-sm" title="Álbum de Fotos"><i class="fa fa-image"></i></a>
                     <button class="btn btn-success btn-sm" onclick="detalles(\''.$row->producto.'\',\''.addslashes($row->descripcion).'\',\''.$row->serial.'\','.$row->stock_min.','.$row->stock_max.','.$row->cantidad.',\''.$row->nombre_local.'\')" data-toggle="modal" data-target="#detalles"><i class="fa fa-eye"></i></button>
                     <button class="btn btn-danger btn-sm" onclick="eliminar('.$row->id.')" data-toggle="modal" data-target="#eliminar_insumo"><i class="fa fa-trash"></i></button>
                     <a href="'.route('insumos.barcode_pdf', $row->id).'" target="_blank" class="btn btn-dark btn-sm" title="Imprimir Código de Barras">
@@ -669,5 +671,116 @@ class InsumosController extends Controller
                   ->setPaper('letter', 'portrait');
 
         return $pdf->stream("etiquetas_lote.pdf");
+    }
+
+    public function albumIndex($id)
+    {
+        Gate::authorize('ver-logistica');
+        
+        $insumo = Insumos::with('fotos')->findOrFail($id);
+        
+        return view('inventario.insumos.album', compact('insumo'));
+    }
+
+    // Actualización del método en InsumosController.php para recibir el campo de título opcional
+    public function albumStoreMultiple(Request $request, $id)
+    {
+        Gate::authorize('gestionar-insumos');
+        
+        $request->validate([
+            'fotos'   => 'required',
+            'fotos.*' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'titulo'  => 'nullable|string|max:150'
+        ]);
+
+        $insumo = Insumos::with('fotos')->findOrFail($id);
+
+        if ($request->hasFile('fotos')) {
+            $files = $request->file('fotos');
+            $tienePrincipal = $insumo->fotos->where('es_principal', true)->count() > 0;
+            $randomIndex = (!$tienePrincipal) ? rand(0, count($files) - 1) : -1;
+            $tituloBase = $request->input('titulo');
+
+            foreach ($files as $index => $file) {
+                // Omitir archivos que no sean válidos por seguridad
+                if (!$file->isValid()) {
+                    continue;
+                }
+
+                // Guardar directamente en la carpeta public/albumes
+                $nombreArchivo = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('albumes'), $nombreArchivo);
+                $path = 'albumes/' . $nombreArchivo;
+
+                $esPrincipal = (!$tienePrincipal && $index === $randomIndex);
+                
+                if ($esPrincipal) {
+                    $tienePrincipal = true;
+                }
+
+                // Si ingresó un título base se asigna (con numeración si son varias), sino toma el nombre original
+                if (!empty($tituloBase)) {
+                    $tituloFinal = count($files) > 1 ? "{$tituloBase} (" . ($index + 1) . ")" : $tituloBase;
+                } else {
+                    $tituloFinal = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                }
+
+                $insumo->fotos()->create([
+                    'ruta'         => $path,
+                    'titulo'       => $tituloFinal,
+                    'es_principal' => $esPrincipal
+                ]);
+            }
+        }
+
+        return redirect()->route('insumos.album', $id)->with('success', 'Fotografías agregadas al álbum con éxito.');
+    }
+
+    public function albumUpdateFoto(Request $request, $fotoId)
+    {
+        Gate::authorize('gestionar-insumos');
+        $request->validate(['titulo' => 'nullable|string|max:150']);
+        
+        $foto = InsumoFoto::findOrFail($fotoId);
+        $foto->update(['titulo' => $request->titulo]);
+
+        return response()->json(['success' => true, 'message' => 'Título actualizado correctamente.']);
+    }
+
+    public function albumDestroyFoto($fotoId)
+    {
+        Gate::authorize('gestionar-insumos');
+        $foto = InsumoFoto::findOrFail($fotoId);
+        
+        // Eliminar archivo físico de la carpeta public/albumes
+        if (file_exists(public_path($foto->ruta))) {
+            unlink(public_path($foto->ruta));
+        }
+
+        $insumoId = $foto->insumo_id;
+        $eraPrincipal = $foto->es_principal;
+        
+        $foto->delete();
+
+        // Si la foto eliminada era la principal, reasignar otra al azar si quedan disponibles
+        if ($eraPrincipal) {
+            $siguienteFoto = InsumoFoto::where('insumo_id', $insumoId)->inRandomOrder()->first();
+            if ($siguienteFoto) {
+                $siguienteFoto->update(['es_principal' => true]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Foto eliminada correctamente.');
+    }
+
+    public function albumSetPrincipal($fotoId)
+    {
+        Gate::authorize('gestionar-insumos');
+        $foto = InsumoFoto::findOrFail($fotoId);
+
+        InsumoFoto::where('insumo_id', $foto->insumo_id)->update(['es_principal' => false]);
+        $foto->update(['es_principal' => true]);
+
+        return redirect()->back()->with('success', 'Foto establecida como principal exitosamente.');
     }
 }

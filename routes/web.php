@@ -89,6 +89,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('buscar-ajax', [InsumosController::class, 'buscarInsumosAjax'])->name('insumos.buscar_ajax');
         // Generación del PDF Múltiple
         Route::post('barcode-pdf-multiple', [InsumosController::class, 'generarCodigosBarrasPdfMultiple'])->name('insumos.barcode_pdf_multiple');
+
+        // Rutas para los albumes de fotos
+        Route::get('/{id}/album', [InsumosController::class, 'albumIndex'])->name('insumos.album');
+        Route::post('/{id}/album/multiple', [InsumosController::class, 'albumStoreMultiple'])->name('insumos.album.store_multiple');
+        Route::put('/album/foto/{fotoId}', [InsumosController::class, 'albumUpdateFoto'])->name('insumos.album.update_foto');
+        Route::delete('/album/foto/{fotoId}', [InsumosController::class, 'albumDestroyFoto'])->name('insumos.album.destroy_foto');
+        Route::post('/album/foto/{fotoId}/principal', [InsumosController::class, 'albumSetPrincipal'])->name('insumos.album.set_principal');
     });
 
     // 3. Resource estándar de Insumos
