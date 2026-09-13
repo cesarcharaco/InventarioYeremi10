@@ -96,6 +96,7 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/album/foto/{fotoId}', [InsumosController::class, 'albumUpdateFoto'])->name('insumos.album.update_foto');
         Route::delete('/album/foto/{fotoId}', [InsumosController::class, 'albumDestroyFoto'])->name('insumos.album.destroy_foto');
         Route::post('/album/foto/{fotoId}/principal', [InsumosController::class, 'albumSetPrincipal'])->name('insumos.album.set_principal');
+        Route::get('album-general', [InsumosController::class, 'albumGeneral'])->name('insumos.album.general');
     });
 
     // 3. Resource estándar de Insumos

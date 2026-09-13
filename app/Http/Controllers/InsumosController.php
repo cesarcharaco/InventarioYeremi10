@@ -783,4 +783,13 @@ class InsumosController extends Controller
 
         return redirect()->back()->with('success', 'Foto establecida como principal exitosamente.');
     }
+
+    public function albumGeneral()
+    {
+        // Se cargan todas las fotos con su respectivo insumo asociado, paginadas de 20 en 20 
+        // para garantizar alto rendimiento con miles de registros.
+        $fotos = InsumoFoto::with('insumo')->latest()->paginate(20);
+
+        return view('inventario.insumos.album_general', compact('fotos'));
+    }
 }

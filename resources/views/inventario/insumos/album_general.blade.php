@@ -1,103 +1,53 @@
-{{-- resources/views/inventario/insumos/album.blade.php --}}
+{{-- resources/views/inventario/insumos/album_general.blade.php --}}
 @extends('layouts.app')
 
-@section('title') Álbum de Insumo @endsection
+@section('title') Álbum General de Insumos @endsection
 
 @section('content')
 <main class="app-content">
   <div class="app-title">
-      <div>
-        <h1><i class="fa fa-images"></i> Álbum de Fotos</h1>
-        <p>Insumo: <strong>{{ $insumo->producto }}</strong> | Serial: <span class="badge badge-secondary">{{ $insumo->serial }}</span></p>
-      </div>
-      <div>
-        <a href="{{ route('insumos.index') }}" class="btn btn-secondary">
-          <i class="fa fa-arrow-left mr-1"></i> Volver a Insumos
-        </a>
-      </div>
+    <div>
+      <h1><i class="fa fa-images"></i> Álbum General de Insumos</h1>
+      <p>Visualización global de todas las fotografías registradas en el inventario</p>
     </div>
+    <div>
+      <a href="{{ route('insumos.index') }}" class="btn btn-secondary">
+        <i class="fa fa-arrow-left mr-1"></i> Volver a Insumos
+      </a>
+    </div>
+  </div>
 
   <div class="basic-tb-hd text-center">
     @include('layouts.partials.flash-messages')
   </div>
 
-  {{-- Sección de registro múltiple con el campo de Título en resources/views/inventario/insumos/album.blade.php --}}
-  <div class="tile mb-4">
-    <h3 class="tile-title text-center mb-3"><i class="fa fa-cloud-upload-alt text-primary"></i> Agregar Fotografías al Álbum</h3>
-    <div class="tile-body">
-
-      {{-- MOSTRAR ERRORES DE VALIDACIÓN SI LOS HAY --}}
-          @if ($errors->any())
-            <div class="alert alert-danger">
-              <ul class="mb-0">
-                @foreach ($errors->all() as $error)
-                  <li>{{ $error }}</li>
-                @endforeach
-              </ul>
-            </div>
-          @endif
-      <form action="{{ route('insumos.album.store_multiple', $insumo->id) }}" method="POST" enctype="multipart/form-data">
-        @csrf
-        
-        {{-- Área Centralizada de Carga Estilo Dropzone --}}
-        <div class="row justify-content-center">
-          <div class="col-md-8">
-            <div class="form-group text-center p-4 border rounded bg-light position-relative" style="border: 2px dashed #007bff !important; transition: all 0.3s ease; cursor: pointer;">
-              <i class="fa fa-cloud-upload-alt fa-3x text-primary mb-2"></i>
-              <h5 class="mb-1">Haz clic aquí para seleccionar imágenes</h5>
-              <p class="text-muted small mb-2">Puedes seleccionar múltiples archivos (Formatos: JPG, PNG, WEBP. Máx: 3MB c/u)</p>
-              
-              {{-- Input invisible cubriendo toda la caja para facilitar el clic --}}
-              <input type="file" name="fotos[]" id="inputFotos" class="position-absolute w-100 h-100" style="top: 0; left: 0; opacity: 0; cursor: pointer;" multiple accept="image/jpeg,png,jpg,webp" required>
-              
-              {{-- Mensaje dinámico de archivos seleccionados --}}
-              <div id="fileFeedback" class="font-weight-bold text-success mt-2" style="font-size: 0.95rem;"></div>
-            </div>
-          </div>
-        </div>
-
-        {{-- Campo de Título Centrado --}}
-        <div class="row justify-content-center mt-3">
-          <div class="col-md-6">
-            <div class="form-group text-center">
-              <label class="font-weight-bold">Título Base (Opcional)</label>
-              <input type="text" name="titulo" class="form-control text-center" placeholder="Ej. Vista frontal de repuesto" maxlength="150">
-              <small class="form-text text-muted">Si se deja en blanco, se usará el nombre original del archivo.</small>
-            </div>
-          </div>
-        </div>
-
-        {{-- Botón de Envío Centrado --}}
-        <div class="row justify-content-center mt-3">
-          <div class="col-md-3">
-            <button type="submit" class="btn btn-primary btn-block py-2 shadow-sm">
-              <i class="fa fa-upload mr-1"></i> Subir Imágenes
-            </button>
-          </div>
-        </div>
-
-      </form>
-    </div>
-  </div>
-
-  {{-- Visualizador de Imágenes estilo Facebook --}}
+  {{-- Galería Global de Fotos --}}
   <div class="tile">
-    <h3 class="tile-title mb-4"><i class="fa fa-th"></i> Galería de Fotos</h3>
+    <h3 class="tile-title mb-4"><i class="fa fa-th"></i> Galería General</h3>
     
-    @if($insumo->fotos->count() > 0)
+    @if($fotos->count() > 0)
       <div class="row">
-        @foreach($insumo->fotos as $foto)
+        @foreach($fotos as $foto)
           <div class="col-md-3 col-sm-6 mb-4">
             <div class="card h-100 shadow-sm position-relative">
               
+              {{-- Indicador de Producto asociado --}}
+              <span class="badge badge-primary position-absolute text-truncate" 
+                    data-toggle="tooltip" 
+                    data-placement="top" 
+                    title="{{ $foto->titulo ?: 'Sin título' }}" 
+                    style="top: 10px; left: 10px; z-index: 10; font-size: 0.75rem; max-width: 60%; cursor: pointer;">
+                  {{ $foto->titulo ?: 'Sin título' }}
+              </span>
+              
               {{-- Indicador si es Principal --}}
               @if($foto->es_principal)
-                <span class="badge badge-success position-absolute" style="top: 10px; left: 10px; z-index: 10; font-size: 0.8rem;">
-                  <i class="fa fa-star">️</i> Principal
+                <span class="badge badge-success position-absolute" style="top: 10px; right: 45px; z-index: 10; font-size: 0.75rem;">
+                  <i class="fa fa-star"></i>
                 </span>
               @endif
 
-              {{-- Menú Desplegable estilo Facebook (Lápiz) --}}
+              {{-- Menú Desplegable estilo Facebook (Lápiz) idéntico a album.blade.php --}}
               <div class="dropdown position-absolute" style="top: 10px; right: 10px; z-index: 10;">
                 <button class="btn btn-light btn-sm rounded-circle shadow-sm" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="width: 32px; height: 32px; background-color: rgba(255, 255, 255, 0.9);">
                   <i class="fa fa-pen text-dark" style="font-size: 0.85rem;"></i>
@@ -114,7 +64,7 @@
                     </button>
                   </form>
 
-                  <a class="dropdown-item" href="{{ asset($foto->ruta) }}" download="insumo_{{ $insumo->serial }}_{{ $foto->id }}.jpg">
+                  <a class="dropdown-item" href="{{ asset($foto->ruta) }}" download="insumo_foto_{{ $foto->id }}.jpg">
                     <i class="fa fa-download text-success mr-2"></i> Descargar
                   </a>
 
@@ -127,29 +77,34 @@
                       <i class="fa fa-trash mr-2"></i> Eliminar foto
                     </button>
                   </form>
-
                 </div>
               </div>
 
-              {{-- Imagen con altura fija y diseño adaptable --}}
+              {{-- Imagen con altura fija y diseño adaptable (Clickeable para el visor) --}}
               <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebook({{ $loop->index }})">
                 <img src="{{ asset($foto->ruta) }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
+
               <div class="card-body p-2 text-center bg-light">
                 <p class="card-text text-muted mb-0" style="font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  {{ $foto->titulo ?: 'Sin título' }}
+                  {{ optional($foto->insumo)->producto ?? 'Sin Insumo' }}: {{ optional($foto->insumo)->descripcion ?? 'Sin descripcion' }}
                 </p>
+                <small class="text-muted" style="font-size: 0.75rem;">Serial: {{ optional($foto->insumo)->serial ?? 'N/A' }}</small>
               </div>
 
             </div>
           </div>
         @endforeach
       </div>
+
+      {{-- Paginación --}}
+      <div class="d-flex justify-content-center mt-4">
+        {{ $fotos->links() }}
+      </div>
     @else
       <div class="text-center py-5">
         <i class="fa fa-image fa-4x text-muted mb-3"></i>
-        <h5 class="text-muted">No hay fotografías registradas para este insumo.</h5>
-        <p class="text-muted">Utiliza el formulario superior para comenzar a subir imágenes</p>
+        <h5 class="text-muted">No hay fotografías registradas en el sistema.</h5>
       </div>
     @endif
   </div>
@@ -222,17 +177,17 @@
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
-        <p style="font-size: 1rem; margin-top: 5px;">{{ $insumo->producto }}</p>
+        <p id="fbLightboxProducto" style="font-size: 1rem; margin-top: 5px;"></p>
       </div>
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Serial</span>
-        <p style="margin-top: 5px;"><span class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;">{{ $insumo->serial }}</span></p>
+        <p style="margin-top: 5px;"><span id="fbLightboxSerial" class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;"></span></p>
       </div>
 
       <div style="margin-bottom: 15px; flex-grow: 1;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
-        <p style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4;">{{ $insumo->descripcion ?? 'Sin descripción registrada.' }}</p>
+        <p id="fbLightboxDescripcion" style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4;"></p>
       </div>
 
     </div>
@@ -242,6 +197,7 @@
 
 @section('scripts')
 <script>
+  // Funciones para el modal de edición de título por AJAX
   function abrirModalEditar(id, titulo) {
     $('#edit_foto_id').val(id);
     $('#edit_titulo').val(titulo === 'null' ? '' : titulo);
@@ -273,88 +229,88 @@
     });
   });
 
-  document.getElementById('inputFotos').addEventListener('change', function(e) {
-      let count = e.target.files.length;
-      let feedback = document.getElementById('fileFeedback');
-      if (count > 0) {
-        feedback.textContent = count === 1 ? '1 archivo seleccionado' : count + ' archivos seleccionados';
-      } else {
-        feedback.textContent = '';
+  // Alerta de confirmación para eliminar foto con SweetAlert2
+  function eliminarFoto(fotoId) {
+    swal.fire({
+      title: "¿Estás seguro?",
+      text: "¡No podrás recuperar esta fotografía una vez eliminada!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#6c757d",
+      confirmButtonText: "Sí, ¡eliminar!",
+      cancelButtonText: "Cancelar"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        document.getElementById('delete-form-' + fotoId).submit();
       }
     });
+  }
 
-  function eliminarFoto(fotoId) {
-      swal.fire({
-        title: "¿Estás seguro?",
-        text: "¡No podrás recuperar esta fotografía una vez eliminada!",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Sí, ¡eliminar!",
-        cancelButtonText: "Cancelar"
-      }).then((result) => {
-        if (result.isConfirmed) {
-          document.getElementById('delete-form-' + fotoId).submit();
-        }
-      });
+  // Mapeo dinámico de las fotos de la página actual hacia JavaScript para el carrusel
+  const albumFotos = [
+    @foreach($fotos as $foto)
+      {
+        ruta: "{{ asset($foto->ruta) }}",
+        titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}",
+        producto: "{{ addslashes(optional($foto->insumo)->producto ?? 'Sin producto') }}",
+        serial: "{{ addslashes(optional($foto->insumo)->serial ?? 'N/A') }}",
+        descripcion: "{{ addslashes(optional($foto->insumo)->descripcion ?? 'Sin descripción registrada.') }}"
+      },
+    @endforeach
+  ];
+
+  let currentIndex = 0;
+
+  function abrirVisorFacebook(index) {
+    currentIndex = index;
+    actualizarContenidoVisor();
+    document.getElementById('fbLightboxModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function cerrarVisorFacebook() {
+    document.getElementById('fbLightboxModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+  }
+
+  function cambiarFoto(direccion) {
+    currentIndex += direccion;
+    
+    if (currentIndex >= albumFotos.length) {
+      currentIndex = 0;
+    } else if (currentIndex < 0) {
+      currentIndex = albumFotos.length - 1;
     }
-    // Mapeo seguro de las fotos del álbum desde Laravel a JS
-      const albumFotos = [
-        @foreach($insumo->fotos as $foto)
-          {
-            ruta: "{{ asset($foto->ruta) }}",
-            titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}"
-          },
-        @endforeach
-      ];
+    
+    actualizarContenidoVisor();
+  }
 
-      let currentIndex = 0;
+  function actualizarContenidoVisor() {
+    let fotoActual = albumFotos[currentIndex];
+    document.getElementById('fbLightboxImg').src = fotoActual.ruta;
+    document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
+    document.getElementById('fbLightboxProducto').textContent = fotoActual.producto;
+    document.getElementById('fbLightboxSerial').textContent = fotoActual.serial;
+    document.getElementById('fbLightboxDescripcion').textContent = fotoActual.descripcion;
+  }
 
-      function abrirVisorFacebook(index) {
-        currentIndex = index;
-        actualizarContenidoVisor();
-        document.getElementById('fbLightboxModal').style.display = 'block';
-        document.body.style.overflow = 'hidden';
+  // Controles por teclado (Escape para salir, flechas para navegar)
+  document.addEventListener('keydown', function(event) {
+    if (document.getElementById('fbLightboxModal').style.display === 'block') {
+      if (event.key === "Escape") {
+        cerrarVisorFacebook();
+      } else if (event.key === "ArrowRight") {
+        cambiarFoto(1);
+      } else if (event.key === "ArrowLeft") {
+        cambiarFoto(-1);
       }
+    }
+  });
 
-      function cerrarVisorFacebook() {
-        document.getElementById('fbLightboxModal').style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
-
-      function cambiarFoto(direccion) {
-        currentIndex += direccion;
-        
-        // Si llega al final, da la vuelta al inicio (carrusel infinito)
-        if (currentIndex >= albumFotos.length) {
-          currentIndex = 0;
-        } 
-        // Si baja del inicio, pasa a la última foto
-        else if (currentIndex < 0) {
-          currentIndex = albumFotos.length - 1;
-        }
-        
-        actualizarContenidoVisor();
-      }
-
-      function actualizarContenidoVisor() {
-        let fotoActual = albumFotos[currentIndex];
-        document.getElementById('fbLightboxImg').src = fotoActual.ruta;
-        document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
-      }
-
-      // Control mediante teclado (Escape para cerrar, Flechas para navegar)
-      document.addEventListener('keydown', function(event) {
-        if (document.getElementById('fbLightboxModal').style.display === 'block') {
-          if (event.key === "Escape") {
-            cerrarVisorFacebook();
-          } else if (event.key === "ArrowRight") {
-            cambiarFoto(1);
-          } else if (event.key === "ArrowLeft") {
-            cambiarFoto(-1);
-          }
-        }
-      });
+  $(document).ready(function() {
+    // Activar los tooltips de Bootstrap
+    $('[data-toggle="tooltip"]').tooltip();
+  });
 </script>
 @endsection

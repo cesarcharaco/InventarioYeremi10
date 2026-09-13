@@ -29,6 +29,9 @@
             <a class="btn btn-dark icon-btn pull-right mr-2" href="{{ route('insumos.etiquetas') }}">
               <i class="fa fa-barcode"></i> Carrito de Etiquetas
             </a>
+            <a class="btn btn-info icon-btn pull-right mr-2 text-white" href="{{ route('insumos.album.general') }}">
+              <i class="fa fa-images"></i> Álbum General
+            </a>
           </h2>
         </div>
         <div class="basic-tb-hd text-center">
