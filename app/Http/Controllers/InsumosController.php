@@ -800,11 +800,36 @@ class InsumosController extends Controller
         return redirect()->back()->with('success', 'Foto establecida como principal exitosamente.');
     }
 
-    public function albumGeneral()
+    public function albumGeneral(Request $request)
     {
-        // Se cargan todas las fotos con su respectivo insumo asociado, paginadas de 20 en 20 
-        // para garantizar alto rendimiento con miles de registros.
         $fotos = InsumoFoto::with('insumo')->latest()->paginate(20);
+
+        if ($request->ajax()) {
+            // Preparamos los datos estructurados para agregarlos dinámicamente al arreglo de JS del visor
+            $fotosData = $fotos->map(function($foto) {
+                $nombreArchivo = basename($foto->ruta);
+                $rutaThumb = file_exists(public_path('albumes/thumbs/' . $nombreArchivo)) 
+                             ? asset('albumes/thumbs/' . $nombreArchivo) 
+                             : asset($foto->ruta);
+
+                return [
+                    'ruta' => asset($foto->ruta), // Imagen original HD para el visor
+                    'thumb' => $rutaThumb,         // Miniatura para la tarjeta
+                    'titulo' => $foto->titulo ?: 'Sin título',
+                    'producto' => optional($foto->insumo)->producto ?? 'Sin producto',
+                    'serial' => optional($foto->insumo)->serial ?? 'N/A',
+                    'descripcion' => optional($foto->insumo)->descripcion ?? 'Sin descripción registrada.',
+                    'es_principal' => $foto->es_principal,
+                    'id' => $foto->id
+                ];
+            });
+
+            return response()->json([
+                'html' => view('inventario.insumos.partials.grid_items', compact('fotos'))->render(),
+                'fotos' => $fotosData,
+                'has_more' => $fotos->hasMorePages()
+            ]);
+        }
 
         return view('inventario.insumos.album_general', compact('fotos'));
     }
