@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Credito extends Model
 {
+    
     protected $table = 'creditos';
 
     protected $fillable = [
@@ -94,8 +95,16 @@ class Credito extends Model
         return $this->hasMany(CajaMovimiento::class, 'id_credito');
     }
 
-    public function getEstadoAttribute() {
-        return $this->saldo_pendiente <= 0 ? 'pagado' : 'pendiente';
+    public function getEstadoAttribute($value)
+    {
+        // Si el saldo pendiente es 0 o menor, financieramente está pagado
+        if ($this->saldo_pendiente <= 0) {
+            return 'pagado';
+        }
+
+        // Si tiene deuda pendiente, devuelve el estado real almacenado en la BD
+        // (ej: 'vencido', 'revalorizado', 'anticipo', 'pendiente')
+        return $value;
     }
 
     public function scopeConSaldoCalculado($query) {

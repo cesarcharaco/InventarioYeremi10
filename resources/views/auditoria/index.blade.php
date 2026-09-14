@@ -65,6 +65,7 @@
                     <th class="text-center">Acción</th>
                     <th>Tabla Afectada</th>
                     <th>Usuario</th>
+                    <th>Cliente</th>
                     <th>Fecha y Hora</th>
                     <th class="text-center">Acciones</th>
                   </tr>
@@ -90,6 +91,9 @@
         <button class="close text-white" type="button" data-dismiss="modal"><span>×</span></button>
       </div>
       <div class="modal-body">
+        {{-- Contenedor dinámico para mostrar info del cliente si existe en el registro --}}
+        <div id="modal-cliente-container"></div>
+
         <div class="table-responsive">
           <table class="table table-bordered table-striped" id="tabla-comparativa-audit" style="width: 100%;">
             <thead>
@@ -110,7 +114,6 @@
       </div>
     </div>
   </div>
-</div>
 </div>
 @endsection
 
@@ -149,6 +152,7 @@
             { "data": "accion", "className": "text-center" },
             { "data": "tabla_afectada" },
             { "data": "nombre_usuario" },
+            { "data": "cliente_info" },
             { "data": "ejecutado_en" },
             { "data": "acciones", "className": "text-center", "orderable": false, "searchable": false }
         ],
@@ -157,7 +161,7 @@
         "autoWidth": false,
         "pageLength": 10,
         "searchDelay": 500,
-        "order": [[3, 'desc']]
+        "order": [[4, 'desc']] // Ajustado al índice de 'ejecutado_en'
     });
 
     // Validar y ejecutar el filtro al hacer clic en "Filtrar"
@@ -187,6 +191,17 @@
       let anteriores = data.anteriores ? JSON.parse(data.anteriores) : {};
       let nuevos = data.nuevos ? JSON.parse(data.nuevos) : {};
 
+      // Mostrar info del cliente en el modal si está disponible
+      let clienteHtml = '';
+      if (data.cliente_nombre) {
+          clienteHtml = `
+              <div class="alert alert-info py-2 mb-3">
+                  <i class="fa fa-user"></i> <strong>Cliente Relacionado:</strong> ${data.cliente_nombre} <small class="text-muted">(CI/RIF: ${data.cliente_identificacion || 'N/A'})</small>
+              </div>
+          `;
+      }
+      $('#modal-cliente-container').html(clienteHtml);
+
       // Obtener todas las llaves (campos) únicas de ambos objetos
       let keys = [...new Set([...Object.keys(anteriores), ...Object.keys(nuevos)])];
       let html = '';
@@ -198,7 +213,7 @@
               let valAnt = anteriores[key] !== undefined ? anteriores[key] : '<span class="text-muted font-italic">No existía</span>';
               let valNue = nuevos[key] !== undefined ? nuevos[key] : '<span class="text-muted font-italic">Eliminado</span>';
 
-              // Opcional: Resaltar visualmente la fila si el valor cambió
+              // Resaltar visualmente la fila si el valor cambió
               let rowClass = (valAnt !== valNue) ? 'table-warning' : '';
 
               html += `
@@ -212,6 +227,6 @@
       }
 
       $('#tabla-comparativa-audit tbody').html(html);
-    }
+  }
 </script>
 @endsection

@@ -653,8 +653,10 @@ public function create()
 
             // 3. Manejar créditos asociados si existen
             if ($venta->credito) {
-                // Eliminar o ajustar el crédito asociado a la venta anulada
-                $venta->credito->delete();
+                $venta->credito->update([
+                    'estado' => 'anulado',
+                    'saldo_pendiente' => 0
+                ]);
             }
 
             // 4. Liberar o anular correlativo de factura/nota si aplica
