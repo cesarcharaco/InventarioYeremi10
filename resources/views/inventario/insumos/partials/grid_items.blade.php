@@ -51,10 +51,13 @@
         </div>
       </div>
 
-      {{-- Imagen con miniatura optimizada --}}
+      {{-- Imagen con miniatura y respaldo de seguridad inteligente --}}
       @php
           $nombreArchivo = basename($foto->ruta);
-          $rutaThumb = asset('albumes/thumbs/' . $nombreArchivo);
+          $rutaThumbFisica = public_path('albumes/thumbs/' . $nombreArchivo);
+          $rutaThumb = file_exists($rutaThumbFisica) 
+                       ? asset('albumes/thumbs/' . $nombreArchivo) 
+                       : asset($foto->ruta);
       @endphp
       <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebookDynamic({{ $foto->id }})">
         <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
