@@ -2,7 +2,28 @@
 @extends('layouts.app')
 
 @section('title') Álbum General de Insumos @endsection
-
+@push('styles')
+<style>
+  @media (max-width: 992px) {
+    #fbLightboxModal .fb-lightbox-wrapper {
+      flex-direction: column !important;
+      overflow-y: auto !important;
+    }
+    #fbLightboxModal .fb-lightbox-img-container {
+      height: 50vh !important;
+      min-height: 280px;
+      padding: 15px !important;
+      flex: none !important;
+    }
+    #fbLightboxModal .fb-lightbox-sidebar {
+      width: 100% !important;
+      height: auto !important;
+      border-left: none !important;
+      border-top: 1px solid #393a3b !important;
+    }
+  }
+</style>
+@endpush
 @section('content')
 <main class="app-content">
   <div class="app-title">
