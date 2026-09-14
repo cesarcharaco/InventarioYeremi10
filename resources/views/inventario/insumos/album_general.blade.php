@@ -302,32 +302,18 @@
 
 @section('scripts')
 <script>
-  const albumFotos = [
-    @foreach($fotos as $foto)
-      {
-        id: {{ $foto->id }},
-        ruta: "{{ asset($foto->ruta) }}",
-        titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}",
-        producto: "{{ addslashes(optional($foto->insumo)->producto ?? 'Sin producto') }}",
-        serial: "{{ addslashes(optional($foto->insumo)->serial ?? 'N/A') }}",
-        descripcion: "{{ addslashes(optional($foto->insumo)->descripcion ?? 'Sin descripción registrada.') }}"
-      },
-    @endforeach
-  ];
-
   let currentIndex = 0;
+  let triggerElements = [];
   let page = 1;
   let hasMore = true;
   let loading = false;
 
-  function abrirVisorFacebookDynamic(fotoId) {
-    let index = albumFotos.findIndex(f => f.id === fotoId);
-    if (index !== -1) {
-      currentIndex = index;
-      actualizarContenidoVisor();
-      document.getElementById('fbLightboxModal').style.display = 'block';
-      document.body.style.overflow = 'hidden';
-    }
+  function abrirVisorFacebook(element) {
+    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
+    currentIndex = triggerElements.indexOf(element);
+    actualizarContenidoVisor();
+    document.getElementById('fbLightboxModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
   }
 
   function cerrarVisorFacebook() {
@@ -337,21 +323,22 @@
 
   function cambiarFoto(direccion) {
     currentIndex += direccion;
-    if (currentIndex >= albumFotos.length) {
+    if (currentIndex >= triggerElements.length) {
       currentIndex = 0;
     } else if (currentIndex < 0) {
-      currentIndex = albumFotos.length - 1;
+      currentIndex = triggerElements.length - 1;
     }
     actualizarContenidoVisor();
   }
 
   function actualizarContenidoVisor() {
-    let fotoActual = albumFotos[currentIndex];
-    document.getElementById('fbLightboxImg').src = fotoActual.ruta;
-    document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
-    document.getElementById('fbLightboxProducto').textContent = fotoActual.producto;
-    document.getElementById('fbLightboxSerial').textContent = fotoActual.serial;
-    document.getElementById('fbLightboxDescripcion').textContent = fotoActual.descripcion;
+    let el = triggerElements[currentIndex];
+    if (!el) return;
+    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
+    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
+    document.getElementById('fbLightboxProducto').textContent = el.getAttribute('data-producto');
+    document.getElementById('fbLightboxSerial').textContent = el.getAttribute('data-serial');
+    document.getElementById('fbLightboxDescripcion').textContent = el.getAttribute('data-descripcion');
   }
 
   const observer = new IntersectionObserver((entries) => {
@@ -375,7 +362,6 @@
       type: 'GET',
       success: function(response) {
         $('#galeria-grid').append(response.html);
-        albumFotos.push(...response.fotos);
         hasMore = response.has_more;
         loading = false;
         document.getElementById('loading-spinner').style.display = 'none';
@@ -415,7 +401,7 @@
       },
       success: function(response) {
         if(response.success) {
-          $('#modalEditarTitulo').modal('hide');
+          $('#modalEditarTitle').modal('hide');
           location.reload();
         }
       },

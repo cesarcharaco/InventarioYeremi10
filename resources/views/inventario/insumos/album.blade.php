@@ -311,7 +311,11 @@
                                ? asset('albumes/thumbs/' . $nombreArchivo) 
                                : asset($foto->ruta);
               @endphp
-              <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebook({{ $loop->index }})">
+              <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" 
+                   class="d-flex align-items-center justify-content-center lightbox-trigger" 
+                   onclick="abrirVisorFacebook(this)"
+                   data-ruta="{{ asset($foto->ruta) }}"
+                   data-titulo="{{ $foto->titulo ?: 'Sin título' }}">
                 <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
               <div class="card-body p-2 text-center bg-light">
@@ -467,55 +471,49 @@
       });
     }
 
-      const albumFotos = [
-        @foreach($insumo->fotos as $foto)
-          {
-            ruta: "{{ asset($foto->ruta) }}",
-            titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}"
-          },
-        @endforeach
-      ];
+  let currentIndex = 0;
+  let triggerElements = [];
 
-      let currentIndex = 0;
+  function abrirVisorFacebook(element) {
+    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
+    currentIndex = triggerElements.indexOf(element);
+    actualizarContenidoVisor();
+    document.getElementById('fbLightboxModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  }
 
-      function abrirVisorFacebook(index) {
-        currentIndex = index;
-        actualizarContenidoVisor();
-        document.getElementById('fbLightboxModal').style.display = 'block';
-        document.body.style.overflow = 'hidden';
+  function cerrarVisorFacebook() {
+    document.getElementById('fbLightboxModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+  }
+
+  function cambiarFoto(direccion) {
+    currentIndex += direccion;
+    if (currentIndex >= triggerElements.length) {
+      currentIndex = 0;
+    } else if (currentIndex < 0) {
+      currentIndex = triggerElements.length - 1;
+    }
+    actualizarContenidoVisor();
+  }
+
+  function actualizarContenidoVisor() {
+    let el = triggerElements[currentIndex];
+    if (!el) return;
+    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
+    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
+  }
+
+  document.addEventListener('keydown', function(event) {
+    if (document.getElementById('fbLightboxModal').style.display === 'block') {
+      if (event.key === "Escape") {
+        cerrarVisorFacebook();
+      } else if (event.key === "ArrowRight") {
+        cambiarFoto(1);
+      } else if (event.key === "ArrowLeft") {
+        cambiarFoto(-1);
       }
-
-      function cerrarVisorFacebook() {
-        document.getElementById('fbLightboxModal').style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
-
-      function cambiarFoto(direccion) {
-        currentIndex += direccion;
-        if (currentIndex >= albumFotos.length) {
-          currentIndex = 0;
-        } else if (currentIndex < 0) {
-          currentIndex = albumFotos.length - 1;
-        }
-        actualizarContenidoVisor();
-      }
-
-      function actualizarContenidoVisor() {
-        let fotoActual = albumFotos[currentIndex];
-        document.getElementById('fbLightboxImg').src = fotoActual.ruta;
-        document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
-      }
-
-      document.addEventListener('keydown', function(event) {
-        if (document.getElementById('fbLightboxModal').style.display === 'block') {
-          if (event.key === "Escape") {
-            cerrarVisorFacebook();
-          } else if (event.key === "ArrowRight") {
-            cambiarFoto(1);
-          } else if (event.key === "ArrowLeft") {
-            cambiarFoto(-1);
-          }
-        }
-      });
+    }
+  });
 </script>
 @endsection
