@@ -802,25 +802,25 @@ class InsumosController extends Controller
 
     public function albumGeneral(Request $request)
     {
-        // Optimizamos seleccionando únicamente las columnas necesarias de la relación
-        $fotos = InsumoFoto::with(['insumo' => function($query) {
-            $query->select('id', 'producto', 'serial', 'descripcion');
-        }])->latest()->paginate(20);
+        $fotos = InsumoFoto::with('insumo')->latest()->paginate(20);
 
         if ($request->ajax()) {
+            // Preparamos los datos estructurados para agregarlos dinámicamente al arreglo de JS del visor
             $fotosData = $fotos->map(function($foto) {
                 $nombreArchivo = basename($foto->ruta);
-                $rutaThumb = asset('albumes/thumbs/' . $nombreArchivo);
+                $rutaThumb = file_exists(public_path('albumes/thumbs/' . $nombreArchivo)) 
+                             ? asset('albumes/thumbs/' . $nombreArchivo) 
+                             : asset($foto->ruta);
 
                 return [
-                    'id' => $foto->id,
-                    'ruta' => asset($foto->ruta),
-                    'thumb' => $rutaThumb,
+                    'ruta' => asset($foto->ruta), // Imagen original HD para el visor
+                    'thumb' => $rutaThumb,         // Miniatura para la tarjeta
                     'titulo' => $foto->titulo ?: 'Sin título',
                     'producto' => optional($foto->insumo)->producto ?? 'Sin producto',
                     'serial' => optional($foto->insumo)->serial ?? 'N/A',
                     'descripcion' => optional($foto->insumo)->descripcion ?? 'Sin descripción registrada.',
-                    'es_principal' => $foto->es_principal
+                    'es_principal' => $foto->es_principal,
+                    'id' => $foto->id
                 ];
             });
 
