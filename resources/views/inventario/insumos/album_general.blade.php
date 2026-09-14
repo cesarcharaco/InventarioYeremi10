@@ -1,22 +1,24 @@
-{{-- resources/views/inventario/insumos/album_general.blade.php --}}
 @extends('layouts.app')
 
 @section('title') Álbum General de Insumos @endsection
 @push('styles')
 <style>
-  @media (max-width: 992px) {
+  @media (max-width: 1024px) {
     #fbLightboxModal .fb-lightbox-wrapper {
       flex-direction: column !important;
-      overflow-y: auto !important;
+      height: auto !important;
+      min-height: 100% !important;
     }
     #fbLightboxModal .fb-lightbox-img-container {
-      height: 50vh !important;
-      min-height: 280px;
-      padding: 15px !important;
+      width: 100% !important;
+      height: 45vh !important;
+      min-height: 300px;
+      padding: 20px !important;
       flex: none !important;
     }
     #fbLightboxModal .fb-lightbox-sidebar {
       width: 100% !important;
+      max-width: 100% !important;
       height: auto !important;
       border-left: none !important;
       border-top: 1px solid #393a3b !important;
@@ -47,12 +49,10 @@
     <h3 class="tile-title mb-4"><i class="fa fa-th"></i> Galería General</h3>
     
     @if($fotos->count() > 0)
-      {{-- Contenedor dinámico donde se inyectarán las fotos mediante scroll infinito --}}
       <div class="row" id="galeria-grid">
         @include('inventario.insumos.partials.grid_items', ['fotos' => $fotos])
       </div>
 
-      {{-- Indicador de carga (Spinner) y Sensor de Scroll Infinito --}}
       <div id="scroll-sentinel" class="text-center py-4">
         <div id="loading-spinner" style="display: none;">
           <i class="fa fa-spinner fa-spin fa-2x text-primary"></i>
@@ -95,28 +95,29 @@
   </div>
 </div>
 
-{{-- VISOR TIPO FACEBOOK CON CARRUSEL --}}
-<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); z-index: 9999; overflow: hidden;">
+{{-- VISOR TIPO FACEBOOK RESPONSIVE --}}
+<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); z-index: 9999; overflow-y: auto;">
   
-  <button type="button" onclick="cerrarVisorFacebook()" style="position: absolute; top: 20px; right: 25px; background: none; border: none; color: #fff; font-size: 2.5rem; cursor: pointer; z-index: 10000; outline: none;">
+  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
     &times;
   </button>
 
-  <div style="display: flex; width: 100%; height: 100%;">
-    <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative;">
+  <div class="fb-lightbox-wrapper" style="display: flex; width: 100%; min-height: 100%; box-sizing: border-box;">
+    
+    <div class="fb-lightbox-img-container" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; box-sizing: border-box;">
       
-      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 20px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.8rem; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
+      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-left"></i>
       </button>
 
       <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
-      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 20px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.8rem; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
+      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
       </button>
     </div>
 
-    <div style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
+    <div class="fb-lightbox-sidebar" style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
       
       <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.2rem;">
         <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
@@ -124,12 +125,12 @@
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
-        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff;"></p>
+        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
       </div>
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
-        <p id="fbLightboxProducto" style="font-size: 1rem; margin-top: 5px;"></p>
+        <p id="fbLightboxProducto" style="font-size: 1rem; margin-top: 5px; word-break: break-word;"></p>
       </div>
 
       <div style="margin-bottom: 15px;">
@@ -139,7 +140,7 @@
 
       <div style="margin-bottom: 15px; flex-grow: 1;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
-        <p id="fbLightboxDescripcion" style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4;"></p>
+        <p id="fbLightboxDescripcion" style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;"></p>
       </div>
 
     </div>
@@ -149,7 +150,6 @@
 
 @section('scripts')
 <script>
-  // Arreglo global dinámico para el visor tipo Facebook
   const albumFotos = [
     @foreach($fotos as $foto)
       {
@@ -168,7 +168,6 @@
   let hasMore = true;
   let loading = false;
 
-  // Abrir visor buscando por ID de foto (compatible con elementos cargados por AJAX)
   function abrirVisorFacebookDynamic(fotoId) {
     let index = albumFotos.findIndex(f => f.id === fotoId);
     if (index !== -1) {
@@ -203,7 +202,6 @@
     document.getElementById('fbLightboxDescripcion').textContent = fotoActual.descripcion;
   }
 
-  // Configuración del Scroll Infinito mediante Intersection Observer
   const observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && hasMore && !loading) {
       cargarMasFotos();
@@ -225,21 +223,16 @@
       type: 'GET',
       success: function(response) {
         $('#galeria-grid').append(response.html);
-        
-        // Agregar los nuevos registros al arreglo global del visor
         albumFotos.push(...response.fotos);
-        
         hasMore = response.has_more;
         loading = false;
         document.getElementById('loading-spinner').style.display = 'none';
 
-        // Si ya no hay más páginas, ocultamos el sentinel
         if (!hasMore) {
           observer.disconnect();
           document.getElementById('scroll-sentinel').innerHTML = '<p class="text-muted small">No hay más fotografías que mostrar.</p>';
         }
 
-        // Reactivar tooltips de Bootstrap en los nuevos elementos
         $('[data-toggle="tooltip"]').tooltip();
       },
       error: function() {
@@ -249,7 +242,6 @@
     });
   }
 
-  // Funciones auxiliares (Edición de título y eliminación)
   function abrirModalEditar(id, titulo) {
     $('#edit_foto_id').val(id);
     $('#edit_titulo').val(titulo === 'null' ? '' : titulo);
@@ -298,7 +290,6 @@
     });
   }
 
-  // Controles por teclado para el visor
   document.addEventListener('keydown', function(event) {
     if (document.getElementById('fbLightboxModal').style.display === 'block') {
       if (event.key === "Escape") {

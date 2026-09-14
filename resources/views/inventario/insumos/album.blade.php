@@ -1,22 +1,24 @@
-{{-- resources/views/inventario/insumos/album.blade.php --}}
 @extends('layouts.app')
 
 @section('title') Álbum de Insumo @endsection
 @push('styles')
 <style>
-  @media (max-width: 992px) {
+  @media (max-width: 1024px) {
     #fbLightboxModal .fb-lightbox-wrapper {
       flex-direction: column !important;
-      overflow-y: auto !important;
+      height: auto !important;
+      min-height: 100% !important;
     }
     #fbLightboxModal .fb-lightbox-img-container {
-      height: 50vh !important;
-      min-height: 280px;
-      padding: 15px !important;
+      width: 100% !important;
+      height: 45vh !important;
+      min-height: 300px;
+      padding: 20px !important;
       flex: none !important;
     }
     #fbLightboxModal .fb-lightbox-sidebar {
       width: 100% !important;
+      max-width: 100% !important;
       height: auto !important;
       border-left: none !important;
       border-top: 1px solid #393a3b !important;
@@ -42,25 +44,23 @@
     @include('layouts.partials.flash-messages')
   </div>
 
-  {{-- Sección de registro múltiple con el campo de Título en resources/views/inventario/insumos/album.blade.php --}}
+  {{-- Sección de registro múltiple con el campo de Título --}}
   <div class="tile mb-4">
     <h3 class="tile-title text-center mb-3"><i class="fa fa-cloud-upload-alt text-primary"></i> Agregar Fotografías al Álbum</h3>
     <div class="tile-body">
 
-      {{-- MOSTRAR ERRORES DE VALIDACIÓN SI LOS HAY --}}
-          @if ($errors->any())
-            <div class="alert alert-danger">
-              <ul class="mb-0">
-                @foreach ($errors->all() as $error)
-                  <li>{{ $error }}</li>
-                @endforeach
-              </ul>
-            </div>
-          @endif
+      @if ($errors->any())
+        <div class="alert alert-danger">
+          <ul class="mb-0">
+            @foreach ($errors->all() as $error)
+              <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+        </div>
+      @endif
       <form action="{{ route('insumos.album.store_multiple', $insumo->id) }}" method="POST" enctype="multipart/form-data">
         @csrf
         
-        {{-- Área Centralizada de Carga Estilo Dropzone --}}
         <div class="row justify-content-center">
           <div class="col-md-8">
             <div class="form-group text-center p-4 border rounded bg-light position-relative" style="border: 2px dashed #007bff !important; transition: all 0.3s ease; cursor: pointer;">
@@ -68,16 +68,13 @@
               <h5 class="mb-1">Haz clic aquí para seleccionar imágenes</h5>
               <p class="text-muted small mb-2">Puedes seleccionar múltiples archivos (Formatos: JPG, PNG, WEBP. Máx: 3MB c/u)</p>
               
-              {{-- Input invisible cubriendo toda la caja para facilitar el clic --}}
               <input type="file" name="fotos[]" id="inputFotos" class="position-absolute w-100 h-100" style="top: 0; left: 0; opacity: 0; cursor: pointer;" multiple accept="image/jpeg,png,jpg,webp" required>
               
-              {{-- Mensaje dinámico de archivos seleccionados --}}
               <div id="fileFeedback" class="font-weight-bold text-success mt-2" style="font-size: 0.95rem;"></div>
             </div>
           </div>
         </div>
 
-        {{-- Campo de Título Centrado --}}
         <div class="row justify-content-center mt-3">
           <div class="col-md-6">
             <div class="form-group text-center">
@@ -88,7 +85,6 @@
           </div>
         </div>
 
-        {{-- Botón de Envío Centrado --}}
         <div class="row justify-content-center mt-3">
           <div class="col-md-3">
             <button type="submit" class="btn btn-primary btn-block py-2 shadow-sm">
@@ -101,7 +97,7 @@
     </div>
   </div>
 
-  {{-- Visualizador de Imágenes estilo Facebook --}}
+  {{-- Galería de Fotos --}}
   <div class="tile">
     <h3 class="tile-title mb-4"><i class="fa fa-th"></i> Galería de Fotos</h3>
     
@@ -111,14 +107,12 @@
           <div class="col-md-3 col-sm-6 mb-4">
             <div class="card h-100 shadow-sm position-relative">
               
-              {{-- Indicador si es Principal --}}
               @if($foto->es_principal)
                 <span class="badge badge-success position-absolute" style="top: 10px; left: 10px; z-index: 10; font-size: 0.8rem;">
                   <i class="fa fa-star">️</i> Principal
                 </span>
               @endif
 
-              {{-- Menú Desplegable estilo Facebook (Lápiz) --}}
               <div class="dropdown position-absolute" style="top: 10px; right: 10px; z-index: 10;">
                 <button class="btn btn-light btn-sm rounded-circle shadow-sm" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="width: 32px; height: 32px; background-color: rgba(255, 255, 255, 0.9);">
                   <i class="fa fa-pen text-dark" style="font-size: 0.85rem;"></i>
@@ -152,13 +146,11 @@
                 </div>
               </div>
 
-              {{-- Imagen con altura fija y diseño adaptable --}}
-
               @php
                   $nombreArchivo = basename($foto->ruta);
                   $rutaThumb = file_exists(public_path('albumes/thumbs/' . $nombreArchivo)) 
                                ? asset('albumes/thumbs/' . $nombreArchivo) 
-                               : asset($foto->ruta); // Fallback por si la foto es antigua
+                               : asset($foto->ruta);
               @endphp
               <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebook({{ $loop->index }})">
                 <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
@@ -210,34 +202,29 @@
   </div>
 </div>
 
-{{-- VISOR TIPO FACEBOOK CON CARRUSEL --}}
-<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.9); z-index: 9999; overflow: hidden;">
+{{-- VISOR TIPO FACEBOOK RESPONSIVE --}}
+<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); z-index: 9999; overflow-y: auto;">
   
-  {{-- Botón Cerrar (X) Superior Derecho --}}
-  <button type="button" onclick="cerrarVisorFacebook()" style="position: absolute; top: 20px; right: 25px; background: none; border: none; color: #fff; font-size: 2.5rem; cursor: pointer; z-index: 10000; outline: none;">
+  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
     &times;
   </button>
 
-  <div style="display: flex; width: 100%; height: 100%;">
+  <div class="fb-lightbox-wrapper" style="display: flex; width: 100%; min-height: 100%; box-sizing: border-box;">
     
-    {{-- Contenedor de la Imagen y Flechas a la Izquierda --}}
-    <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative;">
+    <div class="fb-lightbox-img-container" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; box-sizing: border-box;">
       
-      {{-- Botón Anterior (<) --}}
-      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 20px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.8rem; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
+      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-left"></i>
       </button>
 
       <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
-      {{-- Botón Siguiente (>) --}}
-      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 20px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.8rem; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
+      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
       </button>
     </div>
 
-    {{-- Panel de Información a la Derecha --}}
-    <div style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
+    <div class="fb-lightbox-sidebar" style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
       
       <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.2rem;">
         <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
@@ -245,12 +232,12 @@
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
-        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff;"></p>
+        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
       </div>
 
       <div style="margin-bottom: 15px;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
-        <p style="font-size: 1rem; margin-top: 5px;">{{ $insumo->producto }}</p>
+        <p style="font-size: 1rem; margin-top: 5px; word-break: break-word;">{{ $insumo->producto }}</p>
       </div>
 
       <div style="margin-bottom: 15px;">
@@ -260,7 +247,7 @@
 
       <div style="margin-bottom: 15px; flex-grow: 1;">
         <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
-        <p style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4;">{{ $insumo->descripcion ?? 'Sin descripción registrada.' }}</p>
+        <p style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;">{{ $insumo->descripcion ?? 'Sin descripción registrada.' }}</p>
       </div>
 
     </div>
@@ -327,7 +314,7 @@
         }
       });
     }
-    // Mapeo seguro de las fotos del álbum desde Laravel a JS
+
       const albumFotos = [
         @foreach($insumo->fotos as $foto)
           {
@@ -353,16 +340,11 @@
 
       function cambiarFoto(direccion) {
         currentIndex += direccion;
-        
-        // Si llega al final, da la vuelta al inicio (carrusel infinito)
         if (currentIndex >= albumFotos.length) {
           currentIndex = 0;
-        } 
-        // Si baja del inicio, pasa a la última foto
-        else if (currentIndex < 0) {
+        } else if (currentIndex < 0) {
           currentIndex = albumFotos.length - 1;
         }
-        
         actualizarContenidoVisor();
       }
 
@@ -372,7 +354,6 @@
         document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
       }
 
-      // Control mediante teclado (Escape para cerrar, Flechas para navegar)
       document.addEventListener('keydown', function(event) {
         if (document.getElementById('fbLightboxModal').style.display === 'block') {
           if (event.key === "Escape") {
