@@ -81,8 +81,14 @@
               </div>
 
               {{-- Imagen con altura fija y diseño adaptable (Clickeable para el visor) --}}
+              @php
+                  $nombreArchivo = basename($foto->ruta);
+                  $rutaThumb = file_exists(public_path('albumes/thumbs/' . $nombreArchivo)) 
+                               ? asset('albumes/thumbs/' . $nombreArchivo) 
+                               : asset($foto->ruta); // Fallback por si la foto es antigua
+              @endphp
               <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebook({{ $loop->index }})">
-                <img src="{{ asset($foto->ruta) }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
+                <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
 
               <div class="card-body p-2 text-center bg-light">

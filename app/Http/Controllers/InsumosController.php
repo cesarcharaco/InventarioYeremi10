@@ -687,9 +687,10 @@ class InsumosController extends Controller
     {
         Gate::authorize('gestionar-insumos');
         
+        // Aumentamos el límite de validación a 20MB (20480 KB) para permitir fotos profesionales de alta calidad
         $request->validate([
             'fotos'   => 'required',
-            'fotos.*' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'fotos.*' => 'required|image|mimes:jpeg,png,jpg,webp|max:20480',
             'titulo'  => 'nullable|string|max:150'
         ]);
 
@@ -701,16 +702,26 @@ class InsumosController extends Controller
             $randomIndex = (!$tienePrincipal) ? rand(0, count($files) - 1) : -1;
             $tituloBase = $request->input('titulo');
 
+            // Directorio para miniaturas de carga rápida
+            $thumbPathDir = public_path('albumes/thumbs');
+            if (!file_exists($thumbPathDir)) {
+                mkdir($thumbPathDir, 0755, true);
+            }
+
             foreach ($files as $index => $file) {
-                // Omitir archivos que no sean válidos por seguridad
                 if (!$file->isValid()) {
                     continue;
                 }
 
-                // Guardar directamente en la carpeta public/albumes
+                // Nombre único compartido para el original y su miniatura
                 $nombreArchivo = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                
+                // 1. GUARDAR LA FOTO ORIGINAL INTACTA en public/albumes
                 $file->move(public_path('albumes'), $nombreArchivo);
-                $path = 'albumes/' . $nombreArchivo;
+                $pathOriginal = 'albumes/' . $nombreArchivo;
+
+                // 2. GENERAR MINIATURA LIGERA (400x400px) para que la galería vuele sin afectar el original
+                $this->generarMiniatura(public_path($pathOriginal), $thumbPathDir . '/' . $nombreArchivo, 400, 400, 75);
 
                 $esPrincipal = (!$tienePrincipal && $index === $randomIndex);
                 
@@ -718,7 +729,6 @@ class InsumosController extends Controller
                     $tienePrincipal = true;
                 }
 
-                // Si ingresó un título base se asigna (con numeración si son varias), sino toma el nombre original
                 if (!empty($tituloBase)) {
                     $tituloFinal = count($files) > 1 ? "{$tituloBase} (" . ($index + 1) . ")" : $tituloBase;
                 } else {
@@ -726,14 +736,14 @@ class InsumosController extends Controller
                 }
 
                 $insumo->fotos()->create([
-                    'ruta'         => $path,
+                    'ruta'         => $pathOriginal,
                     'titulo'       => $tituloFinal,
                     'es_principal' => $esPrincipal
                 ]);
             }
         }
 
-        return redirect()->route('insumos.album', $id)->with('success', 'Fotografías agregadas al álbum con éxito.');
+        return redirect()->route('insumos.album', $id)->with('success', 'Fotografías de alta calidad agregadas con éxito.');
     }
 
     public function albumUpdateFoto(Request $request, $fotoId)
@@ -752,9 +762,16 @@ class InsumosController extends Controller
         Gate::authorize('gestionar-insumos');
         $foto = InsumoFoto::findOrFail($fotoId);
         
-        // Eliminar archivo físico de la carpeta public/albumes
+        // 1. Eliminar archivo original físico
         if (file_exists(public_path($foto->ruta))) {
             unlink(public_path($foto->ruta));
+        }
+
+        // 2. Eliminar miniatura asociada si existe
+        $nombreArchivo = basename($foto->ruta);
+        $rutaThumb = public_path('albumes/thumbs/' . $nombreArchivo);
+        if (file_exists($rutaThumb)) {
+            unlink($rutaThumb);
         }
 
         $insumoId = $foto->insumo_id;
@@ -762,7 +779,6 @@ class InsumosController extends Controller
         
         $foto->delete();
 
-        // Si la foto eliminada era la principal, reasignar otra al azar si quedan disponibles
         if ($eraPrincipal) {
             $siguienteFoto = InsumoFoto::where('insumo_id', $insumoId)->inRandomOrder()->first();
             if ($siguienteFoto) {
@@ -791,5 +807,61 @@ class InsumosController extends Controller
         $fotos = InsumoFoto::with('insumo')->latest()->paginate(20);
 
         return view('inventario.insumos.album_general', compact('fotos'));
+    }
+
+    private function generarMiniatura($rutaOrigen, $rutaDestino, $nuevoAncho, $nuevoAlto, $calidad)
+    {
+        $info = @getimagesize($rutaOrigen);
+        if (!$info) return;
+
+        list($anchoOriginal, $altoOriginal, $tipo) = $info;
+
+        switch ($tipo) {
+            case IMAGETYPE_JPEG:
+                $imgOriginal = @imagecreatefromjpeg($rutaOrigen);
+                break;
+            case IMAGETYPE_PNG:
+                $imgOriginal = @imagecreatefrompng($rutaOrigen);
+                if ($imgOriginal) {
+                    imagepalettetotruecolor($imgOriginal);
+                    imagealphablending($imgOriginal, true);
+                    imagesavealpha($imgOriginal, true);
+                }
+                break;
+            case IMAGETYPE_WEBP:
+                $imgOriginal = @imagecreatefromwebp($rutaOrigen);
+                break;
+            default:
+                return;
+        }
+
+        if (!$imgOriginal) return;
+
+        $ratio = $anchoOriginal / $altoOriginal;
+        if ($nuevoAncho / $nuevoAlto > $ratio) {
+            $nuevoAncho = $nuevoAlto * $ratio;
+        } else {
+            $nuevoAlto = $nuevoAncho / $ratio;
+        }
+
+        $imgMiniatura = imagecreatetruecolor((int)$nuevoAncho, (int)$nuevoAlto);
+
+        if ($tipo == IMAGETYPE_PNG || $tipo == IMAGETYPE_WEBP) {
+            imagecolortransparent($imgMiniatura, imagecolorallocatealpha($imgMiniatura, 0, 0, 0, 127));
+            imagealphablending($imgMiniatura, false);
+            imagesavealpha($imgMiniatura, true);
+        }
+
+        imagecopyresampled($imgMiniatura, $imgOriginal, 0, 0, 0, 0, (int)$nuevoAncho, (int)$nuevoAlto, $anchoOriginal, $altoOriginal);
+
+        $extension = strtolower(pathinfo($rutaDestino, PATHINFO_EXTENSION));
+        if ($extension == 'png') {
+            imagepng($imgMiniatura, $rutaDestino, 6);
+        } else {
+            imagejpeg($imgMiniatura, $rutaDestino, $calidad);
+        }
+
+        imagedestroy($imgOriginal);
+        imagedestroy($imgMiniatura);
     }
 }
