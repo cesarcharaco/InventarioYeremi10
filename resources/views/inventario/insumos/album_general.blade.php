@@ -4,6 +4,9 @@
 @push('styles')
 <style>
   @media (max-width: 1024px) {
+    #fbLightboxModal {
+      align-items: flex-start !important;
+    }
     #fbLightboxModal .fb-lightbox-wrapper {
       flex-direction: column !important;
       height: auto !important;
@@ -11,10 +14,21 @@
     }
     #fbLightboxModal .fb-lightbox-img-container {
       width: 100% !important;
-      height: 45vh !important;
-      min-height: 300px;
-      padding: 20px !important;
+      height: auto !important;
+      min-height: auto !important;
+      max-height: 75vh !important;
+      padding: 15px !important;
       flex: none !important;
+      background-color: #000 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    #fbLightboxModal .fb-lightbox-img-container img {
+      max-height: 70vh !important;
+      width: auto !important;
+      max-width: 100% !important;
+      object-fit: contain !important;
     }
     #fbLightboxModal .fb-lightbox-sidebar {
       width: 100% !important;
