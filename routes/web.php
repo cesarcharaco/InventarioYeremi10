@@ -273,7 +273,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead'])->name('notifications.markAllRead');
     Route::get('/notifications/all', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/count', [NotificationController::class, 'count'])->name('notifications.count');
-
+    Route::get('notifications/data', [NotificationController::class, 'getData'])->name('notifications.data');
 
 
     // Rutas Web Protegidas por Autenticación (ejemplo estándar con prefijo/middleware)

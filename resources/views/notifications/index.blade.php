@@ -35,57 +35,52 @@
       </div>
     </div>
 
+    {{-- SECCIÓN DE FILTROS SUPERIORES (Desde, Hasta, Estado) --}}
+    <div class="tile mb-3 p-3 bg-light border">
+      <div class="row align-items-end">
+        <div class="col-md-3 form-group mb-md-0">
+          <label for="desde" class="font-weight-bold small">Desde:</label>
+          <input type="date" id="desde" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3 form-group mb-md-0">
+          <label for="hasta" class="font-weight-bold small">Hasta:</label>
+          <input type="date" id="hasta" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3 form-group mb-md-0">
+          <label for="estado" class="font-weight-bold small">Estado:</label>
+          <select id="estado" class="form-control form-control-sm">
+            <option value="">Todas</option>
+            <option value="no_leidas">No leídas</option>
+            <option value="leidas">Leídas</option>
+          </select>
+        </div>
+        <div class="col-md-3 form-group mb-md-0 d-flex">
+          <a href="{{ route('notifications.index') }}" class="btn btn-secondary btn-sm btn-block" title="Limpiar filtros">
+            <i class="fa fa-refresh"></i> Limpiar Filtros
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="row">
       <div class="col-md-12">
         <div class="tile">
           <div class="tile-body">
             <div class="table-responsive">
-              <table class="table table-hover table-bordered" id="sampleTable">
+              <table class="table table-hover table-bordered" id="tabla-notificaciones" style="width:100%">
                 <thead>
-                  <tr>
-                    <th width="50">Estado</th>
+                  <tr class="bg-primary text-white">
+                    <th width="50" class="text-center">Estado</th>
                     <th>Notificación</th>
                     <th>Mensaje</th>
                     <th>Fecha</th>
-                    <th width="100">Acción</th>
+                    <th width="100" class="text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
-                  @foreach($notifications as $n)
-                  <tr style="{{ $n->read_at ? 'opacity: 0.7;' : 'background-color: rgba(0, 123, 255, 0.05); border-left: 3px solid #007bff;' }}">
-                    <td class="text-center">
-                      @if($n->read_at)
-                        <i class="fa fa-envelope-open text-muted" title="Leída"></i>
-                      @else
-                        <i class="fa fa-envelope text-primary" title="Nueva"></i>
-                      @endif
-                    </td>
-                    <td class="align-middle">
-                        <i class="{{ $n->data['icono'] ?? 'fa fa-info-circle' }} mr-2"></i>
-                        <strong>{{ $n->data['titulo'] ?? ($n->data['title'] ?? 'Alerta del Sistema') }}</strong>
-                    </td>
-                    <td class="align-middle">
-                        {{ $n->data['mensaje'] ?? ($n->data['message'] ?? 'Sin descripción disponible') }}
-                    </td>
-                    <td>
-                      <span class="text-muted small">
-                        <i class="fa fa-clock-o"></i> {{ $n->created_at->diffForHumans() }}
-                      </span>
-                    </td>
-                    <td>
-                      <a href="{{ route('notifications.read', $n->id) }}" 
-                         class="btn btn-primary btn-sm btn-block">
-                        <i class="fa fa-eye"></i> Ver
-                      </a>
-                    </td>
-                  </tr>
-                  @endforeach
+                  <!-- Los datos se cargan dinámicamente vía AJAX por DataTables -->
                 </tbody>
               </table>
-            </div>
-            {{-- Paginación en caso de que haya muchas --}}
-            <div class="mt-3">
-                {{ $notifications->links() }}
             </div>
           </div>
         </div>
@@ -97,17 +92,66 @@
 
 @section('scripts')
 <script type="text/javascript">
-  $(document).ready(function() {
-    if ( ! $.fn.DataTable.isDataTable( '#sampleTable' ) ) {
-        $('#sampleTable').DataTable({
-          "language": { 
-              "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json" 
-          },
-          "responsive": true,
-          "autoWidth": false,
-          "order": [[3, "desc"]] // Ordenar por fecha (columna 3) descendente
-        });
-    }
+  $(document).ready(function () {
+    
+    // Traducción al español igual a insumos
+    var lenguajeEspanol = {
+        "decimal": "",
+        "emptyTable": "No hay información disponible",
+        "info": "Mostrando _START_ a _END_ de _TOTAL_ entradas",
+        "infoEmpty": "Mostrando 0 a 0 de 0 entradas",
+        "infoFiltered": "(Filtrado de _MAX_ entradas totales)",
+        "infoPostFix": "",
+        "thousands": ",",
+        "lengthMenu": "Mostrar _MENU_ entradas",
+        "loadingRecords": "Cargando...",
+        "processing": "Procesando...",
+        "search": "Buscar:",
+        "zeroRecords": "Sin resultados encontrados",
+        "paginate": {
+            "first": "Primero",
+            "last": "Último",
+            "next": "Siguiente",
+            "previous": "Anterior"
+        }
+    };
+
+    // Inicialización del DataTable del lado del servidor
+    var table = $('#tabla-notificaciones').DataTable({
+        "processing": true,
+        "serverSide": true,
+        "ajax": {
+            "url": "{{ route('notifications.data') }}",
+            "type": "GET",
+            "data": function (d) {
+                d.desde = $('#desde').val();
+                d.hasta = $('#hasta').val();
+                d.estado = $('#estado').val();
+            }
+        },
+        "columns": [
+            { "data": "estado", "orderable": false, "searchable": false, "className": "text-center align-middle" },
+            { "data": "titulo", "className": "align-middle" },
+            { "data": "mensaje", "className": "align-middle" },
+            { "data": "fecha", "searchable": false, "className": "align-middle" }, // <--- Añadimos searchable: false aquí
+            { "data": "acciones", "orderable": false, "searchable": false, "className": "text-center align-middle" }
+        ],
+        "language": lenguajeEspanol,
+        "responsive": true,
+        "autoWidth": false,
+        "pageLength": 15,
+        "searchDelay": 500,
+        "order": [[3, 'desc']] // Ordenado por fecha descendente por defecto
+    });
+
+    // Eventos para actualizar la tabla instantáneamente al modificar los filtros sin perder paginación
+    $('#desde, #hasta').on('change', function () {
+        table.ajax.reload();
+    });
+
+    $('#estado').on('change', function () {
+        table.ajax.reload();
+    });
   });
 </script>
 @endsection

@@ -29,58 +29,65 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class CreditoController extends Controller
 {
     public function index(Request $request)
-    {
-        Gate::authorize('ver-creditos');
+{
+    Gate::authorize('ver-creditos');
 
-        $user = auth()->user();
+    $user = auth()->user();
 
-        // 1. Obtener los IDs de los locales del usuario
-        $misLocales = [];
+    // 1. Obtener los IDs de los locales del usuario
+    $misLocales = [];
+    if (!$user->esAdmin()) {
+        $misLocales = DB::table('users_has_local')
+                    ->where('id_user', $user->id)
+                    ->pluck('id_local')
+                    ->toArray();
+    }
+
+    // Callback base: Valida únicamente el acceso por local (permite ver historial con 0 deuda o saldos pagados)
+    $filtroLocalCredito = function($qCredito) use ($user, $misLocales) {
         if (!$user->esAdmin()) {
-            $misLocales = DB::table('users_has_local')
-                            ->where('id_user', $user->id)
-                            ->pluck('id_local')
-                            ->toArray();
-        }
-
-        // Callback reutilizable para filtrar por estado y local
-        $filtroCreditosActivos = function($qCredito) use ($user, $misLocales) {
-            $qCredito->whereIn('estado', ['pendiente', 'anticipo']);
-
-            if (!$user->esAdmin()) {
-                $qCredito->where(function($q) use ($misLocales) {
-                    $q->whereHas('venta', function($qVenta) use ($misLocales) {
-                        $qVenta->whereIn('id_local', $misLocales);
-                    })
-                    ->orWhereNull('id_venta');
-                });
-            }
-        };
-
-        // 2. Consulta principal: Cargar créditos e incluir saldo total pendiente
-        $query = Cliente::whereHas('creditos', $filtroCreditosActivos)
-            ->with(['creditos' => $filtroCreditosActivos])
-            ->withSum(['creditos as saldo_total_pendiente' => $filtroCreditosActivos], 'saldo_pendiente');
-
-        // 3. Filtro de búsqueda por nombre, identificación o alias
-        if ($request->filled('buscar')) {
-            $buscar = $request->buscar;
-            $query->where(function($q) use ($buscar) {
-                $q->where('nombre', 'like', "%{$buscar}%")
-                  ->orWhere('identificacion', 'like', "%{$buscar}%")
-                  ->orWhere('alias', 'like', "%{$buscar}%");
+            $qCredito->where(function($q) use ($misLocales) {
+                $q->whereHas('venta', function($qVenta) use ($misLocales) {
+                    $qVenta->whereIn('id_local', $misLocales);
+                })
+                ->orWhereNull('id_venta');
             });
         }
+    };
 
-        $clientes = $query->get();
+    // Callback estricto: Filtra únicamente créditos activos/anticipos y aplica el filtro de local
+    $filtroCreditosActivos = function($qCredito) use ($filtroLocalCredito) {
+        $filtroLocalCredito($qCredito);
+        $qCredito->whereIn('estado', ['pendiente', 'anticipo']);
+    };
 
-        // 4. Modal / Selector: Clientes que no tienen créditos activos ni anticipos
-        $todosLosClientes = Cliente::whereDoesntHave('creditos', $filtroCreditosActivos)
-            ->orderBy('nombre', 'asc')
-            ->get();
+    // 2. Consulta principal modificada:
+    // - whereHas con $filtroLocalCredito: Trae a clientes con créditos activos Y clientes con 0 deuda. 
+    //   Excluye automáticamente a los que NUNCA han tenido créditos.
+    // - with y withSum con $filtroCreditosActivos: Siguen cargando y sumando solo lo pendiente/activo.
+    $query = Cliente::whereHas('creditos', $filtroLocalCredito)
+        ->with(['creditos' => $filtroCreditosActivos])
+        ->withSum(['creditos as saldo_total_pendiente' => $filtroCreditosActivos], 'saldo_pendiente');
 
-        return view('creditos.index', compact('clientes', 'todosLosClientes'));
+    // 3. Filtro de búsqueda por nombre, identificación o alias
+    if ($request->filled('buscar')) {
+        $buscar = $request->buscar;
+        $query->where(function($q) use ($buscar) {
+            $q->where('nombre', 'like', "%{$buscar}%")
+              ->orWhere('identificacion', 'like', "%{$buscar}%")
+              ->orWhere('alias', 'like', "%{$buscar}%");
+        });
     }
+
+    $clientes = $query->get();
+
+    // 4. Modal / Selector: Clientes que no tienen créditos activos ni anticipos
+    $todosLosClientes = Cliente::whereDoesntHave('creditos', $filtroCreditosActivos)
+        ->orderBy('nombre', 'asc')
+        ->get();
+
+    return view('creditos.index', compact('clientes', 'todosLosClientes'));
+}
 
     public function show($id)
     {
@@ -162,9 +169,16 @@ class CreditoController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($request, $id, $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs) {
-                $creditoReferencia = Credito::findOrFail($id);
-                $cliente = $creditoReferencia->cliente;
+            // Obtenemos el cliente y sus datos antes de la transacción para evitar que queden en NULL
+            $creditoReferencia = Credito::findOrFail($id);
+            $cliente = $creditoReferencia->cliente;
+            $clienteId = $cliente->id;
+            $clienteNombre = $cliente->nombre;
+
+            $montoTotalUSD = 0;
+            $creditoCanceladoTotal = false;
+            
+            DB::transaction(function () use ($request, $creditoReferencia, $cliente, $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs, &$montoTotalUSD, &$creditoCanceladoTotal) {
                 $idCajaActiva = $this->obtenerCajaActiva();
                 
                 $fechaAbono = Carbon::parse($request->fecha_abono);
@@ -268,8 +282,39 @@ class CreditoController extends Controller
                         $cliente->increment('saldo_a_favor', $montoRestante);
                     }
                 }
+                
+                // 6. Verificar si el cliente se ha quedado sin deudas pendientes (Cancelación total)
+                $pendientesRestantes = Credito::where('id_cliente', $cliente->id)
+                    ->where('estado', 'pendiente')
+                    ->count();
+
+                $creditoCanceladoTotal = ($pendientesRestantes === 0);
             });
 
+            // --- ENVÍO DE NOTIFICACIONES A GERENTES Y ENCARGADOS ---
+            $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
+
+            if ($creditoCanceladoTotal) {
+                $detalles = [
+                    'titulo'  => '🎉 Crédito Cancelado Totalmente',
+                    'mensaje' => "El cliente {$clienteNombre} ha cancelado la totalidad de su deuda con un abono de \${$montoTotalUSD}.",
+                    'url'     => route('creditos.show', $clienteId),
+                    'icono'   => 'fas fa-check-circle text-success'
+                ];
+            } else {
+                $detalles = [
+                    'titulo'  => '💵 Nuevo Abono Registrado',
+                    'mensaje' => "Se registró un abono de \${$montoTotalUSD} al cliente {$clienteNombre}.",
+                    'url'     => route('creditos.show', $clienteId),
+                    'icono'   => 'fas fa-hand-holding-usd text-info'
+                ];
+            }
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
+            // --------------------------------------------------------
+            
             return redirect()->back()->with('success', 'Abono procesado correctamente.');
 
         } catch (\Exception $e) {
@@ -322,7 +367,13 @@ class CreditoController extends Controller
         ]);
     
         try {
-            DB::transaction(function () use ($request, $id) {
+            // Variables de control externas para las notificaciones
+            $clienteId = null;
+            $clienteNombre = null;
+            $creditoCanceladoTotal = false;
+            $montoTotalUSD = round($request->monto_total_usd, 2);
+
+            DB::transaction(function () use ($request, $id, $montoTotalUSD, &$clienteId, &$clienteNombre, &$creditoCanceladoTotal) {
                 $abono = AbonoCredito::findOrFail($id);
 
                 if ($abono->estado === 'Anulado') {
@@ -330,8 +381,12 @@ class CreditoController extends Controller
                 }
 
                 $cliente = Cliente::findOrFail($abono->id_cliente);
+                
+                // Asignamos los datos del cliente para usarlos fuera de la transacción
+                $clienteId = $cliente->id;
+                $clienteNombre = $cliente->nombre;
+
                 $fechaAbono = Carbon::parse($request->fecha_abono);
-                $montoTotalUSD = round($request->monto_total_usd, 2);
 
                 // ---------------------------------------------------------
                 // PASO 1: REVERTIR IMPACTO PREVIO
@@ -341,7 +396,6 @@ class CreditoController extends Controller
                 foreach ($detallesPrevios as $detalle) {
                     $credito = Credito::lockForUpdate()->find($detalle->id_credito);
                     if ($credito) {
-                        // Devolver el monto al crédito
                         $credito->saldo_pendiente += $detalle->monto_aplicado_usd;
                         
                         if ($credito->saldo_pendiente > 0 && $credito->estado === 'pagado') {
@@ -351,7 +405,6 @@ class CreditoController extends Controller
                             }
                         }
                         
-                        // Si era anticipo, limpiar saldo_a_favor
                         if ($credito->estado === 'anticipo') {
                             $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, abs($detalle->monto_aplicado_usd)));
                         }
@@ -360,7 +413,6 @@ class CreditoController extends Controller
                     }
                 }
 
-                // Eliminar detalles anteriores
                 AbonoDetalle::where('id_abono', $abono->id)->delete();
 
                 // ---------------------------------------------------------
@@ -414,7 +466,7 @@ class CreditoController extends Controller
                 }
 
                 // ---------------------------------------------------------
-                // PASO 4: MANEJO DEL EXCEDENTE (Anticipo) - IGUAL QUE REGISTRO
+                // PASO 4: MANEJO DEL EXCEDENTE (Anticipo)
                 // ---------------------------------------------------------
                 if ($montoRestante > 0) {
                     $idCajaActiva = $abono->id_caja;
@@ -458,7 +510,38 @@ class CreditoController extends Controller
 
                     $cliente->increment('saldo_a_favor', $montoRestante);
                 }
+
+                // Verificar si tras la actualización el cliente se quedó sin deudas pendientes
+                $pendientesRestantes = Credito::where('id_cliente', $cliente->id)
+                    ->where('estado', 'pendiente')
+                    ->count();
+
+                $creditoCanceladoTotal = ($pendientesRestantes === 0);
             });
+
+            // --- ENVÍO DE NOTIFICACIONES A GERENTES Y ENCARGADOS (FUERA DE LA TRANSACCIÓN) ---
+            $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
+
+            if ($creditoCanceladoTotal) {
+                $detalles = [
+                    'titulo'  => '🔄 Abono Modificado (Deuda Cancelada)',
+                    'mensaje' => "Se actualizó el abono del cliente {$clienteNombre}. Tras la modificación, el cliente ha saldado la totalidad de sus deudas.",
+                    'url'     => route('creditos.show', $clienteId),
+                    'icono'   => 'fas fa-check-circle text-success'
+                ];
+            } else {
+                $detalles = [
+                    'titulo'  => '🔄 Abono Modificado',
+                    'mensaje' => "Se ha actualizado un abono de \${$montoTotalUSD} correspondiente al cliente {$clienteNombre}.",
+                    'url'     => route('creditos.show', $clienteId),
+                    'icono'   => 'fas fa-edit text-warning'
+                ];
+            }
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
+            // ------------------------------------------------------------------------------
 
             return redirect()->back()->with('success', 'Abono actualizado correctamente. Las deudas y saldos a favor han sido recalculados.');
 

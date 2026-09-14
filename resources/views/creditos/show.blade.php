@@ -295,7 +295,7 @@
                                         <th class="d-md-table-cell">Forma de Pago / Desglose</th>
                                         <th class="d-md-table-cell">Detalles</th>
                                         <th>Estado</th>
-                                        @can('anular-abono') <th class="text-center">Acción</th> @endcan
+                                        @canany(['editar-abono', 'anular-abono'])<th class="text-center">Acción</th> @endcanany
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -343,8 +343,20 @@
                                                 {{ $abono->estado }}
                                             </span>
                                         </td>
-                                        @can('anular-abono')
+                                        @canany(['editar-abono', 'anular-abono'])
                                         <td class="text-center">
+                                        @can('editar-abono')
+                                            @if($abono->estado === 'Realizado' && !$esReembolso)
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-primary"
+                                                        onclick="editarAbono({{ $abono->id }})"
+                                                        title="Editar Abono">
+                                                    <i class="fa fa-edit"></i>
+                                                </button>
+                                            @endif
+                                        @endcan
+                                        @can('anular-abono')
+                                        
                                             @if($abono->estado === 'Realizado' && !$esReembolso)
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-danger"
@@ -353,8 +365,10 @@
                                                     <i class="fa fa-ban"></i>
                                                 </button>
                                             @endif
-                                        </td>
                                         @endcan
+                                        </td>
+                                        @endcanany
+                                       
                                     </tr>
                                     @endforeach
                                 </tbody>
@@ -427,6 +441,7 @@
 @include('creditos.modals.modal_credito_directo')
 @include('creditos.modals.modal_eliminar_credito')
 @include('creditos.modals.modal_historial_crediticio')
+@include('creditos.modals.modalEditarAbono')
 @endsection
 
 @section('scripts')
@@ -834,7 +849,7 @@
         $('#modalCreditoDirecto').modal('show');
     }
 
-    console.log("Cargado correctamente el script de eliminación.");
+    
 
         $(document).off('click', '.btn-modal-eliminar-nuevo').on('click', '.btn-modal-eliminar-nuevo', function(e) {
             e.preventDefault();
@@ -964,6 +979,147 @@
                 confirmButtonColor: '#343a40'
             });
             return false;
+        }
+    });
+
+    function editarAbono(id) {
+        $.ajax({
+            url: `/creditos/abonos/${id}/editar`,
+            type: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    let abono = response.abono;
+                    
+                    // 1. Configurar la acción del formulario (Ruta PUT: /creditos/abonos/{id})
+                    $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
+                    
+                    // 2. Rellenar los elementos visuales y campos de tu modal
+                    $('#edit_abono_id').text(abono.id);
+                    $('#edit_nombre_cliente').text(abono.nombre_cliente || 'Cliente');
+                    $('#edit_fecha_abono').val(abono.fecha_abono);
+                    $('#edit_monto_total_usd').val(abono.monto_total_usd);
+                    $('#edit_referencia').val(abono.referencia);
+                    
+                    // 3. Rellenar el desglose de pagos
+                    $('#edit_pago_usd_efectivo').val(abono.pago_usd_efectivo ?? 0);
+                    $('#edit_pago_bs_efectivo').val(abono.pago_bs_efectivo ?? 0);
+                    $('#edit_pago_punto_bs').val(abono.pago_punto_bs ?? 0);
+                    $('#edit_pago_pagomovil_bs').val(abono.pago_pagomovil_bs ?? 0);
+                    
+                    // 4. Mostrar tu modal
+                    $('#modalEditarAbono').modal('show');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al cargar los datos del abono.';
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('Error', errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // 1. Tasa BCV desde Laravel (reutilizada)
+        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
+
+        // 2. Elementos del DOM para el MODAL DE EDICIÓN
+        const editMontoTotal  = document.getElementById('edit_monto_total_usd');
+        const editUsdEfectivo = document.getElementById('edit_pago_usd_efectivo');
+        const editBsEfectivo  = document.getElementById('edit_pago_bs_efectivo');
+        const editPuntoBs     = document.getElementById('edit_pago_punto_bs');
+        const editPagoMovilBs = document.getElementById('edit_pago_pagomovil_bs');
+
+        const inputsDesgloseEdit = document.querySelectorAll('.input-desglose-edit');
+        const divErrorEdit       = document.getElementById('error-desglose-edit');
+        
+        const formEditarAbono = document.getElementById('formEditarAbono');
+        const btnSubmitEdit   = formEditarAbono ? formEditarAbono.querySelector('button[type="submit"]') : null;
+
+        function getNumEdit(input) {
+            if (!input) return 0;
+            const val = parseFloat(input.value);
+            return isNaN(val) ? 0 : val;
+        }
+
+        // 3. Validación estricta de cuadre de montos para Edición
+        function validarCuadreMontosEdit() {
+            if (!editMontoTotal) return;
+
+            const montoObjetivoUSD = getNumEdit(editMontoTotal);
+
+            const usdEfectivo = getNumEdit(editUsdEfectivo);
+            const bsEfectivo  = getNumEdit(editBsEfectivo);
+            const puntoBs     = getNumEdit(editPuntoBs);
+            const pagoMovilBs = getNumEdit(editPagoMovilBs);
+
+            // Convertir montos de bolívares a dólares usando la tasa BCV
+            const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
+            const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
+
+            // Tolerancia para comparar números flotantes
+            const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
+            const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
+
+            if (estanCuadrados) {
+                if (divErrorEdit) divErrorEdit.classList.add('d-none');
+                if (btnSubmitEdit) btnSubmitEdit.disabled = false;
+                inputsDesgloseEdit.forEach(i => i.classList.remove('is-invalid'));
+            } else {
+                if (btnSubmitEdit) btnSubmitEdit.disabled = true;
+                if (divErrorEdit) {
+                    divErrorEdit.classList.remove('d-none');
+
+                    if (montoObjetivoUSD <= 0) {
+                        divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> Ingrese un monto total válido.';
+                    } else {
+                        divErrorEdit.innerHTML = `<i class="fa fa-exclamation-circle"></i> Discrepancia: El desglose suma <b>$${totalDesgloseUSD.toFixed(2)}</b> y el monto total es <b>$${montoObjetivoUSD.toFixed(2)}</b>.`;
+                    }
+                }
+            }
+        }
+
+        // 4. Asignar eventos keyup/input/change al monto total y al desglose de edición
+        if (editMontoTotal) {
+            ['keyup', 'input', 'change'].forEach(evt => {
+                editMontoTotal.addEventListener(evt, validarCuadreMontosEdit);
+            });
+        }
+
+        inputsDesgloseEdit.forEach(input => {
+            ['keyup', 'input', 'change'].forEach(evt => {
+                input.addEventListener(evt, validarCuadreMontosEdit);
+            });
+
+            input.addEventListener('blur', function() {
+                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
+                    this.value = '0';
+                    validarCuadreMontosEdit();
+                }
+            });
+        });
+
+        // 5. Validación al enviar el formulario de edición
+        if (formEditarAbono) {
+            formEditarAbono.addEventListener('submit', function(e) {
+                let totalDesglose = 0;
+                inputsDesgloseEdit.forEach(input => {
+                    totalDesglose += getNumEdit(input);
+                });
+
+                if (totalDesglose <= 0) {
+                    e.preventDefault();
+                    if (divErrorEdit) {
+                        divErrorEdit.classList.remove('d-none');
+                        divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> Debe ingresar al menos un valor en el desglose.';
+                    }
+                    inputsDesgloseEdit.forEach(i => i.classList.add('is-invalid'));
+                    $('.modal-body').animate({ scrollTop: 0 }, 'slow');
+                    return false;
+                }
+            });
         }
     });
 </script>

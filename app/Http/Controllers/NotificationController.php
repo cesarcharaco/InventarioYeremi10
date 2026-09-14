@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Yajra\DataTables\Facades\DataTables;
 class NotificationController extends Controller
 {
     /**
@@ -33,22 +36,82 @@ class NotificationController extends Controller
     /**
      * Listado histórico de notificaciones
      */
-    public function index()
-    {
-        $user = auth()->user();
-        $query = $user->notifications();
+   public function index()
+   {
+       
+       return view('notifications.index');
+   }
 
-        // Filtro adicional opcional por rol si deseas bloquear visualmente ciertas alertas históricas
-        if ($user->role === User::ROLE_VENDEDOR) {
-            // Los vendedores solo ven notificaciones comerciales o de ventas, excluyendo auditoría interna
-            $query->where('data->tipo', '!=', 'auditoria');
+   
+  public function getData(Request $request)
+    {
+        Gate::authorize('ver-logistica'); 
+        $user = auth()->user();
+
+        $query = DB::table('notifications')
+            ->where('notifiable_id', $user->id)
+            ->where('notifiable_type', get_class($user))
+            ->select([
+                'id',
+                'data',
+                'read_at',
+                'created_at as fecha'
+            ]);
+
+        // --- APLICACIÓN DE FILTROS ---
+        if ($request->filled('desde')) {
+            $query->whereDate('created_at', '>=', $request->desde);
         }
 
-        $notifications = $query->paginate(15);
-        
-        return view('notifications.index', compact('notifications'));
-    }
+        if ($request->filled('hasta')) {
+            $query->whereDate('created_at', '<=', $request->hasta);
+        }
 
+        if ($request->filled('estado')) {
+            if ($request->estado === 'no_leidas') {
+                $query->whereNull('read_at');
+            } elseif ($request->estado === 'leidas') {
+                $query->whereNotNull('read_at');
+            }
+        }
+        // -----------------------------
+
+        return DataTables::of($query)
+            ->editColumn('estado', function($row) {
+                if ($row->read_at) {
+                    return '<div class="text-center"><i class="fa fa-envelope-open text-muted" title="Leída"></i></div>';
+                } else {
+                    return '<div class="text-center"><i class="fa fa-envelope text-primary" title="Nueva"></i></div>';
+                }
+            })
+            ->editColumn('titulo', function($row) {
+                $data = json_decode($row->data, true);
+                $icono = $data['icono'] ?? 'fa fa-info-circle';
+                $titulo = $data['titulo'] ?? ($data['title'] ?? 'Alerta del Sistema');
+                return '<i class="' . $icono . ' mr-2"></i><strong>' . e($titulo) . '</strong>';
+            })
+            ->editColumn('mensaje', function($row) {
+                $data = json_decode($row->data, true);
+                $mensaje = $data['mensaje'] ?? ($data['message'] ?? 'Sin descripción disponible');
+                return e($mensaje);
+            })
+            ->editColumn('fecha', function($row) {
+                return '<span class="text-muted small"><i class="fa fa-clock-o"></i> ' . \Carbon\Carbon::parse($row->fecha)->diffForHumans() . '</span>';
+            })
+            ->addColumn('acciones', function($row) {
+                $url = route('notifications.read', $row->id);
+                return '<a href="' . $url . '" class="btn btn-primary btn-sm btn-block"><i class="fa fa-eye"></i> Ver</a>';
+            })
+            // Redirigimos la búsqueda global para que busque dentro del campo JSON 'data'
+            ->filterColumn('titulo', function($query, $keyword) {
+                $query->where('data', 'like', "%{$keyword}%");
+            })
+            ->filterColumn('mensaje', function($query, $keyword) {
+                $query->where('data', 'like', "%{$keyword}%");
+            })
+            ->rawColumns(['estado', 'titulo', 'mensaje', 'fecha', 'acciones'])
+            ->make(true);
+    }
     public function count()
     {
         if (!auth()->check()) {
