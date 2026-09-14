@@ -49,13 +49,12 @@
       @endphp
       <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" 
            class="d-flex align-items-center justify-content-center lightbox-trigger" 
-           onclick="abrirVisorFacebook(this)"
            data-ruta="{{ asset($foto->ruta) }}"
            data-titulo="{{ $foto->titulo ?: 'Sin título' }}"
            data-producto="{{ $foto->insumo->producto ?? 'N/D' }}"
            data-serial="{{ $foto->insumo->serial ?? 'N/D' }}"
            data-descripcion="{{ $foto->insumo->descripcion ?? 'Sin descripción registrada.' }}">
-        <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
+        <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover; pointer-events: none;">
       </div>
       <div class="card-body p-2 text-center bg-light">
         <p class="card-text text-muted mb-0" style="font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">

@@ -308,13 +308,15 @@
   let hasMore = true;
   let loading = false;
 
-  function abrirVisorFacebook(element) {
+  // Delegación de eventos global (Funciona incluso con elementos cargados por AJAX)
+  $(document).on('click', '.lightbox-trigger', function() {
+    console.log("¡Clic detectado en la foto con éxito!");
     triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
-    currentIndex = triggerElements.indexOf(element);
+    currentIndex = triggerElements.indexOf(this);
     actualizarContenidoVisor();
     document.getElementById('fbLightboxModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
-  }
+  });
 
   function cerrarVisorFacebook() {
     document.getElementById('fbLightboxModal').style.display = 'none';
@@ -336,9 +338,16 @@
     if (!el) return;
     document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
     document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
-    document.getElementById('fbLightboxProducto').textContent = el.getAttribute('data-producto');
-    document.getElementById('fbLightboxSerial').textContent = el.getAttribute('data-serial');
-    document.getElementById('fbLightboxDescripcion').textContent = el.getAttribute('data-descripcion');
+    
+    // Si estás en el álbum individual (donde estos elementos no aplican, evitamos errores validando si existen)
+    let prod = document.getElementById('fbLightboxProducto');
+    if (prod) prod.textContent = el.getAttribute('data-producto');
+    
+    let ser = document.getElementById('fbLightboxSerial');
+    if (ser) ser.textContent = el.getAttribute('data-serial');
+    
+    let desc = document.getElementById('fbLightboxDescripcion');
+    if (desc) desc.textContent = el.getAttribute('data-descripcion');
   }
 
   const observer = new IntersectionObserver((entries) => {
@@ -401,7 +410,7 @@
       },
       success: function(response) {
         if(response.success) {
-          $('#modalEditarTitle').modal('hide');
+          $('#modalEditarTitulo').modal('hide');
           location.reload();
         }
       },

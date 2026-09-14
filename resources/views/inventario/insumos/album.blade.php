@@ -413,6 +413,93 @@
 
 @section('scripts')
 <script>
+  let currentIndex = 0;
+  let triggerElements = [];
+  let page = 1;
+  let hasMore = true;
+  let loading = false;
+
+  // Delegación de eventos global (Funciona incluso con elementos cargados por AJAX)
+  $(document).on('click', '.lightbox-trigger', function() {
+    console.log("¡Clic detectado en la foto con éxito!");
+    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
+    currentIndex = triggerElements.indexOf(this);
+    actualizarContenidoVisor();
+    document.getElementById('fbLightboxModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  });
+
+  function cerrarVisorFacebook() {
+    document.getElementById('fbLightboxModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+  }
+
+  function cambiarFoto(direccion) {
+    currentIndex += direccion;
+    if (currentIndex >= triggerElements.length) {
+      currentIndex = 0;
+    } else if (currentIndex < 0) {
+      currentIndex = triggerElements.length - 1;
+    }
+    actualizarContenidoVisor();
+  }
+
+  function actualizarContenidoVisor() {
+    let el = triggerElements[currentIndex];
+    if (!el) return;
+    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
+    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
+    
+    // Si estás en el álbum individual (donde estos elementos no aplican, evitamos errores validando si existen)
+    let prod = document.getElementById('fbLightboxProducto');
+    if (prod) prod.textContent = el.getAttribute('data-producto');
+    
+    let ser = document.getElementById('fbLightboxSerial');
+    if (ser) ser.textContent = el.getAttribute('data-serial');
+    
+    let desc = document.getElementById('fbLightboxDescripcion');
+    if (desc) desc.textContent = el.getAttribute('data-descripcion');
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && hasMore && !loading) {
+      cargarMasFotos();
+    }
+  }, { rootMargin: '300px' });
+
+  const sentinel = document.getElementById('scroll-sentinel');
+  if (sentinel) {
+    observer.observe(sentinel);
+  }
+
+  function cargarMasFotos() {
+    loading = true;
+    page++;
+    document.getElementById('loading-spinner').style.display = 'block';
+
+    $.ajax({
+      url: "{{ route('insumos.album.general') }}?page=" + page,
+      type: 'GET',
+      success: function(response) {
+        $('#galeria-grid').append(response.html);
+        hasMore = response.has_more;
+        loading = false;
+        document.getElementById('loading-spinner').style.display = 'none';
+
+        if (!hasMore) {
+          observer.disconnect();
+          document.getElementById('scroll-sentinel').innerHTML = '<p class="text-muted small">No hay más fotografías que mostrar.</p>';
+        }
+
+        $('[data-toggle="tooltip"]').tooltip();
+      },
+      error: function() {
+        loading = false;
+        document.getElementById('loading-spinner').style.display = 'none';
+      }
+    });
+  }
+
   function abrirModalEditar(id, titulo) {
     $('#edit_foto_id').val(id);
     $('#edit_titulo').val(titulo === 'null' ? '' : titulo);
@@ -444,64 +531,21 @@
     });
   });
 
-  document.getElementById('inputFotos').addEventListener('change', function(e) {
-      let count = e.target.files.length;
-      let feedback = document.getElementById('fileFeedback');
-      if (count > 0) {
-        feedback.textContent = count === 1 ? '1 archivo seleccionado' : count + ' archivos seleccionados';
-      } else {
-        feedback.textContent = '';
+  function eliminarFoto(fotoId) {
+    swal.fire({
+      title: "¿Estás seguro?",
+      text: "¡No podrás recuperar esta fotografía una vez eliminada!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#6c757d",
+      confirmButtonText: "Sí, ¡eliminar!",
+      cancelButtonText: "Cancelar"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        document.getElementById('delete-form-' + fotoId).submit();
       }
     });
-
-  function eliminarFoto(fotoId) {
-      swal.fire({
-        title: "¿Estás seguro?",
-        text: "¡No podrás recuperar esta fotografía una vez eliminada!",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Sí, ¡eliminar!",
-        cancelButtonText: "Cancelar"
-      }).then((result) => {
-        if (result.isConfirmed) {
-          document.getElementById('delete-form-' + fotoId).submit();
-        }
-      });
-    }
-
-  let currentIndex = 0;
-  let triggerElements = [];
-
-  function abrirVisorFacebook(element) {
-    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
-    currentIndex = triggerElements.indexOf(element);
-    actualizarContenidoVisor();
-    document.getElementById('fbLightboxModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-  }
-
-  function cerrarVisorFacebook() {
-    document.getElementById('fbLightboxModal').style.display = 'none';
-    document.body.style.overflow = 'auto';
-  }
-
-  function cambiarFoto(direccion) {
-    currentIndex += direccion;
-    if (currentIndex >= triggerElements.length) {
-      currentIndex = 0;
-    } else if (currentIndex < 0) {
-      currentIndex = triggerElements.length - 1;
-    }
-    actualizarContenidoVisor();
-  }
-
-  function actualizarContenidoVisor() {
-    let el = triggerElements[currentIndex];
-    if (!el) return;
-    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
-    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
   }
 
   document.addEventListener('keydown', function(event) {
@@ -514,6 +558,10 @@
         cambiarFoto(-1);
       }
     }
+  });
+
+  $(document).ready(function() {
+    $('[data-toggle="tooltip"]').tooltip();
   });
 </script>
 @endsection
