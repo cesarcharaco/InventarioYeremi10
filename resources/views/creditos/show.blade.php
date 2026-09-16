@@ -838,16 +838,111 @@
         });
     }
     function abrirModalCreditoDirecto(clienteId) {
-        $('#formCreditoDirecto')[0].reset();
-        $('#pin_autorizacion_directo').val('');
-        
-        @cannot('gestionar-creditos-avanzado')
-            $('#estado_pin_texto').html('Requiere autorización de supervisor').removeClass('text-success').addClass('text-dark');
-            $('#bloque_pin_warning').removeClass('alert-success').addClass('alert-warning');
-        @endcannot
+            $('#formCreditoDirecto')[0].reset();
+            $('#pin_autorizacion_directo').val('');
+            
+            @cannot('gestionar-creditos-avanzado')
+                $('#estado_pin_texto').html('Requiere autorización de supervisor').removeClass('text-success').addClass('text-dark');
+                $('#bloque_pin_warning').removeClass('alert-success').addClass('alert-warning');
+            @endcannot
 
-        $('#modalCreditoDirecto').modal('show');
-    }
+            $('#modalCreditoDirecto').modal('show');
+        }
+
+        $(document).ready(function() {
+
+            // Evento para solicitar y validar el PIN usando SweetAlert2
+            $('#btnSolicitarPinDirecto').on('click', function() {
+                let monto = $('#monto_credito_usd').val();
+
+                if (!monto || parseFloat(monto) <= 0) {
+                    Swal.fire('Monto Requerido', 'Por favor ingresa primero el monto del crédito antes de solicitar el PIN.', 'warning');
+                    return;
+                }
+
+                Swal.fire({
+                    title: '¿Solicitar Autorización?',
+                    text: "Se enviará un PIN de 6 dígitos al supervisor para autorizar $" + monto,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, enviar PIN',
+                    cancelButtonText: 'Cancelar',
+                    allowOutsideClick: false 
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // 1. Llamada AJAX a solicitar_pin
+                        $.post("{{ route('ventas.solicitar_pin') }}", {
+                            _token: "{{ csrf_token() }}",
+                            local_nombre: "{{ auth()->user()->localActual()->nombre ?? 'Local' }}",
+                            cliente_nombre: "{{ $cliente->nombre ?? 'Cliente' }}",
+                            monto_total: monto,
+                            cantidad_items: 1
+                        }, function(response) {
+
+                            if(response.wa_link) { window.open(response.wa_link, '_blank'); }
+
+                            // 2. Prompt con SweetAlert2 para ingresar el PIN
+                            Swal.fire({
+                                title: 'Introduce el PIN',
+                                text: 'El supervisor recibió un código de 6 dígitos',
+                                input: 'text',
+                                inputAttributes: { maxlength: 6, autocapitalize: 'off', id: 'swal_pin_input' },
+                                showCancelButton: true,
+                                confirmButtonText: 'Validar PIN',
+                                cancelButtonText: 'Cancelar',
+                                showLoaderOnConfirm: true,
+                                allowOutsideClick: false,
+                                didOpen: () => {
+                                    // Desactivar los listeners de foco de Bootstrap para permitir escribir en el input de SweetAlert
+                                    $(document).off('focusin.bs.modal');
+                                    if ($.fn.modal && $.fn.modal.Constructor) {
+                                        $.fn.modal.Constructor.prototype._enforceFocus = function() {};
+                                    }
+
+                                    // Forzar el foco
+                                    setTimeout(() => {
+                                        const input = Swal.getInput();
+                                        if (input) {
+                                            $(input).removeAttr('readonly').removeAttr('disabled').focus();
+                                        }
+                                    }, 200);
+                                },
+                                preConfirm: (pin) => {
+                                    return $.post("{{ route('ventas.verificar_pin') }}", {
+                                        _token: "{{ csrf_token() }}",
+                                        pin: pin
+                                    }).done(res => {
+                                        $('#pin_autorizacion_directo').val(pin); 
+                                    }).fail(error => {
+                                        Swal.showValidationMessage(error.responseJSON.message || 'PIN Incorrecto');
+                                    });
+                                }
+                            }).then((res) => {
+                                if (res.isConfirmed) {
+                                    $('#estado_pin_texto').html('<i class="fa fa-check-circle text-success"></i> Crédito Autorizado por Supervisor').removeClass('text-dark').addClass('text-success');
+                                    $('#bloque_pin_warning').removeClass('alert-warning').addClass('alert-success');
+                                    Swal.fire('Autorizado', 'Crédito habilitado con éxito.', 'success');
+                                } else {
+                                    $('#pin_autorizacion_directo').val('');
+                                }
+                            });
+                        });
+                    }
+                });
+            });
+
+            // Validación al enviar el formulario
+            $('#formCreditoDirecto').on('submit', function(e) {
+                @cannot('gestionar-creditos-avanzado')
+                    let pin = $('#pin_autorizacion_directo').val();
+                    if (!pin) {
+                        e.preventDefault();
+                        Swal.fire('Autorización Requerida', 'Debes solicitar y validar el PIN del supervisor para guardar este crédito.', 'error');
+                        return false;
+                    }
+                @endcannot
+            });
+        });
 
     
 

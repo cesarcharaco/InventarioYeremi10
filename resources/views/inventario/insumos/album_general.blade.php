@@ -3,184 +3,25 @@
 @section('title') Álbum General de Insumos @endsection
 @push('styles')
 <style>
-  /* Estilos base del Lightbox (Desktop) */
-  #fbLightboxModal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.95);
-    z-index: 9999;
-    overflow: hidden;
-  }
-
-  .fb-close-btn {
-    position: fixed;
-    top: 15px;
-    right: 20px;
-    background: rgba(0,0,0,0.6);
-    border: none;
-    color: #fff;
-    font-size: 2rem;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    outline: none;
-  }
-
-  .fb-lightbox-wrapper {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-  }
-
-  .fb-lightbox-img-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    position: relative;
-    background-color: #000;
-    box-sizing: border-box;
-    height: 100%;
-  }
-
-  .fb-lightbox-img-container img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    display: block;
-  }
-
-  .fb-nav-btn {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.6);
-    border: none;
-    color: #fff;
-    font-size: 1.5rem;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 10000;
-    outline: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .fb-prev-btn { left: 20px; }
-  .fb-next-btn { right: 20px; }
-
-  .fb-lightbox-sidebar {
-    width: 380px;
-    min-width: 380px;
-    background-color: #242526;
-    color: #e4e6eb;
-    display: flex;
-    flex-direction: column;
-    border-left: 1px solid #393a3b;
-    padding: 25px;
-    box-sizing: border-box;
-    height: 100%;
-    overflow-y: auto;
-  }
-
-  .fb-lightbox-sidebar h4 {
-    color: #fff;
-    border-bottom: 1px solid #393a3b;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
-    font-size: 1.2rem;
-  }
-
-  .fb-detail-group {
-    margin-bottom: 15px;
-  }
-
-  .fb-label {
-    font-size: 0.85rem;
-    color: #b0b3b8;
-    text-transform: uppercase;
-    display: block;
-    font-weight: bold;
-  }
-
-  .fb-value-white {
-    font-size: 1.05rem;
-    margin-top: 5px;
-    color: #fff;
-    word-break: break-word;
-  }
-
-  .fb-value {
-    font-size: 1rem;
-    margin-top: 5px;
-    color: #e4e6eb;
-    word-break: break-word;
-  }
-
-  .fb-value-muted {
-    font-size: 0.95rem;
-    color: #b0b3b8;
-    margin-top: 5px;
-    line-height: 1.4;
-    word-break: break-word;
-  }
-
-  /* MEDIA QUERY RESPONSIVE PARA MÓVILES (<= 1024px) */
   @media (max-width: 1024px) {
-    #fbLightboxModal {
-      overflow-y: auto !important;
-    }
-
-    .fb-lightbox-wrapper {
+    #fbLightboxModal .fb-lightbox-wrapper {
       flex-direction: column !important;
       height: auto !important;
       min-height: 100% !important;
     }
-
-    .fb-lightbox-img-container {
+    #fbLightboxModal .fb-lightbox-img-container {
       width: 100% !important;
-      height: 55vh !important;
-      min-height: 300px !important;
-      max-height: 60vh !important;
+      height: 45vh !important;
+      min-height: 300px;
+      padding: 20px !important;
       flex: none !important;
-      padding: 10px !important;
-      background-color: #000 !important;
     }
-
-    .fb-lightbox-img-container img {
-      max-height: 100% !important;
-      max-width: 100% !important;
-      object-fit: contain !important;
-    }
-
-    .fb-lightbox-sidebar {
+    #fbLightboxModal .fb-lightbox-sidebar {
       width: 100% !important;
-      min-width: 100% !important;
+      max-width: 100% !important;
       height: auto !important;
-      overflow-y: visible !important;
       border-left: none !important;
       border-top: 1px solid #393a3b !important;
-      padding: 20px !important;
-      flex: 1 !important;
-    }
-
-    .fb-close-btn {
-      top: 10px;
-      right: 10px;
-      width: 38px;
-      height: 38px;
-      font-size: 1.5rem;
     }
   }
 </style>
@@ -255,68 +96,87 @@
 </div>
 
 {{-- VISOR TIPO FACEBOOK RESPONSIVE --}}
-<div id="fbLightboxModal">
-  <button type="button" onclick="cerrarVisorFacebook()" class="fb-close-btn">&times;</button>
+<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); z-index: 9999; overflow-y: auto;">
+  
+  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
+    &times;
+  </button>
 
-  <div class="fb-lightbox-wrapper">
+  <div class="fb-lightbox-wrapper" style="display: flex; width: 100%; min-height: 100%; box-sizing: border-box;">
     
-    <div class="fb-lightbox-img-container">
-      <button type="button" onclick="cambiarFoto(-1)" class="fb-nav-btn fb-prev-btn">
+    <div class="fb-lightbox-img-container" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; box-sizing: border-box;">
+      
+      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-left"></i>
       </button>
 
-      <img id="fbLightboxImg" src="" alt="">
+      <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
-      <button type="button" onclick="cambiarFoto(1)" class="fb-nav-btn fb-next-btn">
+      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
       </button>
     </div>
 
-    <div class="fb-lightbox-sidebar">
-      <h4><i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo</h4>
+    <div class="fb-lightbox-sidebar" style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
+      
+      <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.2rem;">
+        <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
+      </h4>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Título de la Foto</span>
-        <p id="fbLightboxTitulo" class="fb-value-white"></p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
+        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
       </div>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Producto</span>
-        <p id="fbLightboxProducto" class="fb-value"></p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
+        <p id="fbLightboxProducto" style="font-size: 1rem; margin-top: 5px; word-break: break-word;"></p>
       </div>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Serial</span>
-        <p><span id="fbLightboxSerial" class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;"></span></p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Serial</span>
+        <p style="margin-top: 5px;"><span id="fbLightboxSerial" class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;"></span></p>
       </div>
 
-      <div class="fb-detail-group" style="flex-grow: 1;">
-        <span class="fb-label">Descripción</span>
-        <p id="fbLightboxDescripcion" class="fb-value-muted"></p>
+      <div style="margin-bottom: 15px; flex-grow: 1;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
+        <p id="fbLightboxDescripcion" style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;"></p>
       </div>
+
     </div>
-
   </div>
 </div>
 @endsection
 
 @section('scripts')
 <script>
+  const albumFotos = [
+    @foreach($fotos as $foto)
+      {
+        id: {{ $foto->id }},
+        ruta: "{{ asset($foto->ruta) }}",
+        titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}",
+        producto: "{{ addslashes(optional($foto->insumo)->producto ?? 'Sin producto') }}",
+        serial: "{{ addslashes(optional($foto->insumo)->serial ?? 'N/A') }}",
+        descripcion: "{{ addslashes(optional($foto->insumo)->descripcion ?? 'Sin descripción registrada.') }}"
+      },
+    @endforeach
+  ];
+
   let currentIndex = 0;
-  let triggerElements = [];
   let page = 1;
   let hasMore = true;
   let loading = false;
 
-  // Delegación de eventos global (Funciona incluso con elementos cargados por AJAX)
-  $(document).on('click', '.lightbox-trigger', function() {
-    console.log("¡Clic detectado en la foto con éxito!");
-    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
-    currentIndex = triggerElements.indexOf(this);
-    actualizarContenidoVisor();
-    document.getElementById('fbLightboxModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-  });
+  function abrirVisorFacebookDynamic(fotoId) {
+    let index = albumFotos.findIndex(f => f.id === fotoId);
+    if (index !== -1) {
+      currentIndex = index;
+      actualizarContenidoVisor();
+      document.getElementById('fbLightboxModal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+  }
 
   function cerrarVisorFacebook() {
     document.getElementById('fbLightboxModal').style.display = 'none';
@@ -325,29 +185,21 @@
 
   function cambiarFoto(direccion) {
     currentIndex += direccion;
-    if (currentIndex >= triggerElements.length) {
+    if (currentIndex >= albumFotos.length) {
       currentIndex = 0;
     } else if (currentIndex < 0) {
-      currentIndex = triggerElements.length - 1;
+      currentIndex = albumFotos.length - 1;
     }
     actualizarContenidoVisor();
   }
 
   function actualizarContenidoVisor() {
-    let el = triggerElements[currentIndex];
-    if (!el) return;
-    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
-    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
-    
-    // Si estás en el álbum individual (donde estos elementos no aplican, evitamos errores validando si existen)
-    let prod = document.getElementById('fbLightboxProducto');
-    if (prod) prod.textContent = el.getAttribute('data-producto');
-    
-    let ser = document.getElementById('fbLightboxSerial');
-    if (ser) ser.textContent = el.getAttribute('data-serial');
-    
-    let desc = document.getElementById('fbLightboxDescripcion');
-    if (desc) desc.textContent = el.getAttribute('data-descripcion');
+    let fotoActual = albumFotos[currentIndex];
+    document.getElementById('fbLightboxImg').src = fotoActual.ruta;
+    document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
+    document.getElementById('fbLightboxProducto').textContent = fotoActual.producto;
+    document.getElementById('fbLightboxSerial').textContent = fotoActual.serial;
+    document.getElementById('fbLightboxDescripcion').textContent = fotoActual.descripcion;
   }
 
   const observer = new IntersectionObserver((entries) => {
@@ -371,6 +223,7 @@
       type: 'GET',
       success: function(response) {
         $('#galeria-grid').append(response.html);
+        albumFotos.push(...response.fotos);
         hasMore = response.has_more;
         loading = false;
         document.getElementById('loading-spinner').style.display = 'none';

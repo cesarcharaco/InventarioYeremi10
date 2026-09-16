@@ -990,14 +990,19 @@ class CreditoController extends Controller
         
         if (Gate::denies('gestionar-creditos-avanzado')) {
             $local = auth()->user()->localActual();
+
+            // Buscamos que coincida el PIN y que su estado sea 'usado' (porque el AJAX lo acaba de quemar)
             $auth = AutorizacionPin::where('id_local', $local->id)
-                        ->where('pin', $request->pin_autorizacion)
+                        ->where('pin', trim($request->pin_autorizacion))
                         ->where('estado', 'usado')
                         ->first();
 
             if (!$auth) {
-                return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
+                return redirect()->back()->with('error', 'No se encontró una autorización válida para esta operación.');
             }
+
+            // Opcional: Si quieres asegurarte de que no reutilicen un PIN viejísimo de hace horas, 
+            // puedes verificar que updated_at sea de hace menos de 2 o 5 minutos.
         }
 
         $montoUsd = (float) $request->monto_credito_usd;
@@ -1158,13 +1163,16 @@ class CreditoController extends Controller
         
         if (Gate::denies('gestionar-creditos-avanzado')) {
             $local = auth()->user()->localActual();
-            $auth = AutorizacionPin::where('id_local', $local ? $local->id : (auth()->user()->id_local ?? 1))
-                        ->where('pin', $request->pin_autorizacion)
+            $localId = $local ? $local->id : (auth()->user()->id_local ?? 1);
+
+            // Verificamos que el PIN exista, pertenezca al local y esté recién marcado como 'usado' por el AJAX
+            $auth = AutorizacionPin::where('id_local', $localId)
+                        ->where('pin', trim($request->pin_autorizacion))
                         ->where('estado', 'usado')
                         ->first();
 
             if (!$auth) {
-                return redirect()->back()->with('error', 'El PIN de autorización no es válido o expiró.');
+                return redirect()->back()->with('error', 'El PIN de autorización no es válido o no ha sido verificado.');
             }
         }
 

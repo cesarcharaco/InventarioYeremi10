@@ -164,5 +164,115 @@
             });
         }
     });
+
+function abrirModalCreditoDirecto(clienteId) {
+    $('#formCreditoDirectoGeneral')[0].reset();
+    $('#pin_autorizacion_directo_general').val('');
+    
+    // Si se pasa un cliente por parámetro, seleccionarlo en el select2
+    if (clienteId && $('#cliente_id_general').length) {
+        $('#cliente_id_general').val(clienteId).trigger('change');
+    }
+    
+    @cannot('gestionar-creditos-avanzado')
+        $('#estado_pin_texto_general').html('Requiere autorización de supervisor').removeClass('text-success').addClass('text-dark');
+        $('#bloque_pin_warning_general').removeClass('alert-success').addClass('alert-warning');
+    @endcannot
+
+    $('#modalCreditoDirectoGeneral').modal('show');
+}
+
+$(document).ready(function() {
+    // Evento para solicitar y validar el PIN usando SweetAlert2
+    $('#btnSolicitarPinDirectoGeneral').on('click', function() {
+        let monto = $('#monto_credito_usd_general').val();
+
+        if (!monto || parseFloat(monto) <= 0) {
+            Swal.fire('Monto Requerido', 'Por favor ingresa primero el monto del crédito antes de solicitar el PIN.', 'warning');
+            return;
+        }
+
+        Swal.fire({
+            title: '¿Solicitar Autorización?',
+            text: "Se enviará un PIN de 6 dígitos al supervisor para autorizar $" + monto,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, enviar PIN',
+            cancelButtonText: 'Cancelar',
+            allowOutsideClick: false 
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Obtener el nombre del cliente seleccionado de forma dinámica
+                let nombreCliente = $('#cliente_id_general option:selected').text().trim() || 'Cliente';
+
+                $.post("{{ route('ventas.solicitar_pin') }}", {
+                    _token: "{{ csrf_token() }}",
+                    local_nombre: "{{ auth()->user()->localActual()->nombre ?? 'Local' }}",
+                    cliente_nombre: nombreCliente,
+                    monto_total: monto,
+                    cantidad_items: 1
+                }, function(response) {
+
+                    if(response.wa_link) { window.open(response.wa_link, '_blank'); }
+
+                    Swal.fire({
+                        title: 'Introduce el PIN',
+                        text: 'El supervisor recibió un código de 6 dígitos',
+                        input: 'text',
+                        inputAttributes: { maxlength: 6, autocapitalize: 'off' },
+                        showCancelButton: true,
+                        confirmButtonText: 'Validar PIN',
+                        cancelButtonText: 'Cancelar',
+                        showLoaderOnConfirm: true,
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            $(document).off('focusin.bs.modal');
+                            if ($.fn.modal && $.fn.modal.Constructor) {
+                                $.fn.modal.Constructor.prototype._enforceFocus = function() {};
+                            }
+
+                            setTimeout(() => {
+                                const input = Swal.getInput();
+                                if (input) {
+                                    $(input).removeAttr('readonly').removeAttr('disabled').focus();
+                                }
+                            }, 200);
+                        },
+                        preConfirm: (pin) => {
+                            return $.post("{{ route('ventas.verificar_pin') }}", {
+                                _token: "{{ csrf_token() }}",
+                                pin: pin
+                            }).done(res => {
+                                $('#pin_autorizacion_directo_general').val(pin); 
+                            }).fail(error => {
+                                Swal.showValidationMessage(error.responseJSON.message || 'PIN Incorrecto');
+                            });
+                        }
+                    }).then((res) => {
+                        if (res.isConfirmed) {
+                            $('#estado_pin_texto_general').html('<i class="fa fa-check-circle text-success"></i> Crédito Autorizado por Supervisor').removeClass('text-dark').addClass('text-success');
+                            $('#bloque_pin_warning_general').removeClass('alert-warning').addClass('alert-success');
+                            Swal.fire('Autorizado', 'Crédito habilitado con éxito.', 'success');
+                        } else {
+                            $('#pin_autorizacion_directo_general').val('');
+                        }
+                    });
+                });
+            }
+        });
+    });
+
+    // Validación al enviar el formulario general
+    $('#formCreditoDirectoGeneral').on('submit', function(e) {
+        @cannot('gestionar-creditos-avanzado')
+            let pin = $('#pin_autorizacion_directo_general').val();
+            if (!pin) {
+                e.preventDefault();
+                Swal.fire('Autorización Requerida', 'Debes solicitar y validar el PIN del supervisor para guardar este crédito.', 'error');
+                return false;
+            }
+        @endcannot
+    });
+});
 </script>
 @endsection

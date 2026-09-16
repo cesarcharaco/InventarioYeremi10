@@ -447,34 +447,43 @@ public function create()
 
     public function solicitarPin(Request $request)
     {
-        $pin = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
         $user = Auth::user();
         $local = $user->localActual();
 
-        // Guardamos o actualizamos la solicitud del local
+        // 1. Validar que el local exista
+        if (!$local) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'No se encontró un local activo para solicitar el PIN.'
+            ], 422);
+        }
+
+        $pin = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        // 2. Guardar o actualizar la solicitud del local
         AutorizacionPin::updateOrCreate(
-            ['id_local' => $local->id],
             [
+                'id_local' => $local->id,
+            ],
+            [
+                'vendedor' => $user->name, 
                 'pin' => $pin,
                 'monto' => $request->monto_total,
-                'vendedor' => auth()->user()->name,
                 'cliente' => $request->cliente_nombre,
                 'estado' => 'activo',
                 'updated_at' => now()
             ]
         );
 
-        // --- NOTIFICACIÓN AL SUPERADMIN Y AL ENCARGADO DEL LOCAL ESPECÍFICO ---
-        
-        // Obtenemos los IDs de los usuarios asignados a este local mediante la tabla pivot[cite: 15]
+        // 3. Obtener los IDs de usuarios asignados a este local
         $usuariosLocalIds = DB::table('users_has_local')
             ->where('id_local', $local->id)
             ->pluck('id_user');
 
-        // Filtramos al SuperAdmin (respaldo global) y al encargado asignado específicamente a este local
-        $destinatarios = User::where('role', User::ROLE_SUPERADMIN)
+        // 4. Buscar administradores y encargados usando cadenas de texto (igual que en el resto del controlador)
+        $destinatarios = User::where('role', 'admin')
             ->orWhere(function($query) use ($usuariosLocalIds) {
-                $query->where('role', User::ROLE_ENCARGADO)
+                $query->where('role', 'encargado')
                       ->whereIn('id', $usuariosLocalIds);
             })
             ->get();
@@ -490,23 +499,56 @@ public function create()
             $destinatario->notify(new StockBajoNotification($detalles));
         }
 
-        return response()->json(['success' => true, 'message' => 'PIN generado y enviado al encargado del local.']);
+        return response()->json([
+            'success' => true, 
+            'message' => 'PIN generado y enviado al encargado del local/Administrador'
+        ]);
     }
 
     public function verificarPin(Request $request)
     {
         $user = Auth::user();
         $local = $user->localActual();
-        $auth = AutorizacionPin::where('id_local', $local->id)
-                    ->where('estado', 'activo')
-                    ->first();
 
-        if ($auth && $request->pin == $auth->pin) {
-            $auth->update(['estado' => 'usado']); // Marcamos como usado
-            return response()->json(['success' => true]);
+        if (!$local) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'No se encontró un local activo para validar el PIN.'
+            ], 422);
         }
 
-        return response()->json(['success' => false, 'message' => 'PIN incorrecto o expirado'], 422);
+        // Limpiamos espacios en blanco accidentales que envíe el input
+        $pinIngresado = trim($request->pin);
+
+        if (empty($pinIngresado)) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Debe ingresar el código PIN.'
+            ], 422);
+        }
+
+        // 2. Usamos una transacción con bloqueo para evitar que un doble clic queme el PIN dos veces
+        return DB::transaction(function () use ($local, $pinIngresado) {
+            
+            $auth = AutorizacionPin::where('id_local', $local->id)
+                        ->where('estado', 'activo')
+                        ->lockForUpdate() // Bloquea la fila temporalmente para evitar peticiones concurrentes
+                        ->latest('updated_at')
+                        ->first();
+
+            // 3. Comparamos de forma estricta asegurando que ambos sean cadenas de texto
+            if ($auth && $pinIngresado === (string) $auth->pin) {
+                // Marcamos como usado inmediatamente
+                $auth->update(['estado' => 'usado']); 
+                
+                return response()->json(['success' => true]);
+            }
+
+            return response()->json([
+                'success' => false, 
+                'message' => 'El PIN de autorización no es válido, ya fue utilizado o expiró.'
+            ], 422);
+        });
     }
 
     public function getDeudaPendiente($id)

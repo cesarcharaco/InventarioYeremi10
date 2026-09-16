@@ -3,184 +3,25 @@
 @section('title') Álbum de Insumo @endsection
 @push('styles')
 <style>
-  /* Estilos base del Lightbox (Desktop) */
-  #fbLightboxModal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.95);
-    z-index: 9999;
-    overflow: hidden;
-  }
-
-  .fb-close-btn {
-    position: fixed;
-    top: 15px;
-    right: 20px;
-    background: rgba(0,0,0,0.6);
-    border: none;
-    color: #fff;
-    font-size: 2rem;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    outline: none;
-  }
-
-  .fb-lightbox-wrapper {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-  }
-
-  .fb-lightbox-img-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    position: relative;
-    background-color: #000;
-    box-sizing: border-box;
-    height: 100%;
-  }
-
-  .fb-lightbox-img-container img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    display: block;
-  }
-
-  .fb-nav-btn {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.6);
-    border: none;
-    color: #fff;
-    font-size: 1.5rem;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 10000;
-    outline: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .fb-prev-btn { left: 20px; }
-  .fb-next-btn { right: 20px; }
-
-  .fb-lightbox-sidebar {
-    width: 380px;
-    min-width: 380px;
-    background-color: #242526;
-    color: #e4e6eb;
-    display: flex;
-    flex-direction: column;
-    border-left: 1px solid #393a3b;
-    padding: 25px;
-    box-sizing: border-box;
-    height: 100%;
-    overflow-y: auto;
-  }
-
-  .fb-lightbox-sidebar h4 {
-    color: #fff;
-    border-bottom: 1px solid #393a3b;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
-    font-size: 1.2rem;
-  }
-
-  .fb-detail-group {
-    margin-bottom: 15px;
-  }
-
-  .fb-label {
-    font-size: 0.85rem;
-    color: #b0b3b8;
-    text-transform: uppercase;
-    display: block;
-    font-weight: bold;
-  }
-
-  .fb-value-white {
-    font-size: 1.05rem;
-    margin-top: 5px;
-    color: #fff;
-    word-break: break-word;
-  }
-
-  .fb-value {
-    font-size: 1rem;
-    margin-top: 5px;
-    color: #e4e6eb;
-    word-break: break-word;
-  }
-
-  .fb-value-muted {
-    font-size: 0.95rem;
-    color: #b0b3b8;
-    margin-top: 5px;
-    line-height: 1.4;
-    word-break: break-word;
-  }
-
-  /* MEDIA QUERY RESPONSIVE PARA MÓVILES (<= 1024px) */
   @media (max-width: 1024px) {
-    #fbLightboxModal {
-      overflow-y: auto !important;
-    }
-
-    .fb-lightbox-wrapper {
+    #fbLightboxModal .fb-lightbox-wrapper {
       flex-direction: column !important;
       height: auto !important;
       min-height: 100% !important;
     }
-
-    .fb-lightbox-img-container {
+    #fbLightboxModal .fb-lightbox-img-container {
       width: 100% !important;
-      height: 55vh !important;
-      min-height: 300px !important;
-      max-height: 60vh !important;
+      height: 45vh !important;
+      min-height: 300px;
+      padding: 20px !important;
       flex: none !important;
-      padding: 10px !important;
-      background-color: #000 !important;
     }
-
-    .fb-lightbox-img-container img {
-      max-height: 100% !important;
-      max-width: 100% !important;
-      object-fit: contain !important;
-    }
-
-    .fb-lightbox-sidebar {
+    #fbLightboxModal .fb-lightbox-sidebar {
       width: 100% !important;
-      min-width: 100% !important;
+      max-width: 100% !important;
       height: auto !important;
-      overflow-y: visible !important;
       border-left: none !important;
       border-top: 1px solid #393a3b !important;
-      padding: 20px !important;
-      flex: 1 !important;
-    }
-
-    .fb-close-btn {
-      top: 10px;
-      right: 10px;
-      width: 38px;
-      height: 38px;
-      font-size: 1.5rem;
     }
   }
 </style>
@@ -203,7 +44,7 @@
     @include('layouts.partials.flash-messages')
   </div>
 
-  {{-- Sección de registro múltiple --}}
+  {{-- Sección de registro múltiple con el campo de Título --}}
   <div class="tile mb-4">
     <h3 class="tile-title text-center mb-3"><i class="fa fa-cloud-upload-alt text-primary"></i> Agregar Fotografías al Álbum</h3>
     <div class="tile-body">
@@ -268,7 +109,7 @@
               
               @if($foto->es_principal)
                 <span class="badge badge-success position-absolute" style="top: 10px; left: 10px; z-index: 10; font-size: 0.8rem;">
-                  <i class="fa fa-star"></i> Principal
+                  <i class="fa fa-star">️</i> Principal
                 </span>
               @endif
 
@@ -311,11 +152,7 @@
                                ? asset('albumes/thumbs/' . $nombreArchivo) 
                                : asset($foto->ruta);
               @endphp
-              <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" 
-                   class="d-flex align-items-center justify-content-center lightbox-trigger" 
-                   onclick="abrirVisorFacebook(this)"
-                   data-ruta="{{ asset($foto->ruta) }}"
-                   data-titulo="{{ $foto->titulo ?: 'Sin título' }}">
+              <div style="height: 200px; background-color: #f8f9fa; overflow: hidden; cursor: pointer;" class="d-flex align-items-center justify-content-center" onclick="abrirVisorFacebook({{ $loop->index }})">
                 <img src="{{ $rutaThumb }}" class="card-img-top" alt="{{ $foto->titulo }}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
               <div class="card-body p-2 text-center bg-light">
@@ -366,140 +203,60 @@
 </div>
 
 {{-- VISOR TIPO FACEBOOK RESPONSIVE --}}
-<div id="fbLightboxModal">
-  <button type="button" onclick="cerrarVisorFacebook()" class="fb-close-btn">&times;</button>
+<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); z-index: 9999; overflow-y: auto;">
+  
+  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
+    &times;
+  </button>
 
-  <div class="fb-lightbox-wrapper">
+  <div class="fb-lightbox-wrapper" style="display: flex; width: 100%; min-height: 100%; box-sizing: border-box;">
     
-    <div class="fb-lightbox-img-container">
-      <button type="button" onclick="cambiarFoto(-1)" class="fb-nav-btn fb-prev-btn">
+    <div class="fb-lightbox-img-container" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; box-sizing: border-box;">
+      
+      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-left"></i>
       </button>
 
-      <img id="fbLightboxImg" src="" alt="">
+      <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
-      <button type="button" onclick="cambiarFoto(1)" class="fb-nav-btn fb-next-btn">
+      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
       </button>
     </div>
 
-    <div class="fb-lightbox-sidebar">
-      <h4><i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo</h4>
+    <div class="fb-lightbox-sidebar" style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
+      
+      <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.2rem;">
+        <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
+      </h4>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Título de la Foto</span>
-        <p id="fbLightboxTitulo" class="fb-value-white"></p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
+        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
       </div>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Producto</span>
-        <p class="fb-value">{{ $insumo->producto }}</p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
+        <p style="font-size: 1rem; margin-top: 5px; word-break: break-word;">{{ $insumo->producto }}</p>
       </div>
 
-      <div class="fb-detail-group">
-        <span class="fb-label">Serial</span>
-        <p><span class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;">{{ $insumo->serial }}</span></p>
+      <div style="margin-bottom: 15px;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Serial</span>
+        <p style="margin-top: 5px;"><span class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;">{{ $insumo->serial }}</span></p>
       </div>
 
-      <div class="fb-detail-group" style="flex-grow: 1;">
-        <span class="fb-label">Descripción</span>
-        <p class="fb-value-muted">{{ $insumo->descripcion ?? 'Sin descripción registrada.' }}</p>
+      <div style="margin-bottom: 15px; flex-grow: 1;">
+        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
+        <p style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;">{{ $insumo->descripcion ?? 'Sin descripción registrada.' }}</p>
       </div>
+
     </div>
-
   </div>
 </div>
 @endsection
 
 @section('scripts')
 <script>
-  let currentIndex = 0;
-  let triggerElements = [];
-  let page = 1;
-  let hasMore = true;
-  let loading = false;
-
-  // Delegación de eventos global (Funciona incluso con elementos cargados por AJAX)
-  $(document).on('click', '.lightbox-trigger', function() {
-    console.log("¡Clic detectado en la foto con éxito!");
-    triggerElements = Array.from(document.querySelectorAll('.lightbox-trigger'));
-    currentIndex = triggerElements.indexOf(this);
-    actualizarContenidoVisor();
-    document.getElementById('fbLightboxModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-  });
-
-  function cerrarVisorFacebook() {
-    document.getElementById('fbLightboxModal').style.display = 'none';
-    document.body.style.overflow = 'auto';
-  }
-
-  function cambiarFoto(direccion) {
-    currentIndex += direccion;
-    if (currentIndex >= triggerElements.length) {
-      currentIndex = 0;
-    } else if (currentIndex < 0) {
-      currentIndex = triggerElements.length - 1;
-    }
-    actualizarContenidoVisor();
-  }
-
-  function actualizarContenidoVisor() {
-    let el = triggerElements[currentIndex];
-    if (!el) return;
-    document.getElementById('fbLightboxImg').src = el.getAttribute('data-ruta');
-    document.getElementById('fbLightboxTitulo').textContent = el.getAttribute('data-titulo');
-    
-    // Si estás en el álbum individual (donde estos elementos no aplican, evitamos errores validando si existen)
-    let prod = document.getElementById('fbLightboxProducto');
-    if (prod) prod.textContent = el.getAttribute('data-producto');
-    
-    let ser = document.getElementById('fbLightboxSerial');
-    if (ser) ser.textContent = el.getAttribute('data-serial');
-    
-    let desc = document.getElementById('fbLightboxDescripcion');
-    if (desc) desc.textContent = el.getAttribute('data-descripcion');
-  }
-
-  const observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && hasMore && !loading) {
-      cargarMasFotos();
-    }
-  }, { rootMargin: '300px' });
-
-  const sentinel = document.getElementById('scroll-sentinel');
-  if (sentinel) {
-    observer.observe(sentinel);
-  }
-
-  function cargarMasFotos() {
-    loading = true;
-    page++;
-    document.getElementById('loading-spinner').style.display = 'block';
-
-    $.ajax({
-      url: "{{ route('insumos.album.general') }}?page=" + page,
-      type: 'GET',
-      success: function(response) {
-        $('#galeria-grid').append(response.html);
-        hasMore = response.has_more;
-        loading = false;
-        document.getElementById('loading-spinner').style.display = 'none';
-
-        if (!hasMore) {
-          observer.disconnect();
-          document.getElementById('scroll-sentinel').innerHTML = '<p class="text-muted small">No hay más fotografías que mostrar.</p>';
-        }
-
-        $('[data-toggle="tooltip"]').tooltip();
-      },
-      error: function() {
-        loading = false;
-        document.getElementById('loading-spinner').style.display = 'none';
-      }
-    });
-  }
-
   function abrirModalEditar(id, titulo) {
     $('#edit_foto_id').val(id);
     $('#edit_titulo').val(titulo === 'null' ? '' : titulo);
@@ -531,37 +288,82 @@
     });
   });
 
-  function eliminarFoto(fotoId) {
-    swal.fire({
-      title: "¿Estás seguro?",
-      text: "¡No podrás recuperar esta fotografía una vez eliminada!",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#6c757d",
-      confirmButtonText: "Sí, ¡eliminar!",
-      cancelButtonText: "Cancelar"
-    }).then((result) => {
-      if (result.isConfirmed) {
-        document.getElementById('delete-form-' + fotoId).submit();
+  document.getElementById('inputFotos').addEventListener('change', function(e) {
+      let count = e.target.files.length;
+      let feedback = document.getElementById('fileFeedback');
+      if (count > 0) {
+        feedback.textContent = count === 1 ? '1 archivo seleccionado' : count + ' archivos seleccionados';
+      } else {
+        feedback.textContent = '';
       }
     });
-  }
 
-  document.addEventListener('keydown', function(event) {
-    if (document.getElementById('fbLightboxModal').style.display === 'block') {
-      if (event.key === "Escape") {
-        cerrarVisorFacebook();
-      } else if (event.key === "ArrowRight") {
-        cambiarFoto(1);
-      } else if (event.key === "ArrowLeft") {
-        cambiarFoto(-1);
-      }
+  function eliminarFoto(fotoId) {
+      swal.fire({
+        title: "¿Estás seguro?",
+        text: "¡No podrás recuperar esta fotografía una vez eliminada!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#6c757d",
+        confirmButtonText: "Sí, ¡eliminar!",
+        cancelButtonText: "Cancelar"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          document.getElementById('delete-form-' + fotoId).submit();
+        }
+      });
     }
-  });
 
-  $(document).ready(function() {
-    $('[data-toggle="tooltip"]').tooltip();
-  });
+      const albumFotos = [
+        @foreach($insumo->fotos as $foto)
+          {
+            ruta: "{{ asset($foto->ruta) }}",
+            titulo: "{{ addslashes($foto->titulo ?: 'Sin título') }}"
+          },
+        @endforeach
+      ];
+
+      let currentIndex = 0;
+
+      function abrirVisorFacebook(index) {
+        currentIndex = index;
+        actualizarContenidoVisor();
+        document.getElementById('fbLightboxModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+      }
+
+      function cerrarVisorFacebook() {
+        document.getElementById('fbLightboxModal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+
+      function cambiarFoto(direccion) {
+        currentIndex += direccion;
+        if (currentIndex >= albumFotos.length) {
+          currentIndex = 0;
+        } else if (currentIndex < 0) {
+          currentIndex = albumFotos.length - 1;
+        }
+        actualizarContenidoVisor();
+      }
+
+      function actualizarContenidoVisor() {
+        let fotoActual = albumFotos[currentIndex];
+        document.getElementById('fbLightboxImg').src = fotoActual.ruta;
+        document.getElementById('fbLightboxTitulo').textContent = fotoActual.titulo;
+      }
+
+      document.addEventListener('keydown', function(event) {
+        if (document.getElementById('fbLightboxModal').style.display === 'block') {
+          if (event.key === "Escape") {
+            cerrarVisorFacebook();
+          } else if (event.key === "ArrowRight") {
+            cambiarFoto(1);
+          } else if (event.key === "ArrowLeft") {
+            cambiarFoto(-1);
+          }
+        }
+      });
 </script>
 @endsection
