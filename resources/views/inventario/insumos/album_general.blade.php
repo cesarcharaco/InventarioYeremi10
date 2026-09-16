@@ -1,31 +1,89 @@
 @extends('layouts.app')
 
 @section('title') Álbum General de Insumos @endsection
+
 @push('styles')
 <style>
+  /* --- MODAL FLOTANTE GLOBAL --- */
+  #fbLightboxModal {
+    display: none;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: rgba(0, 0, 0, 0.96) !important;
+    z-index: 9999999 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fb-lightbox-wrapper {
+    display: flex;
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+  }
+  .fb-lightbox-img-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    position: relative;
+    box-sizing: border-box;
+    background-color: #000;
+  }
+  .fb-lightbox-sidebar {
+    width: 380px;
+    background-color: #242526;
+    color: #e4e6eb;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #393a3b;
+    padding: 25px;
+    box-sizing: border-box;
+  }
+
+  /* --- RESPONSIVE MÓVIL --- */
   @media (max-width: 1024px) {
-    #fbLightboxModal .fb-lightbox-wrapper {
+    .fb-lightbox-wrapper {
       flex-direction: column !important;
-      height: auto !important;
-      min-height: 100% !important;
-    }
-    #fbLightboxModal .fb-lightbox-img-container {
       width: 100% !important;
-      height: 45vh !important;
-      min-height: 300px;
-      padding: 20px !important;
-      flex: none !important;
+      min-height: 100% !important;
+      height: auto !important;
     }
-    #fbLightboxModal .fb-lightbox-sidebar {
+    .fb-lightbox-img-container {
+      width: 100% !important;
+      height: 52vh !important;
+      min-height: 300px !important;
+      max-height: 52vh !important;
+      padding: 10px !important;
+      flex: none !important;
+      position: relative !important;
+    }
+    .fb-lightbox-img-container img {
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain !important;
+    }
+    .fb-lightbox-sidebar {
       width: 100% !important;
       max-width: 100% !important;
       height: auto !important;
       border-left: none !important;
       border-top: 1px solid #393a3b !important;
+      padding: 20px 15px !important;
+      background-color: #242526 !important;
     }
   }
 </style>
 @endpush
+
 @section('content')
 <main class="app-content">
   <div class="app-title">
@@ -95,54 +153,55 @@
   </div>
 </div>
 
-{{-- VISOR TIPO FACEBOOK RESPONSIVE --}}
-<div id="fbLightboxModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95); z-index: 9999; overflow-y: auto;">
+{{-- VISOR TIPO FACEBOOK --}}
+<div id="fbLightboxModal" style="display: none; position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; margin: 0 !important; padding: 0 !important; background-color: rgba(0, 0, 0, 0.96) !important; z-index: 9999999 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch;">
   
-  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 20px; background: rgba(0,0,0,0.5); border: none; color: #fff; font-size: 2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
+  <button type="button" onclick="cerrarVisorFacebook()" style="position: fixed; top: 15px; right: 15px; background: rgba(0,0,0,0.7); border: none; color: #fff; font-size: 1.8rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000000; outline: none; display: flex; align-items: center; justify-content: center;">
     &times;
   </button>
 
-  <div class="fb-lightbox-wrapper" style="display: flex; width: 100%; min-height: 100%; box-sizing: border-box;">
-    
-    <div class="fb-lightbox-img-container" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative; box-sizing: border-box;">
-      
-      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
+  <div class="fb-lightbox-wrapper">
+    <div class="fb-lightbox-img-container">
+      <button type="button" onclick="cambiarFoto(-1)" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); background: rgba(0, 0, 0, 0.7); border: none; color: #fff; font-size: 1.2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-left"></i>
       </button>
 
       <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
-      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; background: rgba(0, 0, 0, 0.6); border: none; color: #fff; font-size: 1.5rem; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 10000; outline: none; display: flex; align-items: center; justify-content: center;">
+      <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: rgba(0, 0, 0, 0.7); border: none; color: #fff; font-size: 1.2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
       </button>
     </div>
 
-    <div class="fb-lightbox-sidebar" style="width: 380px; background-color: #242526; color: #e4e6eb; display: flex; flex-direction: column; border-left: 1px solid #393a3b; padding: 25px; box-sizing: border-box;">
-      
-      <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.2rem;">
-        <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
-      </h4>
+    {{-- BARRA LATERAL CON DIV SEPARADOR INTERNO --}}
+    <div class="fb-lightbox-sidebar">
+      <div style="padding: 5px 12px; width: 100%; box-sizing: border-box;">
+        
+        <h4 style="color: #fff; border-bottom: 1px solid #393a3b; padding-bottom: 15px; margin-bottom: 20px; font-size: 1.1rem;">
+          <i class="fa fa-info-circle text-primary mr-2"></i> Detalle del Insumo
+        </h4>
 
-      <div style="margin-bottom: 15px;">
-        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
-        <p id="fbLightboxTitulo" style="font-size: 1.05rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
+        <div style="margin-bottom: 15px;">
+          <span style="font-size: 0.8rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Título de la Foto</span>
+          <p id="fbLightboxTitulo" style="font-size: 1rem; margin-top: 5px; color: #fff; word-break: break-word;"></p>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <span style="font-size: 0.8rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
+          <p id="fbLightboxProducto" style="font-size: 0.95rem; margin-top: 5px; word-break: break-word; color: #e4e6eb;"></p>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <span style="font-size: 0.8rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Serial</span>
+          <p style="margin-top: 5px;"><span id="fbLightboxSerial" class="badge badge-secondary" style="font-size: 0.85rem; padding: 5px 10px;"></span></p>
+        </div>
+
+        <div style="margin-bottom: 15px; flex-grow: 1;">
+          <span style="font-size: 0.8rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
+          <p id="fbLightboxDescripcion" style="font-size: 0.9rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;"></p>
+        </div>
+
       </div>
-
-      <div style="margin-bottom: 15px;">
-        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Producto</span>
-        <p id="fbLightboxProducto" style="font-size: 1rem; margin-top: 5px; word-break: break-word;"></p>
-      </div>
-
-      <div style="margin-bottom: 15px;">
-        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Serial</span>
-        <p style="margin-top: 5px;"><span id="fbLightboxSerial" class="badge badge-secondary" style="font-size: 0.9rem; padding: 6px 10px;"></span></p>
-      </div>
-
-      <div style="margin-bottom: 15px; flex-grow: 1;">
-        <span style="font-size: 0.85rem; color: #b0b3b8; text-transform: uppercase; display: block; font-weight: bold;">Descripción</span>
-        <p id="fbLightboxDescripcion" style="font-size: 0.95rem; color: #b0b3b8; margin-top: 5px; line-height: 1.4; word-break: break-word;"></p>
-      </div>
-
     </div>
   </div>
 </div>
@@ -303,6 +362,12 @@
   });
 
   $(document).ready(function() {
+    // MAGIA AUTOMÁTICA: Mueve el modal al body al cargar para evitar márgenes del layout
+    const modal = document.getElementById('fbLightboxModal');
+    if (modal) {
+      document.body.appendChild(modal);
+    }
+
     $('[data-toggle="tooltip"]').tooltip();
   });
 </script>
