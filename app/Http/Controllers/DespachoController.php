@@ -661,7 +661,8 @@ class DespachoController extends Controller
 
         // 2. Locales de Destino: Si es encargado, su local por defecto; si es admin, cualquiera de la red
         if ($usuario->role === User::ROLE_ENCARGADO) {
-            $localesDestino = $usuario->local; // O los locales asignados al usuario
+            // Usamos el método helper que ya tienes definido en el modelo User
+            $localesDestino = $usuario->localActual(); 
         } else {
             $localesDestino = Local::all();
         }

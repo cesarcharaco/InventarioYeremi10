@@ -68,7 +68,7 @@ class AuthServiceProvider extends ServiceProvider
 
         // registro de despachos de mercancia
         Gate::define('crear-despacho', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
 
         // confirmación de recepcion de mercancia
@@ -78,7 +78,7 @@ class AuthServiceProvider extends ServiceProvider
         
         // editar de despachos de mercancia
         Gate::define('editar-despacho', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
 
         // eliminar de despachos de mercancia
@@ -104,7 +104,7 @@ class AuthServiceProvider extends ServiceProvider
 
         // Quién puede procesar/despachar una solicitud pendiente (convertirla a En Tránsito)
         Gate::define('procesar-solicitud', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA, User::ROLE_ENCARGADO]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
         //Registro de incidencias todos
         Gate::define('registrar-incidencia', function (User $user) {
