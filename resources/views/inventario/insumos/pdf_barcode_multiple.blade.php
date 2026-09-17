@@ -21,7 +21,7 @@
             table-layout: fixed;
         }
         td {
-            width: 33.33%;
+            width: 25%; /* 4 columnas exactas */
             padding: 0.5mm;
             vertical-align: top;
             box-sizing: border-box;
@@ -61,8 +61,8 @@
 <body>
     @foreach ($listaImpresion as $index => $data)
         <table class="{{ !$loop->last ? 'page-break' : '' }}">
-            @for ($i = 0; $i < 24; $i++)
-                @if ($i % 3 == 0)
+            @for ($i = 0; $i < 32; $i++) {{-- 32 etiquetas por hoja (8 filas x 4 columnas) --}}
+                @if ($i % 4 == 0)
                     <tr>
                 @endif
 
@@ -74,7 +74,7 @@
                     </div>
                 </td>
 
-                @if (($i + 1) % 3 == 0 || $i + 1 == 24)
+                @if (($i + 1) % 4 == 0 || $i + 1 == 32)
                     </tr>
                 @endif
             @endfor

@@ -18,7 +18,7 @@
             table-layout: fixed;
         }
         td {
-            width: 33.33%;
+            width: 25%; /* 4 columnas exactas */
             padding: 0.5mm;
             vertical-align: top;
             box-sizing: border-box;
@@ -58,7 +58,7 @@
 <body>
     <table>
         @for ($i = 0; $i < $cantidadEtiquetas; $i++)
-            @if ($i % 3 == 0)
+            @if ($i % 4 == 0)
                 <tr>
             @endif
 
@@ -70,7 +70,7 @@
                 </div>
             </td>
 
-            @if (($i + 1) % 3 == 0 || $i + 1 == $cantidadEtiquetas)
+            @if (($i + 1) % 4 == 0 || $i + 1 == $cantidadEtiquetas)
                 </tr>
             @endif
         @endfor

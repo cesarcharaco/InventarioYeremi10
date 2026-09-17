@@ -588,27 +588,23 @@ class InsumosController extends Controller
 
     public function generarCodigoBarrasPdf($id)
     {
-        // 1. Buscar el insumo por su ID
         $insumo = DB::table('insumos')->where('id', $id)->first();
 
         if (!$insumo) {
             abort(404, 'El insumo no existe.');
         }
 
-        // 2. Generar la imagen del código de barras (CODE 128) en Base64
         $generator = new BarcodeGeneratorPNG();
         $barcodeBase64 = base64_encode(
             $generator->getBarcode($insumo->serial, $generator::TYPE_CODE_128)
         );
 
-        // 3. Definir cuántas etiquetas entran por hoja (ej. 24 etiquetas en grilla 3x8)
-        $cantidadEtiquetas = 24;
+        // Actualizado a 32 para aprovechar la grilla 4x8 en la hoja Carta
+        $cantidadEtiquetas = 32;
 
-        // 4. Cargar la vista y renderizar el PDF en tamaño Carta
         $pdf = Pdf::loadView('inventario.insumos.pdf_barcode', compact('insumo', 'barcodeBase64', 'cantidadEtiquetas'))
                   ->setPaper('letter', 'portrait');
 
-        // 5. Retornar el PDF en el navegador para vista previa/impresión
         return $pdf->stream("etiquetas_{$insumo->serial}.pdf");
     }
 
