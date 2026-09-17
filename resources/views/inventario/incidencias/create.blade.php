@@ -3,6 +3,11 @@
 @section('css')
 
 <style>
+    /* Forzar que Select2 ocupe el 100% del ancho del contenedor */
+    .select2-container {
+        width: 100% !important;
+    }
+
     /* Forzar la altura y padding del Select2 para que coincida con los form-control */
     .select2-container--default .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
@@ -73,13 +78,14 @@
                 </div>
 
                 <div class="col-md-6">                  
-                  <div class="form-group">
-                    <label class="control-label">Seleccione Insumo <b style="color: red;">*</b></label>
-                    <select name="id_insumoc" id="id_insumoc" class="form-control select2" required disabled>
-                      <option value="">-- Primero seleccione un local --</option>
-                    </select>
+                  <div class="form-group position-relative">
+                    <label class="control-label">Buscar Insumo <b style="color: red;">*</b></label>
+                    <input type="text" id="buscador_insumo" class="form-control" placeholder="Escribe el serial o nombre..." autocomplete="off" disabled>
+                    <input type="hidden" name="id_insumoc" id="id_insumoc" required>
+                    <div id="resultados-busqueda-insumo" class="list-group position-absolute w-100 shadow" style="z-index: 1000; display:none;"></div>
+                    <small id="seleccion_info" class="text-success font-weight-bold mt-1 d-block"></small>
                   </div>
-                </div> 
+                </div>
               </div>
 
               <div class="row">
@@ -143,59 +149,91 @@
 @section('scripts')
 <script type="text/javascript">
 $(document).ready(function() {
-    $('.select2').select2();
-    $('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
+    $('.select2').select2({ width: '100\%' });$('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
 
     const ui = {
-        cantidad:    $("#cantidad"),
-        local:       $("#id_local"),
-        insumo:      $("#id_insumoc"),
-        tipo:        $("#tipo"),
-        obs:         $("#observacion"),
-        mensaje:     $("#mensaje"),
-        btnSubmit:   $("#registrar")
+        cantidad:         $("#cantidad"),
+        local:            $("#id_local"),
+        insumoHidden:     $("#id_insumoc"),
+        buscadorInsumo:   $("#buscador_insumo"),
+        resultadosInsumo: $("#resultados-busqueda-insumo"),
+        seleccionInfo:    $("#seleccion_info"),
+        tipo:             $("#tipo"),
+        obs:              $("#observacion"),
+        mensaje:          $("#mensaje"),
+        btnSubmit:        $("#registrar")
     };
 
     const allInsumos = @json($insumos);
+    let selectedMaxStock = 0;
 
+    // Al cambiar de local
     ui.local.on('change', function() {
         const localId = $(this).val();
         
-        ui.insumo.empty().append('<option value="">-- Seleccione un insumo --</option>');
+        ui.buscadorInsumo.val('').prop('disabled', !localId);
+        ui.insumoHidden.val('');
+        ui.seleccionInfo.text('');
+        ui.resultadosInsumo.hide();
+        selectedMaxStock = 0;
         
-        if (localId) {
-            const filtrados = allInsumos.filter(item => item.id_local == localId);
-            
-            filtrados.forEach(item => {
-                const option = new Option(
-                    `Serial: ${item.serial} | ${item.producto} | ${item.descripcion} | Disponible: ${item.cantidad}`, 
-                    item.id_insumoc, 
-                    false, 
-                    false
-                );
-                $(option).attr('data-max', item.cantidad);
-                ui.insumo.append(option);
-            });
-            
-            ui.insumo.prop('disabled', false);
+        if (!localId) {
+            ui.buscadorInsumo.attr('placeholder', '-- Primero seleccione un local --');
         } else {
-            ui.insumo.prop('disabled', true);
+            ui.buscadorInsumo.attr('placeholder', 'Escribe el serial o nombre del insumo...');
         }
         
-        ui.insumo.trigger('change');
         validateForm();
     });
 
+    // Autocompletado al escribir en el buscador de insumos
+    ui.buscadorInsumo.on('keyup', function() {
+        const localId = ui.local.val();
+        const q = $(this).val().toLowerCase();
+        
+        if (q.length < 2 || !localId) {
+            ui.resultadosInsumo.hide();
+            return;
+        }
+
+        const filtrados = allInsumos.filter(item => {
+            if (item.id_local != localId) return false;
+            const texto = `[${item.serial}] ${item.producto} ${item.descripcion}`.toLowerCase();
+            return texto.includes(q);
+        });
+
+        let html = '';
+        if (filtrados.length === 0) {
+            html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
+        } else {
+            filtrados.forEach(item => {
+                html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id_insumoc}, '${item.serial}', '${item.producto}', '${item.descripcion}', ${item.cantidad}); return false;">
+                            <strong>[${item.serial}]</strong> ${item.producto} - ${item.descripcion} | <span class="text-info">Disponible: ${item.cantidad}</span>
+                         </a>`;
+            });
+        }
+        ui.resultadosInsumo.html(html).show();
+    });
+
+    // Función global para capturar la selección del item
+    window.seleccionarInsumo = function(id, serial, producto, descripcion, cantidad) {
+        ui.insumoHidden.val(id);
+        selectedMaxStock = cantidad;
+        ui.buscadorInsumo.val('');
+        ui.resultadosInsumo.hide();
+        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} - ${descripcion} (Stock: ${cantidad})`);
+        validateForm();
+    };
+
     const validateForm = () => {
-        const selected = ui.insumo.find(':selected');
-        const max = parseInt(selected.data('max')) || 0;
+        const max = selectedMaxStock;
         const val = parseInt(ui.cantidad.val()) || 0;
         const tipo = ui.tipo.val();
         
         let error = "";
         let isInvalid = false;
 
-        if (ui.local.val() === "" || ui.insumo.val() === "") {
+        if (ui.local.val() === "" || ui.insumoHidden.val() === "") {
             isInvalid = true;
         } else if (val <= 0) {
             error = "La cantidad debe ser mayor a 0";
@@ -218,7 +256,6 @@ $(document).ready(function() {
     };
 
     ui.cantidad.on('input change', validateForm);
-    ui.insumo.on('change', validateForm);
     ui.tipo.on('change', validateForm);
     ui.obs.on('input', validateForm);
 });

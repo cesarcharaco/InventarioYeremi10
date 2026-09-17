@@ -90,14 +90,15 @@
                   </div>
 
                   <div class="col-md-6">                  
-                    <div class="form-group">
+                    <div class="form-group position-relative">
                       <label class="control-label">
-                        Seleccione Insumo <b style="color: red;">*</b>
+                        Buscar Insumo <b style="color: red;">*</b>
                         <br><small class="text-info font-weight-bold"><i class="fa fa-info-circle"></i> Registrado: {{ $detalleInsumoActual }}</small>
                       </label>
-                      <select name="id_insumoc" id="id_insumoc" class="form-control select2" required>
-                        <option value="">-- Primero seleccione un local --</option>
-                      </select>
+                      <input type="text" id="buscador_insumo" class="form-control" placeholder="Escribe el serial o nombre..." autocomplete="off">
+                      <input type="hidden" name="id_insumoc" id="id_insumoc" value="{{ $currentInsumoCtrolId }}" required>
+                      <div id="resultados-busqueda-insumo" class="list-group position-absolute w-100 shadow" style="z-index: 1000; display:none;"></div>
+                      <small id="seleccion_info" class="text-success font-weight-bold mt-1 d-block"></small>
                     </div>
                   </div> 
                 </div>
@@ -163,73 +164,107 @@
 @section('scripts')
 <script type="text/javascript">
 $(document).ready(function() {
-    $('.select2').select2();
-    $('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
+    $('.select2').select2({ width: '100\%' });$('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
 
     const ui = {
-        cantidad:    $("#cantidad"),
-        local:       $("#id_local"),
-        insumo:      $("#id_insumoc"),
-        tipo:        $("#tipo"),
-        obs:         $("#observacion"),
-        mensaje:     $("#mensaje"),
-        btnSubmit:   $("#registrar")
+        cantidad:         $("#cantidad"),
+        local:            $("#id_local"),
+        insumoHidden:     $("#id_insumoc"),
+        buscadorInsumo:   $("#buscador_insumo"),
+        resultadosInsumo: $("#resultados-busqueda-insumo"),
+        seleccionInfo:    $("#seleccion_info"),
+        tipo:             $("#tipo"),
+        obs:              $("#observacion"),
+        mensaje:          $("#mensaje"),
+        btnSubmit:        $("#registrar")
     };
 
     const allInsumos = @json($insumos);
     const currentInsumoId = "{{ $incidencia->id_insumoc }}";
     const currentIncidenciaCantidad = parseInt("{{ $incidencia->cantidad }}") || 0;
+    let selectedMaxStock = 0;
 
-    // Función para poblar el select de insumos según el local seleccionado
-    const cargarInsumosPorLocal = (localId, selectedId = null) => {
-        ui.insumo.empty().append('<option value="">-- Seleccione un insumo --</option>');
+    // Cargar estado inicial del insumo registrado
+    const initialItem = allInsumos.find(item => item.id_insumoc == currentInsumoId);
+    if (initialItem) {
+        let maxStock = (parseInt(initialItem.cantidad) || 0) + currentIncidenciaCantidad;
+        selectedMaxStock = maxStock;
+        ui.seleccionInfo.text(`Registrado: [${initialItem.serial}] ${initialItem.producto} (Stock máx: ${maxStock})`);
+    }
+
+    // Evento al cambiar de local
+    ui.local.on('change', function() {
+        const localId = $(this).val();
+        const originalLocalId = "{{ $insumoActual ? $insumoActual->id_local :$incidencia->id_local }}";
         
-        if (localId) {
-            const filtrados = allInsumos.filter(item => item.id_local == localId);
-            
+        ui.buscadorInsumo.val('');
+        ui.resultadosInsumo.hide();
+        
+        if (localId == originalLocalId && initialItem) {
+            ui.insumoHidden.val(currentInsumoId);
+            let maxStock = (parseInt(initialItem.cantidad) || 0) + currentIncidenciaCantidad;
+            selectedMaxStock = maxStock;
+            ui.seleccionInfo.text(`Seleccionado: [${initialItem.serial}] ${initialItem.producto} (Stock: ${maxStock})`);
+        } else {
+            ui.insumoHidden.val('');
+            selectedMaxStock = 0;
+            ui.seleccionInfo.text('');
+        }
+        
+        validateForm();
+    });
+
+    // Búsqueda en vivo
+    ui.buscadorInsumo.on('keyup', function() {
+        const localId = ui.local.val();
+        const q = $(this).val().toLowerCase();
+        
+        if (q.length < 2 || !localId) {
+            ui.resultadosInsumo.hide();
+            return;
+        }
+
+        const filtrados = allInsumos.filter(item => {
+            if (item.id_local != localId) return false;
+            const texto = `[${item.serial}] ${item.producto} ${item.descripcion}`.toLowerCase();
+            return texto.includes(q);
+        });
+
+        let html = '';
+        if (filtrados.length === 0) {
+            html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
+        } else {
             filtrados.forEach(item => {
                 let maxStock = parseInt(item.cantidad) || 0;
-                
-                // Si este es el insumo que ya tenía la incidencia, sumamos su cantidad actual para permitir reasignarla
                 if (item.id_insumoc == currentInsumoId) {
                     maxStock += currentIncidenciaCantidad;
                 }
-
-                const descripcionText = item.descripcion ? ` | ${item.descripcion}` : '';
-                const optionText = `Serial: ${item.serial} | ${item.producto}${descripcionText} | Disponible: ${maxStock}`;
-                
-                const option = new Option(optionText, item.id_insumoc, false, false);
-                $(option).attr('data-max', maxStock);
-                
-                if (item.id_insumoc == selectedId) {
-                    $(option).prop('selected', true);
-                }
-                
-                ui.insumo.append(option);
+                html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id_insumoc}, '${item.serial}', '${item.producto}', '${item.descripcion}', ${maxStock}); return false;">
+                            <strong>[${item.serial}]</strong> ${item.producto} - ${item.descripcion} | <span class="text-info">Disponible: ${maxStock}</span>
+                         </a>`;
             });
-            
-            ui.insumo.prop('disabled', false).trigger('change');
-        } else {
-            ui.insumo.prop('disabled', true);
         }
+        ui.resultadosInsumo.html(html).show();
+    });
+
+    window.seleccionarInsumo = function(id, serial, producto, descripcion, maxStock) {
+        ui.insumoHidden.val(id);
+        selectedMaxStock = maxStock;
+        ui.buscadorInsumo.val('');
+        ui.resultadosInsumo.hide();
+        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} - ${descripcion} (Stock: ${maxStock})`);
         validateForm();
     };
 
-    // Evento al cambiar de local manualmente
-    ui.local.on('change', function() {
-        cargarInsumosPorLocal($(this).val());
-    });
-
     const validateForm = () => {
-        const selected = ui.insumo.find(':selected');
-        const max = parseInt(selected.data('max')) || 0;
+        const max = selectedMaxStock;
         const val = parseInt(ui.cantidad.val()) || 0;
         const tipo = ui.tipo.val();
         
         let error = "";
         let isInvalid = false;
 
-        if (ui.local.val() === "" || ui.insumo.val() === "") {
+        if (ui.local.val() === "" || ui.insumoHidden.val() === "") {
             isInvalid = true;
         } else if (val <= 0) {
             error = "La cantidad debe ser mayor a 0";
@@ -251,16 +286,10 @@ $(document).ready(function() {
         ui.cantidad.toggleClass('is-invalid', error !== "");
     };
 
-    // Inicialización al cargar la página en modo edición
-    const initialLocalId = ui.local.val();
-    if (initialLocalId) {
-        cargarInsumosPorLocal(initialLocalId, currentInsumoId);
-    }
-
     ui.cantidad.on('input change', validateForm);
-    ui.insumo.on('change', validateForm);
     ui.tipo.on('change', validateForm);
     ui.obs.on('input', validateForm);
+    validateForm();
 });
 </script>
 @endsection

@@ -8,11 +8,9 @@
             <h1 class="m-0 text-dark"><i class="fas fa-cart-plus mr-2 text-primary"></i>Nueva Entrada</h1>
         </div>
     </div>
-
 @endsection
 
 @section('css')
-
 <style>
     /* Forzar la altura y padding del Select2 para que coincida con los form-control */
     .select2-container--default .select2-selection--single {
@@ -36,6 +34,7 @@
     }
 </style>
 @endsection
+
 @section('content')
     @include('layouts.partials.flash-messages')
 
@@ -58,7 +57,7 @@
                             <select name="id_proveedor" class="form-control select2" required>
                                 <option value=""></option>
                                 @foreach($proveedores as $p)
-                                    <option value="{{ $p->id }}">{{ $p->rif }} - {{ $p->nombre }}</option>
+                                    <option value="{{ $p->id }}">{{ $p->rif }} - {{$p->nombre }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -102,25 +101,15 @@
                     </div>
                     <div class="card-body">
                         <div class="border-bottom pb-3 mb-3">
-                            {{-- Fila 1: Buscador de Insumo (Ancho completo) --}}
+                            {{-- Fila 1: Buscador Flotante de Insumo (Ancho completo) --}}
                             <div class="row">
-                                <div class="col-12 form-group">
-                                    <label>Seleccionar Insumo</label>
-                                    <select id="select_insumo" class="form-control select2" style="width: 100%;">
-                                        <option value=""></option>
-                                        @foreach($insumos as $i)
-                                            <option value="{{ $i->id }}" 
-                                                    data-nombre="{{ $i->producto }}" 
-                                                    data-costo="{{ $i->costo }}"
-                                                    data-descripcion="{{ $i->descripcion }}">
-                                                {{ $i->producto }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    {{-- Espacio para mostrar la descripción dinámicamente --}}
-                                    <div id="info_descripcion" class="mt-2 text-muted" style="display:none;">
-                                        <small><strong>Descripción:</strong> <span id="text_descripcion"></span></small>
-                                    </div>
+                                <div class="col-12 form-group position-relative">
+                                    <label>Buscar Insumo / Repuesto</label>
+                                    <input type="text" id="buscador" class="form-control" placeholder="Escribe el nombre o descripción del insumo..." autocomplete="off">
+                                    <input type="hidden" id="select_insumo_id" value="">
+                                    <input type="hidden" id="select_insumo_nombre" value="">
+                                    <input type="hidden" id="select_insumo_descripcion" value="">
+                                    <div id="resultados-busqueda" class="list-group position-absolute w-100 shadow" style="z-index: 1000; display:none;"></div>
                                 </div>
                             </div>
 
@@ -135,7 +124,7 @@
                                     <input type="number" id="input_costo" class="form-control" step="0.01" min="0" placeholder="0.00">
                                 </div>
                                 <div class="col-md-4 col-12 form-group">
-                                    <label class="d-none d-md-block">&nbsp;</label> {{-- Espaciador para alinear botón en PC --}}
+                                    <label class="d-none d-md-block">&nbsp;</label>
                                     <button type="button" class="btn btn-success btn-block" id="btnAgregarItem">
                                         <i class="fas fa-plus mr-1"></i> Añadir
                                     </button>
@@ -175,79 +164,87 @@
     let contador = 0;
     let totalGeneral = 0;
 
+    // Cargar los insumos directamente desde PHP con json 
+    let insumosDisponibles = @json($insumos);
+
+    function seleccionarInsumo(id) {
+        let item = insumosDisponibles.find(i => i.id == id);
+        if (!item) return;
+
+        let costoStr = item.costo ? parseFloat(item.costo).toFixed(2) : '0.00';
+        let textoItem = `${item.producto} ${item.descripcion ? ' - ' + item.descripcion : ''} (Costo sugerido: $${costoStr})`;
+        
+        $('#select_insumo_id').val(item.id);
+        $('#select_insumo_nombre').val(item.producto);
+        $('#select_insumo_descripcion').val(item.descripcion || '');
+        $('#buscador').val(textoItem);
+        $('#resultados-busqueda').hide();
+
+        // Sugerir costo y enfocar cantidad
+        $('#input_costo').val(item.costo || 0);
+        $('#input_cantidad').focus();
+    }
+
     $(document).ready(function() {
-       // Función de coincidencia personalizada para buscar por producto y descripción
-           function customMatcher(params, data) {
-               if ($.trim(params.term) === '') {
-                   return data;
-               }
+        // Inicializar Select2 solo para proveedores y depósitos
+        $('.select2').select2({
+            width: '100%'
+        });
 
-               if (typeof data.id === 'undefined') {
-                   return null;
-               }
+        // Ocultar resultados de búsqueda al hacer clic fuera
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#buscador, #resultados-busqueda').length) {
+                $('#resultados-busqueda').hide();
+            }
+        });
 
-               let term = params.term.toLowerCase();
-               let producto = $(data.element).text().toLowerCase();
-               let descripcion = ($(data.element).data('descripcion') || '').toLowerCase();
+        // Autocompletado en tiempo real al escribir en el buscador
+        $('#buscador').on('keyup', function() {
+            let q = $(this).val().toLowerCase();
+            if (q.length < 2) {
+                $('#resultados-busqueda').hide();
+                return;
+            }
 
-               if (producto.indexOf(term) > -1 || descripcion.indexOf(term) > -1) {
-                   return data;
-               }
+            let filtrados = insumosDisponibles.filter(item => 
+                (item.producto && item.producto.toLowerCase().includes(q)) || 
+                (item.descripcion && item.descripcion.toLowerCase().includes(q))
+            );
 
-               return null;
-           }
-
-           // Inicializar Select2 con Template Personalizado y el Matcher integrado
-           $('#select_insumo').select2({
-               placeholder: "Busque un insumo por nombre o descripción...",
-               allowClear: true,
-               templateResult: formatInsumo,
-               matcher: customMatcher
-           });
-
-           // Función para dar formato a las opciones en la lista
-           function formatInsumo (insumo) {
-               if (!insumo.id) { return insumo.text; }
-
-               let descripcion = $(insumo.element).data('descripcion') || 'Sin descripción';
-               
-               let $insumo = $(
-                   '<div class="insumo-item"><strong>' +
-                       '<span class="titulo-insumo">' + insumo.text + '</span><br>' +
-                       '<span class="detalle-insumo"><i class="fas fa-info-circle mr-1"></i>' + descripcion + '</span>' +
-                   '</strong></div>'
-               );
-               
-               return $insumo;
-           };
-
-           // Al elegir un insumo, sugerir su costo actual
-           $('#select_insumo').on('change', function() {
-               let costo = $(this).find(':selected').data('costo');
-               $('#input_costo').val(costo);
-               $('#input_cantidad').focus();
-           });
+            let html = '';
+            if (filtrados.length === 0) {
+                html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
+            } else {
+                filtrados.forEach(item => {
+                    let costoVal = item.costo ? parseFloat(item.costo).toFixed(2) : '0.00';
+                    let descText = item.descripcion ? `<br><small class="text-muted"><i class="fas fa-info-circle mr-1"></i>${item.descripcion}</small>` : '';
+                    html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id}); return false;">
+                                <strong>${item.producto}</strong>
+                                ${descText}
+                                <span class="badge badge-info float-right mt-1">Costo: $${costoVal}</span>
+                             </a>`;
+                });
+            }
+            $('#resultados-busqueda').html(html).show();
+        });
 
         // Botón Agregar Item
         $('#btnAgregarItem').click(function() {
-            let id_insumo = $('#select_insumo').val();
-            let $selectedOption = $('#select_insumo').find(':selected');
-            let nombre = $selectedOption.data('nombre');
-            let descripcion = $selectedOption.data('descripcion') || ''; // Capturamos la descripción
+            let id_insumo = $('#select_insumo_id').val();
+            let nombre = $('#select_insumo_nombre').val();
+            let descripcion = $('#select_insumo_descripcion').val() || '';
             let cantidad = parseFloat($('#input_cantidad').val());
             let costo = parseFloat($('#input_costo').val());
 
             if (!id_insumo || isNaN(cantidad) || cantidad <= 0 || isNaN(costo)) {
-                Swal.fire('Atención', 'Por favor complete los datos del insumo correctamente.', 'warning');
+                Swal.fire('Atención', 'Por favor seleccione un insumo válido del buscador y complete la cantidad y costo correctamente.', 'warning');
                 return;
             }
 
             let subtotal = cantidad * costo;
             
-            // Estructura condicional para mostrar la descripción si existe
             let htmlDescripcion = descripcion ? `<br><small class="text-muted"><i class="fas fa-info-circle mr-1"></i>${descripcion}</small>` : '';
 
-            // Construir fila incluyendo la descripción
             let fila = `
                 <tr id="fila_${contador}">
                     <td>
@@ -277,11 +274,13 @@
             $('#tabla_items tbody').append(fila);
             $('#vacio_msg').hide();
             
-            // Actualizar Totales
             actualizarTotal(subtotal);
             
-            // Limpiar campos
-            $('#select_insumo').val(null).trigger('change');
+            // Limpiar campos y buscador
+            $('#buscador').val('');
+            $('#select_insumo_id').val('');
+            $('#select_insumo_nombre').val('');
+            $('#select_insumo_descripcion').val('');
             $('#input_cantidad').val('');
             $('#input_costo').val('');
             contador++;

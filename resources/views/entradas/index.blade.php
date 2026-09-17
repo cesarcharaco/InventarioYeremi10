@@ -17,8 +17,59 @@
 @endsection
 
 @section('content')
-    {{-- ✅ Mensajes Flash según tu estructura --}}
     @include('layouts.partials.flash-messages')
+
+    {{-- Tarjeta de Filtros --}}
+    <div class="card card-outline card-info mb-3">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-filter mr-1"></i> Filtros de Búsqueda</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Fecha Desde:</label>
+                        <input type="date" id="filtro_desde" class="form-control form-control-sm" max="{{ date('Y-m-d') }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Fecha Hasta:</label>
+                        <input type="date" id="filtro_hasta" class="form-control form-control-sm" max="{{ date('Y-m-d') }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Proveedor:</label>
+                        <select id="filtro_proveedor" class="form-control form-control-sm">
+                            <option value="">Todos los proveedores</option>
+                            @foreach($proveedores as $prov)
+                                <option value="{{ $prov->id }}">{{ $prov->nombre }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Estado:</label>
+                        <select id="filtro_estado" class="form-control form-control-sm">
+                            <option value="">Todos los estados</option>
+                            <option value="PENDIENTE">PENDIENTE</option>
+                            <option value="APROBADO">APROBADO</option>
+                            <option value="ANULADO">ANULADO</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12 text-right">
+                    <button type="button" id="btn-limpiar" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-eraser mr-1"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="card card-outline card-info">
         <div class="card-header">
@@ -32,7 +83,7 @@
         
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-bordered table-striped sampleTable dt-responsive nowrap" style="width:100%">
+                <table id="tabla-entradas" class="table table-bordered table-striped sampleTable dt-responsive nowrap" style="width:100%">
                     <thead>
                         <tr>
                             <th>Fecha</th>
@@ -44,46 +95,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach($entradas as $entrada)
-                            <tr>
-                                <td>{{ \Carbon\Carbon::parse($entrada->created_at)->format('d/m/Y h:i A') }}</td>
-                                <td>
-                                    <span class="text-bold">{{ $entrada->proveedor->nombre }}</span>
-                                    <br><small class="text-muted">{{ $entrada->proveedor->rif }}</small>
-                                </td>
-                                <td>
-                                    <span class="badge badge-info shadow-sm">
-                                        <i class="fas fa-warehouse mr-1"></i> {{ $entrada->local->nombre }}
-                                    </span>
-                                </td>
-                                <td class="text-orange">
-                                    ${{ number_format($entrada->total_costo_usd, 2) }}
-                                </td>
-                                <td>
-                                    <small><i class="fas fa-user mr-1"></i> {{ $entrada->usuario->name }}</small>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group">
-                                        {{-- Botón ver detalle --}}
-                                        <a href="{{ route('entradas.show', $entrada->id) }}" 
-                                           class="btn btn-info btn-xs" 
-                                           title="Ver Detalle">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        
-                                        {{-- Botón para anular (si aplica en tu lógica de negocio) --}}
-                                        @if(auth()->user()->esAdmin())
-                                        <button type="button" 
-                                                class="btn btn-danger btn-xs btn-anular" 
-                                                data-id="{{ $entrada->id }}"
-                                                title="Anular Entrada">
-                                            <i class="fas fa-ban"></i>
-                                        </button>
-                                        @endif
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
+                        {{-- Se llena vía AJAX --}}
                     </tbody>
                 </table>
             </div>
@@ -99,10 +111,55 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
-        $('.btn-anular').click(function() {
+        if ($.fn.DataTable.isDataTable('#tabla-entradas')) {
+            $('#tabla-entradas').DataTable().destroy();
+        }
+
+        var table = $('#tabla-entradas').DataTable({
+            processing: true,
+            serverSide: true,
+            destroy: true,
+            retrieve: true,
+            ajax: {
+                url: "{{ route('entradas.data') }}",
+                data: function (d) {
+                    d.fecha_desde = $('#filtro_desde').val();
+                    d.fecha_hasta = $('#filtro_hasta').val();
+                    d.id_proveedor = $('#filtro_proveedor').val();
+                    d.estado = $('#filtro_estado').val();
+                }
+            },
+            columns: [
+                { data: 'created_at', name: 'entradas_almacen.created_at' },
+                { data: 'proveedor', name: 'proveedor.nombre' },
+                { data: 'local', name: 'local.nombre' },
+                { data: 'total_costo_usd', name: 'entradas_almacen.total_costo_usd' },
+                { data: 'usuario', name: 'usuario.name' },
+                { data: 'acciones', name: 'acciones', orderable: false, searchable: false, className: 'text-center' }
+            ],
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json"
+            }
+        });
+
+        // Filtrado automático onchange en todos los campos de selección y fechas
+        $('#filtro_desde, #filtro_hasta, #filtro_proveedor, #filtro_estado').on('change', function() {
+            table.ajax.reload();
+        });
+
+        // Botón Limpiar filtros
+        $('#btn-limpiar').click(function() {
+            $('#filtro_desde').val('');
+            $('#filtro_hasta').val('');
+            $('#filtro_proveedor').val('');
+            $('#filtro_estado').val('');
+            table.ajax.reload();
+        });
+
+        // Delegación de eventos para el botón anular
+        $(document).on('click', '.btn-anular', function() {
             let id = $(this).data('id');
-            let url = "{{ route('entradas.anular', ':id') }}";
-            url = url.replace(':id', id);
+            let url = "{{ route('entradas.anular', '__ID__') }}".replace('__ID__', id);
 
             Swal.fire({
                 title: '¿Anular esta entrada?',
@@ -116,7 +173,6 @@
                 reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Seteamos la URL dinámica al formulario y lo enviamos
                     $('#form-anular').attr('action', url);
                     $('#form-anular').submit();
                 }

@@ -86,14 +86,11 @@
           <div class="tile-body">
             <div class="row align-items-end">
               <div class="col-md-7">
-                <div class="form-group mb-md-0">
+                <div class="form-group mb-md-0 position-relative">
                   <label><b>Buscar Insumo / Repuesto</b></label>
-                  <select id="select_insumo" class="form-control select2">
-                    <option value="">Seleccione un repuesto...</option>
-                    @foreach($insumos as $insumo)
-                      <option value="{{ $insumo->id }}">{{ $insumo->serial }} | {{ $insumo->producto }} | {{ $insumo->descripcion }}</option>
-                    @endforeach
-                  </select>
+                  <input type="text" id="buscador" class="form-control" placeholder="Escribe el serial o nombre del insumo..." autocomplete="off">
+                  <input type="hidden" id="select_insumo_id" value="">
+                  <div id="resultados-busqueda" class="list-group position-absolute w-100 shadow" style="z-index: 1000; display:none;"></div>
                 </div>
               </div>
               <div class="col-md-3">
@@ -162,14 +159,15 @@
 <script>
     // Inicializar el contador de filas basado en los detalles existentes
     var items = {{ $despacho->detalles->count() }};
+    let insumosDisponibles = []; // Almacenará los repuestos del depósito origen seleccionado
 
     function agregarProducto() {
-        let insumo_id = $('#select_insumo').val();
-        let insumo_text = $('#select_insumo option:selected').text();
+        let insumo_id = $('#select_insumo_id').val();
+        let insumo_text = $('#buscador').val();
         let cantidad = parseInt($('#input_cantidad').val());
 
-        if (insumo_id == "" || isNaN(cantidad) || cantidad <= 0) {
-            Swal.fire('Atención', 'Seleccione un producto y una cantidad válida mayor a cero.', 'warning');
+        if (insumo_id == "" || insumo_text == "" || isNaN(cantidad) || cantidad <= 0) {
+            Swal.fire('Atención', 'Seleccione un producto válido del buscador y una cantidad pedida mayor a cero.', 'warning');
             return;
         }
 
@@ -204,8 +202,20 @@
         items++; 
         verificarBoton();
         
-        $('#select_insumo').val(null).trigger('change');
+        // Resetear buscador y cantidad
+        $('#buscador').val('');
+        $('#select_insumo_id').val('');
         $('#input_cantidad').val(1);
+    }
+
+    function seleccionarInsumo(id) {
+        let item = insumosDisponibles.find(i => i.id == id);
+        if (!item) return;
+
+        let textoItem = `${item.serial} | ${item.producto} | ${item.descripcion} (Stock Origen: ${item.stock})`;
+        $('#select_insumo_id').val(item.id);
+        $('#buscador').val(textoItem);
+        $('#resultados-busqueda').hide();
     }
 
     function eliminarFila(index) {
@@ -218,9 +228,46 @@
         $('#btn-guardar').prop('disabled', totalFilas === 0);
     }
 
-    $(document).ready(function() {
-        $('.select2').select2({ width: '100%' });
+    $(document).ready(function() {$('.select2').select2({ width: '100%' });
         verificarBoton();
+
+        // Ocultar resultados si se hace clic fuera del buscador
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#buscador, #resultados-busqueda').length) {
+                $('#resultados-busqueda').hide();
+            }
+        });
+
+        // Autocompletado local filtrando los datos del origen seleccionado
+        $('#buscador').on('keyup', function() {
+            let q = $(this).val().toLowerCase();
+            if (q.length < 2) {
+                $('#resultados-busqueda').hide();
+                return;
+            }
+
+            let filtrados = insumosDisponibles.filter(item => 
+                item.serial.toLowerCase().includes(q) || 
+                item.producto.toLowerCase().includes(q) || 
+                item.descripcion.toLowerCase().includes(q)
+            );
+
+            let html = '';
+            if (filtrados.length === 0) {
+                html = '<div class="list-group-item text-muted">No se encontraron repuestos</div>';
+            } else {
+                filtrados.forEach(item => {
+                    html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id}); return false;">
+                                <strong>[${item.serial}]</strong> ${item.producto} - ${item.descripcion} 
+                                <span class="badge badge-success float-right">Stock: ${item.stock}</span>
+                             </a>`;
+                });
+            }
+            $('#resultados-busqueda').html(html).show();
+        });
+
+        // Disparar validación inicial para cargar los repuestos según el local origen precargado
+        $('#id_local_origen').trigger('change');
 
         $('#form-solicitud').on('submit', function(e) {
             e.preventDefault();
@@ -247,6 +294,48 @@
                     form.submit();
                 }
             });
+        });
+
+        // Lógica para gestionar origen/destino y carga dinámica de repuestos del origen
+        $('#id_local_origen').on('change', function() {
+            let origenId = $(this).val();
+            let destinoSelect = $('#id_local_destino');
+            let buscador = $('#buscador');
+            
+            destinoSelect.find('option').prop('disabled', false);
+            
+            if (origenId) {
+                destinoSelect.find(`option[value="${origenId}"]`).prop('disabled', true);
+                if (destinoSelect.val() === origenId) {
+                    destinoSelect.val(null).trigger('change');
+                }
+
+                $.ajax({
+                    url: `/despacho/insumos-por-local/${origenId}`,
+                    type: 'GET',
+                    dataType: 'json',
+                    beforeSend: function() {
+                        buscador.prop('disabled', true).val('Cargando repuestos disponibles...');
+                        insumosDisponibles = [];
+                    },
+                    success: function(data) {
+                        insumosDisponibles = data;
+                        if (data.length === 0) {
+                            buscador.val('No hay repuestos disponibles en este depósito origen');
+                        } else {
+                            buscador.prop('disabled', false).val('').attr('placeholder', 'Escribe el serial o nombre del insumo...');
+                        }
+                    },
+                    error: function() {
+                        buscador.val('Error al cargar los repuestos');
+                    }
+                });
+            } else {
+                buscador.prop('disabled', true).val('Seleccione un depósito origen primero...');
+                insumosDisponibles = [];
+            }
+            
+            destinoSelect.select2({ width: '100%' });
         });
     });
 </script>

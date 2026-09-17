@@ -229,9 +229,11 @@ Route::middleware(['auth'])->group(function () {
     // --- ENTRADAS ---
     Route::prefix('entradas')->group(function () {
         Route::get('/', [EntradaController::class, 'index'])->name('entradas.index');
+        Route::get('/data', [EntradaController::class, 'getEntradasData'])->name('entradas.data');
         Route::get('/crear', [EntradaController::class, 'create'])->name('entradas.create');
         Route::post('/guardar', [EntradaController::class, 'store'])->name('entradas.store');
-        
+        Route::get('/recepcion/data', [EntradaController::class, 'getDataRecepciones'])->name('entradas.recepcion.data');
+
         // Nueva ruta para la bandeja de pendientes de recepción (Almacén X10)
         Route::get('/recepcion/pendientes', [EntradaController::class, 'pendientesRecepcion'])->name('entradas.recepcion');
         // Nueva ruta para procesar/aprobar un ítem o lote de recepción

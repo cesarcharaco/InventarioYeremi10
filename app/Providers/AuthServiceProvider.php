@@ -283,6 +283,10 @@ class AuthServiceProvider extends ServiceProvider
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
     });
 
+    Gate::define('anular-entrada', function (User $user) {
+        return in_array($user->role, [User::ROLE_SUPERADMIN]); // O los roles que decidas
+    });
+
     Gate::define('emitir-nota-entrega', function (User $user) {
         return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
     });

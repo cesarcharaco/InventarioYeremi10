@@ -510,44 +510,4 @@ class InsumosImport implements ToModel, WithHeadingRow
 
 
 
-
-3. El Flujo Correcto Recomendado (Alineado con las Buenas Prácticas de tu Sistema)
-Para mantener la consistencia que ya tienes estructurada en tu DespachoController, el ciclo de vida del inventario debe dividirse estrictamente en tres etapas independientes:
-
-Etapa 1: Solicitud (Pendiente)
-
-Acción: Se registra el pedido.
-
-Impacto en Stock: Ninguno. (Solo es una intención de compra/traslado).
-
-UX: Redirección a la vista de impresión / comprobante + botón para ir al índice.
-
-Etapa 2: Despacho / Salida de Almacén (En Tránsito)
-
-Acción: El personal va al almacén, busca los repuestos (pudiendo ajustar cantidades si hay faltantes en anaquel, tal como lo contempla tu método procesarEnvioPendiente) y confirma el envío.
-
-Impacto en Stock: Descuento inmediato en el depósito de origen y cambio de estado a En Tránsito. (Esto protege tu inventario central para que no se vuelva a ofrecer esa mercancía).
-
-Etapa 3: Recepción en Sucursal (Recibido / Con Incidencias)
-
-Acción: La mercancía llega a la sucursal destino. El receptor verifica físicamente, ajusta si hubo mermas/golpes y procesa la recepción.
-
-Impacto en Stock: Aumento del stock en el local de destino (tal como lo hace tu función gestionarStockDestino), cerrando el ciclo.
-
-Conclusión
-Mantén tu idea de llevar al usuario a una vista previa con opción de impresión inmediatamente después de registrar la solicitud. Sin embargo, no postergues el descuento del stock hasta la recepción. El stock del origen debe descontarse obligatoriamente al confirmar el despacho físico desde el almacén, de lo contrario abrirás una brecha de inventarios desincronizados entre sucursales.
-
-2. Lo que falta (Aspectos Críticos, Riesgos y Mejoras Pendientes)
-A pesar de estar muy bien estructurado, el controlador actual presenta algunos vacíos lógicos y operativos que deberías atender para asegurar el 100% de la fiabilidad del sistema:
-
-Reversión de Stock en Despachos Cancelados o Rechazados:
-
-El problema: En el método confirmarRecepcion, si el estado recibido es 'Cancelado' (rechazado por completo), el sistema evita sumar el stock en destino (lo cual es correcto), pero olvida devolver el stock al depósito de origen. Como el stock ya se había descontado al crear el despacho, esos productos quedarían "desaparecidos" o en un limbo contable. Falta implementar una devolución automática al origen si un despacho es cancelado en destino.
-
-Ruta o Vista Directa para la Impresión del Comprobante:
-
-Como se comentó en el análisis de UX anterior, el controlador redirige al index tras guardar un despacho exitoso. Le falta un mecanismo (o redirección a una vista de impresión/PDF del comprobante recién creado) para que el almacenista pueda sacar el reporte físico en papel sin tener que buscarlo manualmente en el historial.
-
-Trazabilidad de Ajustes en Solicitudes Parciales:
-
-Cuando un almacenista procesa un pedido pendiente mediante procesarEnvioPendiente, puede modificar las cantidades a enviar. Aunque el sistema actualiza el detalle, no deja un registro o nota histórica automática en la observación indicando que el pedido fue surtido parcialmente por falta de stock en origen, lo que podría generar confusiones futuras con la sucursal que solicitó el producto.
+1. Fallas Lógicas e Inconsistencias DetectadasA. Inconsistencia de UI en el botón "Anular" (entradas.index)El problema: En la vista blade, validas @if(auth()->user()->esAdmin()) para mostrar el botón de anular (papelera/prohibido). Sin embargo, en el backend (destroy), exiges rigurosamente que $entrada->estado === 'PENDIENTE'.   Consecuencia: Un administrador puede ver el botón de anular en una entrada que ya fue APROBADA, hacer clic, pasar el filtro de SweetAlert, enviar la petición HTTP y encontrarse con un error rojo en pantalla ("No se puede eliminar una entrada que ya ha sido procesada...").Solución: El botón de anular en la tabla solo debe mostrarse si el estado de la entrada es PENDIENTE.B. Método fantasma en el modelo User (esAdmin())El problema: En la vista usas @if(auth()->user()->esAdmin()). En el resto del sistema que hemos visto (por ejemplo en InsumosController), los roles se evalúan consultando la propiedad directa del rol o mediante Gates ($user->role === 'admin' o Gate::authorize). Si el método esAdmin() no está declarado explícitamente en tu modelo User, esa directiva Blade arrojará un error de método no encontrado (BadMethodCallException).   C. Riesgo de concurrencia y recálculo en procesarRecepcion()El problema: Cuando un almacenista procesa una recepción por primera vez, creas un registro en el histórico. Si la procesa una segunda vez (por una corrección), el sistema busca el histórico previo, revierte el costo maestro al anterior y vuelve a aplicar el nuevo. Si se realizan múltiples modificaciones parciales concurrentes sin un bloqueo de tabla estricto (DB::transaction lo mitiga parcialmente, pero la lógica de negocio es frágil), el rastreo de costos (costo_anterior) puede corromperse si el histórico se borra o se sobreescribe mal en flujos de re-reversión.   
