@@ -106,20 +106,31 @@ Route::middleware(['auth'])->group(function () {
 
     // Grupo de rutas para Despachos
     Route::group(['prefix' => 'despacho'], function () {
-        // 1. Rutas principales estáticas (siempre arriba)
+        // --- RUTAS DE Vistas y Acciones Generales ---
         Route::get('/', [DespachoController::class, 'index'])->name('despacho.index');
         Route::get('/create', [DespachoController::class, 'create'])->name('despacho.create');
         Route::post('/store', [DespachoController::class, 'store'])->name('despacho.store');
+        Route::get('/data', [DespachoController::class, 'getDespachosData'])->name('despacho.data');
 
-        // 2. Rutas específicas con sub-parámetros (antes del show /{id})
-        Route::get('/{id}/json', [DespachoController::class, 'getJson'])->name('despacho.json'); // <--- NUEVA: Para poblar el modal
-        Route::get('/{id}/edit', [DespachoController::class, 'edit'])->name('despacho.edit');
+        // --- RUTAS PARA SOLICITUDES (ESTADO PENDIENTE) ---
+        Route::get('/solicitud/crear', [DespachoController::class, 'createSolicitud'])->name('despacho.solicitud.create');
+        Route::post('/solicitud/guardar', [DespachoController::class, 'storeSolicitud'])->name('despacho.solicitud.store');
+        Route::get('/{id}/print', [DespachoController::class, 'printComprobante'])->name('despacho.print');
+        // ➔ Nuevas rutas para Editar y Actualizar Solicitudes Pendientes
+        Route::get('/solicitud/{id}/edit', [DespachoController::class, 'editSolicitud'])->name('despacho.solicitud.edit');
+        Route::put('/solicitud/{id}', [DespachoController::class, 'updateSolicitud'])->name('despacho.solicitud.update');
+        Route::delete('/solicitud/{id}', [DespachoController::class, 'destroySolicitud'])->name('despacho.solicitud.destroy');
+        Route::get('/insumos-por-local/{idLocal}', [DespachoController::class, 'getInsumosPorLocal'])->name('despacho.insumosPorLocal');
+        // --- ACCIÓN DE PROCESAR ENVÍO ---
+        Route::post('/{id}/procesar-envio', [DespachoController::class, 'procesarEnvioPendiente'])->name('despacho.procesarEnvio');
 
-        // 3. Ruta genérica de visualización (después de las específicas)
+        // --- RUTAS ESPECÍFICAS Y GENÉRICAS CON ID ---
+        Route::get('/{id}/json', [DespachoController::class, 'getJson'])->name('despacho.json');
+        Route::get('/{id}/edit', [DespachoController::class, 'edit'])->name('despacho.edit'); // Despachos En Tránsito
+        Route::put('/{id}', [DespachoController::class, 'update'])->name('despacho.update'); 
         Route::get('/{id}', [DespachoController::class, 'show'])->name('despacho.show');
         
-        // 4. Acciones por POST / DELETE
-        Route::post('/confirmar/{id}', [DespachoController::class, 'confirmarRecepcion'])->name('despacho.confirmar'); // <--- Esta ya la tenías
+        Route::post('/confirmar/{id}', [DespachoController::class, 'confirmarRecepcion'])->name('despacho.confirmar');
         Route::post('/anular/{id}', [DespachoController::class, 'anular'])->name('despacho.anular');
         Route::delete('/{id}', [DespachoController::class, 'destroy'])->name('despacho.destroy');
     });

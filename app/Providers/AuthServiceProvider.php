@@ -90,7 +90,22 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('seleccionar-cualquier-origen', function (User $user) {
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
+        // --- MÓDULO DE SOLICITUDES DE DESPACHO (ESTADO PENDIENTE) ---
 
+        // Quién puede crear una solicitud de pedido
+        Gate::define('crear-solicitud', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+        });
+
+        // Quién puede editar una solicitud (mientras esté pendiente)
+        Gate::define('editar-solicitud', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+        });
+
+        // Quién puede procesar/despachar una solicitud pendiente (convertirla a En Tránsito)
+        Gate::define('procesar-solicitud', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA, User::ROLE_ENCARGADO]);
+        });
         //Registro de incidencias todos
         Gate::define('registrar-incidencia', function (User $user) {
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA, User::ROLE_VENDEDOR]);

@@ -1,15 +1,15 @@
 @extends('layouts.app')
 
-@section('title') Nuevo Despacho @endsection
+@section('title') Nueva Solicitud de Pedido @endsection
 
 @section('content')
 <main class="app-content">
-  {{-- VERIFICACIÓN DE PERMISO PARA CREAR --}}
-  @cannot('crear-despacho')
+  {{-- VERIFICACIÓN DE PERMISO PARA CREAR SOLICITUD --}}
+  @cannot('crear-solicitud')
     <div class="tile text-center shadow-sm py-5">
         <h1 class="text-danger mb-3"><i class="fa fa-lock fa-2x"></i></h1>
         <h3 class="text-danger">Acceso Restringido</h3>
-        <p class="text-muted">No tienes permisos para registrar salidas de mercancía en el sistema.</p>
+        <p class="text-muted">No tienes permisos para generar solicitudes de pedido en el sistema.</p>
         <a href="{{ route('despacho.index') }}" class="btn btn-primary mt-2">
             <i class="fa fa-arrow-left"></i> Volver al listado
         </a>
@@ -17,15 +17,16 @@
   @else
   <div class="app-title">
     <div>
-      <h1><i class="fa fa-truck"></i> Gestión de Despachos</h1>
-      <p>Salida de Mercancía | Yermotos Repuestos C.A.</p>
+      <h1><i class="fa fa-file-text-o"></i> Gestión de Solicitudes</h1>
+      <p>Solicitud de Reabastecimiento de Mercancía | Yermotos Repuestos C.A.</p>
     </div>
     <ul class="app-breadcrumb breadcrumb">
       <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="fa fa-home fa-lg"></i></a></li>
-      <li class="breadcrumb-item"><a href="{{ route('despacho.index') }}">Despachos</a></li>
-      <li class="breadcrumb-item active">Nuevo</li>
+      <li class="breadcrumb-item"><a href="{{ route('despacho.index') }}">Logística</a></li>
+      <li class="breadcrumb-item active">Nueva Solicitud</li>
     </ul>
   </div>
+
   @if(session('danger') || session('error'))
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             {{ session('danger') ?? session('error') }}
@@ -34,69 +35,59 @@
             </button>
         </div>
     @endif
-  <form action="{{ route('despacho.store') }}" method="POST" id="form-despacho">
+
+  <form action="{{ route('despacho.solicitud.store') }}" method="POST" id="form-solicitud">
     @csrf
     <div class="row">
-      {{-- PANEL IZQUIERDO: DATOS DE CABECERA --}}
+      {{-- PANEL IZQUIERDO: DATOS DE CABECERA DE LA SOLICITUD --}}
       <div class="col-md-4">
         <div class="tile shadow-sm">
-          <h3 class="tile-title"><i class="fa fa-info-circle text-primary"></i> Datos del Envío</h3>
+          <h3 class="tile-title"><i class="fa fa-info-circle text-primary"></i> Datos de la Solicitud</h3>
           <div class="tile-body">
             <div class="form-group">
-              <label><b>Código de Despacho</b></label>
+              <label><b>Código de Solicitud</b></label>
               <input class="form-control bg-light font-weight-bold text-primary" type="text" name="codigo" value="{{ $codigo }}" readonly>
             </div>
 
             <div class="form-group">
-              <label><b>Origen (Donde sale)</b> <b class="text-danger">*</b></label>
-              @can('seleccionar-cualquier-origen')
-                <select name="id_local_origen" id="id_local_origen" class="form-control select2" required>
-                    <option value="">Seleccione origen...</option>
-                    @foreach($localesOrigen as $local)
-                        <option value="{{ $local->id }}">{{ $local->nombre }} ({{ $local->tipo }})</option>
-                    @endforeach
-                </select>
-              @else
-                @php $miLocal = auth()->user()->localActual(); @endphp
-                <select class="form-control" disabled>
-                    <option value="{{ $miLocal->id ?? '' }}">{{ $miLocal->nombre ?? 'Sin Local Asignado' }}</option>
-                </select>
-                <input type="hidden" name="id_local_origen" id="id_local_origen" value="{{ $miLocal->id ?? '' }}">
-              @endcan
-            </div>
-
-            <div class="form-group">
-              <label><b>Destino (A donde va)</b> <b class="text-danger">*</b></label>
-              <select name="id_local_destino" id="id_local_destino" class="form-control select2" required>
-                <option value="">Seleccione destino...</option>
-                @foreach($localesDestino as $local)
-                  <option value="{{ $local->id }}">{{ $local->nombre }}</option>
-                @endforeach
+              <label><b>Origen (Depósito / Almacén que surte)</b> <b class="text-danger">*</b></label>
+              <select name="id_local_origen" id="id_local_origen" class="form-control select2" required>
+                  <option value="">Seleccione depósito origen...</option>
+                  @foreach($localesOrigen as $local)
+                      <option value="{{ $local->id }}">{{ $local->nombre }} ({{ $local->tipo }})</option>
+                  @endforeach
               </select>
             </div>
 
             <div class="form-group">
-              <label><b>Transportado por:</b> <b class="text-danger">*</b></label>
-              <input class="form-control" type="text" name="transportado_por" placeholder="Nombre del chofer" required>
+              <label><b>Destino (Tu Local / Sucursal que recibe)</b> <b class="text-danger">*</b></label>
+              @if(auth()->user()->role === \App\Models\User::ROLE_ENCARGADO)
+                <select class="form-control" disabled>
+                    <option value="{{ $localesDestino->id ?? '' }}">{{ $localesDestino->nombre ?? 'Sin Local Asignado' }}</option>
+                </select>
+                <input type="hidden" name="id_local_destino" id="id_local_destino" value="{{ $localesDestino->id ?? '' }}">
+              @else
+                <select name="id_local_destino" id="id_local_destino" class="form-control select2" required>
+                    <option value="">Seleccione local destino...</option>
+                    @foreach($localesDestino as $local)
+                      <option value="{{ $local->id }}">{{ $local->nombre }}</option>
+                    @endforeach
+                </select>
+              @endif
             </div>
 
             <div class="form-group">
-              <label><b>Vehículo / Placa</b></label>
-              <input class="form-control" type="text" name="vehiculo_placa" placeholder="Ej: Toyota Blanca - AB123">
-            </div>
-
-            <div class="form-group">
-              <label><b>Observaciones</b></label>
-              <textarea class="form-control" name="observacion" rows="2" placeholder="Notas adicionales del envío..."></textarea>
+              <label><b>Observaciones / Justificación</b></label>
+              <textarea class="form-control" name="observacion" rows="3" placeholder="Motivo de la solicitud, urgencia, notas..."></textarea>
             </div>
           </div>
         </div>
       </div>
 
-      {{-- PANEL DERECHO: SELECCIÓN DE PRODUCTOS --}}
+      {{-- PANEL DERECHO: SELECCIÓN DE INSUMOS A SOLICITAR --}}
       <div class="col-md-8">
         <div class="tile shadow-sm">
-          <h3 class="tile-title"><i class="fa fa-cogs text-primary"></i> Cargar Repuestos</h3>
+          <h3 class="tile-title"><i class="fa fa-cogs text-primary"></i> Repuestos Solicitados</h3>
           <div class="tile-body">
             <div class="row align-items-end">
               <div class="col-md-7">
@@ -112,7 +103,7 @@
               </div>
               <div class="col-md-3">
                 <div class="form-group mb-md-0">
-                  <label><b>Cantidad</b></label>
+                  <label><b>Cantidad Pedida</b></label>
                   <input type="number" id="input_cantidad" class="form-control" min="1" value="1">
                 </div>
               </div>
@@ -128,7 +119,7 @@
                 <thead class="table-light">
                   <tr>
                     <th>Repuesto / Insumo</th>
-                    <th width="120px" class="text-center">Cant.</th>
+                    <th width="120px" class="text-center">Cant. Pedida</th>
                     <th width="60px" class="text-center"><i class="fa fa-trash"></i></th>
                   </tr>
                 </thead>
@@ -140,8 +131,8 @@
           </div>
           
           <div class="tile-footer bg-white border-top">
-            <button class="btn btn-primary" type="submit" id="btn-guardar" disabled>
-              <i class="fa fa-check-circle"></i> Procesar Despacho
+            <button class="btn btn-warning text-dark font-weight-bold" type="submit" id="btn-guardar" disabled>
+              <i class="fa fa-file-text-o"></i> Enviar Solicitud de Pedido
             </button>
             <a class="btn btn-secondary ml-2" href="{{ route('despacho.index') }}">
                 <i class="fa fa-times-circle"></i> Cancelar
@@ -221,25 +212,25 @@
         // Disparar validación inicial por si hay un local precargado
         $('#id_local_origen').trigger('change');
 
-        $('#form-despacho').on('submit', function(e) {
+        $('#form-solicitud').on('submit', function(e) {
             e.preventDefault();
             let form = this;
 
             Swal.fire({
-                title: '¿Procesar Despacho?',
-                text: "Se generará la salida oficial de mercancía y se actualizará el inventario.",
+                title: '¿Enviar Solicitud de Pedido?',
+                text: "Se registrará la solicitud en estado Pendiente. El almacén de origen será notificado y el inventario no se afectará aún.",
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonColor: '#009688',
+                confirmButtonColor: '#f0ad4e',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fa fa-check"></i> Sí, procesar',
+                confirmButtonText: '<i class="fa fa-check"></i> Sí, enviar solicitud',
                 cancelButtonText: 'Cancelar',
                 reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
                     Swal.fire({
-                        title: 'Generando Despacho...',
-                        text: 'Registrando inventario y notificando sucursal de destino.',
+                        title: 'Registrando Solicitud...',
+                        text: 'Enviando notificación al almacén.',
                         allowOutsideClick: false,
                         didOpen: () => { Swal.showLoading() }
                     });

@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('id_local_destino')->constrained('local');
             
             // Datos de logística de salida
-            $table->string('transportado_por');
+            $table->string('transportado_por')->nullable();
             $table->string('vehiculo_placa')->nullable();
             $table->text('observacion')->nullable(); // Nota de salida (Admin)
             
@@ -33,7 +33,8 @@ return new class extends Migration
             ])->default('En Tránsito');
             
             // Tiempos
-            $table->timestamp('fecha_despacho')->useCurrent();
+            $table->timestamp('fecha_solicitud')->useCurrent(); // Fecha de creación de la solicitud
+            $table->timestamp('fecha_despacho')->nullable();     // Nace nulo hasta que se despacha físicamente
             $table->timestamp('fecha_recepcion')->nullable(); 
             
             $table->timestamps();

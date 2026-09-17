@@ -496,3 +496,58 @@ class InsumosImport implements ToModel, WithHeadingRow
     </div>
 </main>
 @endsection
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3. El Flujo Correcto Recomendado (Alineado con las Buenas Prácticas de tu Sistema)
+Para mantener la consistencia que ya tienes estructurada en tu DespachoController, el ciclo de vida del inventario debe dividirse estrictamente en tres etapas independientes:
+
+Etapa 1: Solicitud (Pendiente)
+
+Acción: Se registra el pedido.
+
+Impacto en Stock: Ninguno. (Solo es una intención de compra/traslado).
+
+UX: Redirección a la vista de impresión / comprobante + botón para ir al índice.
+
+Etapa 2: Despacho / Salida de Almacén (En Tránsito)
+
+Acción: El personal va al almacén, busca los repuestos (pudiendo ajustar cantidades si hay faltantes en anaquel, tal como lo contempla tu método procesarEnvioPendiente) y confirma el envío.
+
+Impacto en Stock: Descuento inmediato en el depósito de origen y cambio de estado a En Tránsito. (Esto protege tu inventario central para que no se vuelva a ofrecer esa mercancía).
+
+Etapa 3: Recepción en Sucursal (Recibido / Con Incidencias)
+
+Acción: La mercancía llega a la sucursal destino. El receptor verifica físicamente, ajusta si hubo mermas/golpes y procesa la recepción.
+
+Impacto en Stock: Aumento del stock en el local de destino (tal como lo hace tu función gestionarStockDestino), cerrando el ciclo.
+
+Conclusión
+Mantén tu idea de llevar al usuario a una vista previa con opción de impresión inmediatamente después de registrar la solicitud. Sin embargo, no postergues el descuento del stock hasta la recepción. El stock del origen debe descontarse obligatoriamente al confirmar el despacho físico desde el almacén, de lo contrario abrirás una brecha de inventarios desincronizados entre sucursales.
+
+2. Lo que falta (Aspectos Críticos, Riesgos y Mejoras Pendientes)
+A pesar de estar muy bien estructurado, el controlador actual presenta algunos vacíos lógicos y operativos que deberías atender para asegurar el 100% de la fiabilidad del sistema:
+
+Reversión de Stock en Despachos Cancelados o Rechazados:
+
+El problema: En el método confirmarRecepcion, si el estado recibido es 'Cancelado' (rechazado por completo), el sistema evita sumar el stock en destino (lo cual es correcto), pero olvida devolver el stock al depósito de origen. Como el stock ya se había descontado al crear el despacho, esos productos quedarían "desaparecidos" o en un limbo contable. Falta implementar una devolución automática al origen si un despacho es cancelado en destino.
+
+Ruta o Vista Directa para la Impresión del Comprobante:
+
+Como se comentó en el análisis de UX anterior, el controlador redirige al index tras guardar un despacho exitoso. Le falta un mecanismo (o redirección a una vista de impresión/PDF del comprobante recién creado) para que el almacenista pueda sacar el reporte físico en papel sin tener que buscarlo manualmente en el historial.
+
+Trazabilidad de Ajustes en Solicitudes Parciales:
+
+Cuando un almacenista procesa un pedido pendiente mediante procesarEnvioPendiente, puede modificar las cantidades a enviar. Aunque el sistema actualiza el detalle, no deja un registro o nota histórica automática en la observación indicando que el pedido fue surtido parcialmente por falta de stock en origen, lo que podría generar confusiones futuras con la sucursal que solicitó el producto.

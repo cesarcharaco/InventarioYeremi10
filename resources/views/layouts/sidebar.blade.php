@@ -143,29 +143,48 @@
                 </li>
                 @endcan
 
-                {{-- LOGÍSTICA --}}
-                @can('ver-logistica')
-                <li class="nav-item has-treeview {{ Request::is('despacho*') ? 'menu-open' : '' }}">
-                    <a href="#" class="nav-link {{ Request::is('despacho*') ? 'active' : '' }}">
-                        <i class="nav-icon fas fa-truck"></i>
-                        <p>Logística <i class="right fas fa-angle-left"></i></p>
-                    </a>
-                    <ul class="nav nav-treeview">
-                        <li class="nav-item">
-                            <a href="{{ route('despacho.create') }}" class="nav-link {{ Request::is('despacho/create') ? 'active' : '' }}">
-                                <i class="fas fa-plus-circle nav-icon text-primary"></i>
-                                <p>Nuevo Despacho</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('despacho.index') }}" class="nav-link {{ Request::is('despacho') ? 'active' : '' }}">
-                                <i class="fas fa-history nav-icon"></i>
-                                <p>Historial</p>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-                @endcan
+               {{-- LOGÍSTICA --}}
+               @can('ver-logistica')
+               <li class="nav-item has-treeview {{ Request::is('despacho*') ? 'menu-open' : '' }}">
+                   <a href="#" class="nav-link {{ Request::is('despacho*') ? 'active' : '' }}">
+                       <i class="nav-icon fas fa-truck"></i>
+                       <p>
+                           Logística 
+                           <i class="right fas fa-angle-left"></i>
+                       </p>
+                   </a>
+                   <ul class="nav nav-treeview">
+                       
+                       {{-- Opción exclusiva para el Encargado / Quien solicita pedidos --}}
+                       @can('crear-solicitud')
+                       <li class="nav-item">
+                           <a href="{{ route('despacho.solicitud.create') }}" class="nav-link {{ Request::is('despacho/solicitud*') ? 'active' : '' }}">
+                               <i class="fas fa-file-alt nav-icon text-warning"></i>
+                               <p>Solicitar Pedido</p>
+                           </a>
+                       </li>
+                       @endcan
+
+                       {{-- Opción para Despachos Directos (Almacén Central / Admin) --}}
+                       @can('crear-despacho')
+                       <li class="nav-item">
+                           <a href="{{ route('despacho.create') }}" class="nav-link {{ Request::is('despacho/create') ? 'active' : '' }}">
+                               <i class="fas fa-plus-circle nav-icon text-primary"></i>
+                               <p>Nuevo Despacho Directo</p>
+                           </a>
+                       </li>
+                       @endcan
+
+                       {{-- Historial General de Envíos y Solicitudes Pendientes --}}
+                       <li class="nav-item">
+                           <a href="{{ route('despacho.index') }}" class="nav-link {{ Request::is('despacho') ? 'active' : '' }}">
+                               <i class="fas fa-history nav-icon"></i>
+                               <p>Historial y Solicitudes</p>
+                           </a>
+                       </li>
+                   </ul>
+               </li>
+               @endcan
 
                 {{-- MÓDULO CLIENTES --}}
                 @can('gestionar-clientes')
