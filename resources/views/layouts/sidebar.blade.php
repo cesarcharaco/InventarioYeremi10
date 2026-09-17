@@ -55,7 +55,7 @@
                             </a>
                         </li>
                         {{-- Solo perfiles autorizados para ver costos --}}
-                        @can('ver-costos')
+                        @can('gestion-costos')
                         <li class="nav-item">
                             <a href="{{ route('insumos.precios') }}" class="nav-link {{ Request::is('*precios*') ? 'active' : '' }}">
                                 <i class="far fa-circle nav-icon"></i>

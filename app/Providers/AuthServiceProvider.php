@@ -28,7 +28,7 @@ class AuthServiceProvider extends ServiceProvider
         
         // Gestión de Proveedores: Solo Admin y Encargado
         Gate::define('gestionar-proveedores', function (User $user) {
-            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_ALMACENISTA]);
+            return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ALMACENISTA]);
         });
 
         // Gestión de Compras
@@ -39,6 +39,11 @@ class AuthServiceProvider extends ServiceProvider
         // Ver Precios de Costo: Solo Admin y Encargado
         Gate::define('ver-costos', function (User $user) {
             return in_array($user->role, [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO]);
+        });
+
+        // Ver Precios de Costo: Solo Admin y Encargado
+        Gate::define('gestion-costos', function (User $user) {
+            return in_array($user->role, [User::ROLE_SUPERADMIN]);
         });
 
         // Editar Precios de Costo: Solo Admin y Encargado
