@@ -166,36 +166,21 @@ class CreditoController extends Controller
             'fecha_abono'     => 'required|date'
         ]);
 
-        // OBTENER LA TASA DE CAMBIO
-        $tasa_bcv = bcv_rate('USD');
-
-        // Seguridad: Evitar división por cero si la función falla o devuelve 0
-        if (!$tasa_bcv || $tasa_bcv <= 0) {
-            return back()->with('error', 'No se pudo obtener la tasa del BCV. Verifique el sistema de tasas e intente nuevamente.');
-        }
-
         $pagoUsdEfectivo = (float)($request->pago_usd_efectivo ?? 0);
         $pagoBsEfectivo  = (float)($request->pago_bs_efectivo ?? 0);
         $pagoPuntoBs     = (float)($request->pago_punto_bs ?? 0);
         $pagoPagomovilBs = (float)($request->pago_pagomovil_bs ?? 0);
 
-        // 2. Conversión de Bolívares a Dólares
-        $totalPagosBs = $pagoBsEfectivo + $pagoPuntoBs + $pagoPagomovilBs;
-        $totalBsConvertidoAUsd = $totalPagosBs / $tasa_bcv;
+        $totalDesglose = $pagoUsdEfectivo + $pagoBsEfectivo + $pagoPuntoBs + $pagoPagomovilBs;
 
-        // 3. Sumatoria unificada en USD
-        $totalDesgloseUsd = $pagoUsdEfectivo + $totalBsConvertidoAUsd;
-
-        if ($totalDesgloseUsd <= 0) {
+        if ($totalDesglose <= 0) {
             return back()->with('error', 'Debe registrar al menos un valor en el desglose.');
         }
-        
-        // FIX: Tolerancia de 0.05 USD (5 centavos) para absorber diferencias matemáticas de redondeo en BS
-        if (abs($totalDesgloseUsd - (float) $request->monto_total_usd) > 0.05) {
-            return back()->with(
-                'error', 
-                'El desglose de pagos ($' . number_format($totalDesgloseUsd, 2) . ' equivalentes) no coincide con el monto total del abono ($' . number_format($request->monto_total_usd, 2) . ').'
-            );
+
+        // FIX: el desglose debe cuadrar con el monto que se amortiza; si no,
+        // caja y cartera quedan descuadradas
+        if (abs($totalDesglose - (float) $request->monto_total_usd) > 0.01) {
+            return back()->with('error', 'El desglose de pagos ($' . number_format($totalDesglose, 2) . ') no coincide con el monto total del abono ($' . number_format($request->monto_total_usd, 2) . ').');
         }
 
         try {
@@ -824,7 +809,7 @@ class CreditoController extends Controller
     {
         $cliente = Cliente::findOrFail($cliente_id);
 
-        // Créditos ordenados cronológicamente de más antiguo a más reciente (Solo pendientes y anticipos)
+        // Créditos ordenados cronológicamente de más antiguo a más reciente
         $creditos = Credito::where('id_cliente', $cliente_id)
             ->whereIn('estado', ['pendiente', 'anticipo'])
             ->with([
@@ -838,20 +823,21 @@ class CreditoController extends Controller
                       ->orderBy('abonos_credito.created_at', 'asc'); // Ordenar abonos por fecha
                 }
             ])
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'asc') // Ordenar créditos principales por fecha
             ->get();
 
         $creditosIds = $creditos->pluck('id');
 
         $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
             ->where('estado', 'aplicado')
-            ->orderBy('aplicado_en', 'asc')
+            ->orderBy('aplicado_en', 'asc') // Asegurar orden en el historial global si se usa
             ->get();
+
 
         $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
         $totalIntereses = $historialIntereses->sum('monto_interes');
 
-        // Sumatoria exacta desde la tabla pivote abono_detalles
+        // Sumatoria exacta desde la tabla pivote abono_detalles[cite: 10]
         $totalAbonado = AbonoDetalle::whereIn('id_credito', $creditosIds)
             ->whereHas('abono', function($q) {
                 $q->where('estado', 'Realizado');
@@ -1032,16 +1018,7 @@ class CreditoController extends Controller
                 // FIX: sincronizar el saldo global del cliente (antes quedaba duplicado
                 // y podía gastarse dos veces)
                 if ($cliente && $descuento > 0) {
-                    // 1. Forzamos el casteo a float. Si es null, se convierte automáticamente en 0.0
-                    $saldoActual = (float) $cliente->saldo_a_favor;
-                    
-                    // 2. Calculamos el monto numérico exacto a descontar
-                    $montoADescontar = min($saldoActual, $descuento);
-
-                    // 3. Solo hacemos la consulta a la BD si realmente hay algo que descontar
-                    if ($montoADescontar > 0) {
-                        $cliente->decrement('saldo_a_favor', $montoADescontar);
-                    }
+                    $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $descuento));
                 }
             }
 
@@ -1447,74 +1424,50 @@ class CreditoController extends Controller
 
         $cliente = Cliente::findOrFail($id);
 
-        // 1. Abonos realizados en el periodo
-        $abonosPeriodo = AbonoCredito::where('id_cliente', $id)
+        $creditos = Credito::where('id_cliente', $id)
             ->whereBetween('created_at', [$fechaInicio, $fechaFin])
-            ->with(['detalles.credito'])
-            ->get();
-
-        // 2. Intereses / Indexaciones aplicadas estrictamente en el periodo
-        $interesesPeriodo = CreditoInteres::whereHas('credito', function($q) use ($id) {
-                $q->where('id_cliente', $id);
-            })
-            ->whereBetween('aplicado_en', [$fechaInicio, $fechaFin])
-            ->with(['credito'])
-            ->get();
-
-        // 3. Recopilar IDs de créditos activos en el rango
-        $idsCreditosActivos = Credito::where('id_cliente', $id)
-            ->whereBetween('created_at', [$fechaInicio, $fechaFin])
-            ->pluck('id')
-            ->toArray();
-
-        foreach ($abonosPeriodo as $abono) {
-            if ($abono->detalles) {
-                foreach ($abono->detalles as $detalle) {
-                    if ($detalle->id_credito) $idsCreditosActivos[] = $detalle->id_credito;
-                }
-            }
-        }
-
-        foreach ($interesesPeriodo as $interes) {
-            if ($interes->id_credito) $idsCreditosActivos[] = $interes->id_credito;
-        }
-
-        $idsCreditosActivos = array_unique($idsCreditosActivos);
-
-        // 4. Obtener créditos con sus relaciones filtradas por fecha
-        $creditos = Credito::whereIn('id', $idsCreditosActivos)
             ->with([
                 'venta.detalles.insumo',
-                'intereses' => function($q) use ($fechaInicio, $fechaFin) {
-                    $q->whereBetween('aplicado_en', [$fechaInicio, $fechaFin])
-                      ->where('estado', 'aplicado');
-                },
-                'abonos'
+                'intereses.administrador'
             ])
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // 5. Totales precisos para el Resumen
-        $montoTotalCreditos = Credito::where('id_cliente', $id)
+        $abonosPeriodo = AbonoCredito::where('id_cliente', $id)
             ->whereBetween('created_at', [$fechaInicio, $fechaFin])
-            ->sum('monto_inicial');
+            ->with(['usuario', 'caja', 'detalles.credito'])
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-        // IMPORTANTE: Ajusta aquí 'monto_abonado' al nombre real de la columna en tu BD (ej. monto_aplicado)
-        $totalAbonadoPeriodo = $abonosPeriodo->where('estado', 'Realizado')->sum(function($a) {
-            return $a->monto_pagado_usd ?? $a->monto_total_usd ?? 0;
-        });
+        $interesesPeriodo = CreditoInteres::whereHas('credito', function($q) use ($id) {
+                $q->where('id_cliente', $id);
+            })
+            ->whereBetween('aplicado_en', [$fechaInicio, $fechaFin])
+            ->with(['administrador', 'credito'])
+            ->orderBy('aplicado_en', 'desc')
+            ->get();
 
+        $montoTotalCreditos = $creditos->sum('monto_inicial');
+        $totalAbonadoPeriodo = $abonosPeriodo->where('estado', 'Realizado')->sum('monto_total_usd');
         $totalInteresesPeriodo = $interesesPeriodo->where('estado', 'aplicado')->sum('monto_interes');
 
         $empresa = Local::first();
 
         $pdf = Pdf::loadView('creditos.historial_fechas', compact(
-            'cliente', 'creditos', 'abonosPeriodo', 'interesesPeriodo',
-            'fechaInicio', 'fechaFin', 'montoTotalCreditos', 
-            'totalAbonadoPeriodo', 'totalInteresesPeriodo', 'empresa'
+            'cliente', 
+            'creditos', 
+            'abonosPeriodo', 
+            'interesesPeriodo',
+            'fechaInicio', 
+            'fechaFin', 
+            'montoTotalCreditos', 
+            'totalAbonadoPeriodo',
+            'totalInteresesPeriodo',
+            'empresa'
         ));
 
         $pdf->setPaper('a4', 'portrait');
+
         return $pdf->stream('estado_cuenta.pdf');
     }
 }

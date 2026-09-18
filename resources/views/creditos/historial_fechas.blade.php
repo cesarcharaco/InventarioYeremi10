@@ -1,11 +1,16 @@
 @php
+    $totalDebePeriodo = $montoTotalCreditos ?? 0;
+    $totalAbonosPeriodo = $totalAbonadoPeriodo ?? 0;
+    $totalIndexacionesPeriodo = $totalInteresesPeriodo ?? 0;
+    
+    // Fórmula clara: (Créditos + Indexaciones) - Abonos
+    $saldoNetoPeriodo = ($totalDebePeriodo + $totalIndexacionesPeriodo) - $totalAbonosPeriodo;
+
     $resumenPeriodo = [
-        'monto_inicial'   => $montoTotalCreditos ?? 0,
-        'total_intereses' => $totalInteresesPeriodo ?? 0,
-        'total_abonado'   => $totalAbonadoPeriodo ?? 0,
-        'saldo_pendiente' => ($montoTotalCreditos + ($totalInteresesPeriodo ?? 0)) - ($totalAbonadoPeriodo ?? 0),
-        'saldo_a_favor'   => 0,
-        'neto_a_pagar'    => max(0, ($montoTotalCreditos + ($totalInteresesPeriodo ?? 0)) - ($totalAbonadoPeriodo ?? 0))
+        'monto_inicial'   => $totalDebePeriodo,
+        'total_intereses' => $totalIndexacionesPeriodo,
+        'total_abonado'   => $totalAbonosPeriodo,
+        'saldo_pendiente' => max(0, $saldoNetoPeriodo),
     ];
 @endphp
 <!DOCTYPE html>
@@ -261,12 +266,18 @@
             } else {
                 $totalDebeGeneral += $credito->monto_inicial;
                 
-                $abonosValidos = $credito->abonos ? $credito->abonos->where('estado', 'Realizado') : collect();
-                $totalAbonoGeneral += $abonosValidos->sum('monto_pagado_usd');
+                $abonosValidos = $credito->abonos ?? collect();
+                $totalAbonoGeneral += $abonosValidos->sum(function($a) {
+                    // Apunta al campo real de tu modelo AbonoDetalle
+                    $estado = optional($a->abono)->estado ?? $a->estado ?? 'Realizado';
+                    if (strtolower($estado) === 'realizado') {
+                        return $a->monto_aplicado_usd ?? optional($a->pivot)->monto_aplicado_usd ?? $a->monto ?? 0;
+                    }
+                    return 0;
+                });
 
                 $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
-                $montoIntereses = $interesesAplicados->sum('monto_interes');
-                $totalInteresesGeneral += $montoIntereses;
+                $totalInteresesGeneral += $interesesAplicados->sum('monto_interes');
             }
           @endphp
 
@@ -340,42 +351,67 @@
           @endif
 
           @if(!$esAnticipo)
-            {{-- INDEXACIONES --}}
-            @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
-              @foreach($interesesAplicados as $interes)
-                <tr class="bg-interes">
-                  <td class="pl-4" style="font-size: 8.5px;">
-                    <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
-                    <span style="color: #666;">({{ $interes->aplicado_en ? \Carbon\Carbon::parse($interes->aplicado_en)->format('d/m/Y') : '' }})</span>
-                  </td>
-                  <td class="text-right font-bold text-danger">
-                    +${{ number_format($interes->monto_interes, 2) }}
-                  </td>
-                  <td></td>
-                  <td style="color: #666; font-size: 8.5px;">Ajuste de valor aplicado</td>
-                </tr>
-              @endforeach
-            @endif
+           {{-- INDEXACIONES --}}
+           @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
+             @foreach($interesesAplicados as $interes)
+               <tr class="bg-interes">
+                 <td class="pl-4" style="font-size: 8.5px;">
+                   <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
+                   <span style="color: #666;">({{ $interes->aplicado_en ? \Carbon\Carbon::parse($interes->aplicado_en)->format('d/m/Y h:i A') : '' }})</span>
+                 </td>
+                 <td class="text-right font-bold text-danger">
+                   +${{ number_format($interes->monto_interes, 2) }}
+                 </td>
+                 <td></td>
+                 <td style="color: #666; font-size: 8.5px;">
+                   {{ $interes->observacion ?? 'Ajuste de valor por inflación aplicado' }}
+                 </td>
+               </tr>
+             @endforeach
+           @endif
 
-            {{-- ABONOS --}}
-            @if(isset($credito->abonos))
-              @foreach($credito->abonos->where('estado', 'Realizado') as $abono)
-                @php $esReembolso = $abono->monto_pagado_usd < 0; @endphp
+          {{-- ABONOS --}}
+          @php 
+            $abonosList = $credito->abonos ?? collect();
+          @endphp
+          
+          @if($abonosList->isNotEmpty())
+            @foreach($abonosList as $abonoItem)
+              @php 
+                // Columna correcta según tu modelo AbonoDetalle
+                $montoReal = $abonoItem->monto_aplicado_usd 
+                             ?? optional($abonoItem->pivot)->monto_aplicado_usd 
+                             ?? $abonoItem->monto 
+                             ?? 0;
+
+                // El estado vive en la tabla padre (abonos_credito)
+                $estadoAbono = optional($abonoItem->abono)->estado ?? $abonoItem->estado ?? 'Realizado';
+                $esReembolso = $montoReal < 0; 
+
+                // Datos del recibo y fechas desde la relación padre
+                $abonoPadre = $abonoItem->abono ?? $abonoItem;
+                $codigoRecibo = $abonoPadre->codigo_recibo ?? ('ABN-' . ($abonoPadre->id ?? $abonoItem->id));
+                $fechaAbono = $abonoPadre->created_at ?? $abonoItem->created_at;
+                $obsAbono = $abonoPadre->observacion ?? $abonoItem->observacion ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado');
+              @endphp
+
+              @if(strtolower($estadoAbono) === 'realizado')
                 <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
                   <td class="pl-4" style="font-size: 8.5px;">
-                    <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $abono->codigo_recibo ?? 'ABN-' . $abono->id }}
-                    <span style="color: #666;">({{ $abono->created_at->format('d/m/Y h:i A') }})</span>
+                    <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $codigoRecibo }}
+                    <span style="color: #666;">({{ $fechaAbono ? \Carbon\Carbon::parse($fechaAbono)->format('d/m/Y h:i A') : '' }})</span>
                   </td>
                   <td></td>
                   <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
-                    {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_pagado_usd), 2) }}
+                    {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoReal), 2) }}
                   </td>
                   <td style="color: #666; font-size: 8.5px;">
-                    {{ $abono->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
+                    {{ $obsAbono }}
                   </td>
                 </tr>
-              @endforeach
-            @endif
+              @endif
+            @endforeach
+          @endif
 
             <!-- SUBTOTAL PENDIENTE DE ESTE CRÉDITO -->
             <tr class="bg-subtotal">

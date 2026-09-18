@@ -13,10 +13,6 @@
             color: #333333;
             line-height: 1.3;
         }
-        
-        /* ==========================================
-           ESTILOS DE ENCABEZADO FORMAL
-           ========================================== */
         .header-table {
             width: 100%;
             border-collapse: collapse;
@@ -41,7 +37,6 @@
             color: #444; 
             line-height: 1.25; 
         }
-
         .box-header-right { 
             border: 1.5px solid #8b0000; 
             border-radius: 5px; 
@@ -64,8 +59,6 @@
             text-align: left; 
             font-weight: bold; 
         }
-
-        /* Bloques de Información */
         .info-table {
             width: 100%;
             border-collapse: collapse;
@@ -85,8 +78,6 @@
             text-transform: uppercase;
             font-size: 9.5px;
         }
-
-        /* Tabla de Resumen Financiero */
         .resumen-table {
             width: 100%;
             border-collapse: collapse;
@@ -107,8 +98,6 @@
             text-align: right;
             font-weight: bold;
         }
-
-        /* Tabla Unificada de Registros (Estilo Productos) */
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -130,8 +119,6 @@
             border: 1px solid #dee2e6;
             font-size: 9px;
         }
-
-        /* Clases de apoyo y colores PDF */
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .text-success { color: #28a745 !important; }
@@ -141,15 +128,12 @@
         .text-muted { color: #6c757d !important; }
         .font-bold { font-weight: bold; }
         .pl-4 { padding-left: 15px !important; }
-        
-        /* Fondos de filas para PDF */
         .bg-light-gray { background-color: #e9ecef; }
         .bg-anticipo { background-color: #d1ecf1; }
         .bg-abono { background-color: #d4edda; }
         .bg-interes { background-color: #fff3cd; }
         .bg-subtotal { background-color: #f8f9fa; }
         .bg-footer { background-color: #343a40; color: #ffffff; }
-
         .section-heading {
             font-size: 10px;
             font-weight: bold;
@@ -160,8 +144,6 @@
             padding-left: 5px;
             text-transform: uppercase;
         }
-
-        /* Pie de página */
         .footer {
             position: fixed;
             bottom: 0px;
@@ -182,18 +164,18 @@
     <table class="header-table">
         <tr>
             <td style="width: 58%; vertical-align: top;">
-                <h1 class="company-title">YERMOTORS REPUESTOS C.A.</h1>
+                <h1 class="company-title">{{ $empresa->nombre ?? 'YERMOTORS REPUESTOS C.A.' }}</h1>
                 <div class="company-subtitle">Venta de Repuestos y Accesorios</div>
                 <div class="company-info-text">
-                    <strong>RIF:</strong> J-50186803-4<br>
-                    <strong>Dirección:</strong> Calle Páez entre Bolívar y Guzmán Blanco, Casa S/N, Sector Centro, San José de Guaribe, Estado Guárico.<br>
-                    <strong>Teléfono:</strong> 0414-0863107
+                    <strong>RIF:</strong> {{ $empresa->rif ?? 'J-50186803-4' }}<br>
+                    <strong>Dirección:</strong> {{ $empresa->direccion ?? 'San José de Guaribe, Guárico.' }}<br>
+                    <strong>Teléfono:</strong> {{ $empresa->telefono ?? '0414-0863107' }}
                 </div>
             </td>
             
             <td style="width: 42%; vertical-align: top;">
                 <div class="box-header-right">
-                    <h4>ESTADO DE CUENTA</h4>
+                    <h4>ESTADO DE CUENTA ACTUAL</h4>
                     <p><strong>FECHA:</strong> {{ \Carbon\Carbon::now()->format('d / m / Y') }}</p>
                     <p><strong>HORA:</strong> {{ \Carbon\Carbon::now()->format('h:i A') }}</p>
                     <p><strong>GENERADO POR:</strong> {{ auth()->user()->name ?? 'Sistema' }}</p>
@@ -202,7 +184,7 @@
         </tr>
     </table>
 
-    {{-- Datos del Cliente y Emisión[cite: 5] --}}
+    {{-- Datos del Cliente y Emisión --}}
     <table class="info-table">
         <tr>
             <td style="width: 60%; background-color: #f1f3f5; border-radius: 3px;">
@@ -220,7 +202,7 @@
         </tr>
     </table>
 
-    {{-- Resumen Financiero[cite: 5] --}}
+    {{-- Resumen Financiero --}}
     <div class="section-heading">RESUMEN GENERAL</div>
     <table class="resumen-table">
         <tr>
@@ -248,8 +230,8 @@
         @endif
     </table>
 
-    {{-- SECCIÓN UNIFICADA DE REGISTROS (ESTILO PRODUCTOS / DETALLADO) --}}
-    <div class="section-heading">DETALLE DE MOVIMIENTOS Y REGISTROS</div>
+    {{-- SECCIÓN UNIFICADA DE REGISTROS --}}
+    <div class="section-heading">DETALLE DE MOVIMIENTOS Y REGISTROS VIGENTES</div>
     <table class="data-table">
       <thead>
         <tr>
@@ -271,19 +253,20 @@
             @php 
               $esAnticipo = ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0);
               $venta = $credito->venta; 
-              $esCreditoDirecto = (!$venta || $venta->detalles->isEmpty());
+              $esCreditoDirecto = (!$venta || ($venta->detalles && $venta->detalles->isEmpty()));
 
               if ($esAnticipo) {
                   $totalSaldoAFavor += abs($credito->saldo_pendiente);
               } else {
                   $totalDebeGeneral += $credito->monto_inicial;
                   
-                  // Se calculan los abonos válidos a través de la relación maestro-detalle
-                  $abonosValidos = $credito->abonoDetalles ? $credito->abonoDetalles->filter(function($d) {
-                      return $d->abono && $d->abono->estado === 'Realizado';
+                  $abonosValidos = $credito->abonos ? $credito->abonos->filter(function($abono) {
+                      return $abono->estado === 'Realizado';
                   }) : collect();
                   
-                  $totalAbonoGeneral += $abonosValidos->sum('monto_aplicado_usd');
+                  $totalAbonoGeneral += $abonosValidos->sum(function($abono) {
+                      return $abono->pivot->monto_aplicado_usd ?? 0;
+                  });
 
                   $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
                   $montoIntereses = $interesesAplicados->sum('monto_interes');
@@ -297,7 +280,7 @@
               @if($esAnticipo)
                 <strong>SALDO A FAVOR / ANTICIPO ANT-{{ $credito->id }}</strong>
               @else
-                REF: {{ $venta->codigo_factura ?? 'CRD-' . $credito->id }} 
+                REF: {{ optional($venta)->codigo_factura ?? 'CRD-' . $credito->id }} 
               @endif
               <span style="font-weight: normal; color: #555; font-size: 8px;">(FECHA: {{ $credito->created_at->format('d/m/Y h:i A') }})</span>
             </td>
@@ -332,13 +315,13 @@
                 </td>
                 <td style="color: #666; font-size: 8.5px;">A favor / Excedente</td>
               </tr>
-            @elseif(!$esCreditoDirecto)
+            @elseif(!$esCreditoDirecto && $venta && $venta->detalles)
               @foreach($venta->detalles as $detalle)
                 <tr>
                   <td class="pl-4">
-                    • {{ $detalle->insumo->producto ?? 'Producto N/A' }}
-                    @if(!empty($detalle->insumo->serial))
-                      <span style="color: #666; font-size: 8px;">(S/N: {{ $detalle->insumo->serial }})</span>
+                    • {{ optional($detalle->insumo)->producto ?? 'Producto N/A' }}
+                    @if(!empty(optional($detalle->insumo)->serial))
+                      <span style="color: #666; font-size: 8px;">(S/N: {{ optional($detalle->insumo)->serial }})</span>
                     @endif
                     <span style="color: #666; font-size: 8px;">x{{ $detalle->cantidad }}</span>
                   </td>
@@ -362,44 +345,48 @@
 
           @if(!$esAnticipo)
             {{-- INDEXACIONES --}}
-                @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
-                  @foreach($interesesAplicados as $interes)
-                    <tr class="bg-interes">
-                      <td class="pl-4" style="font-size: 8.5px;">
-                        <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje }}%)</strong>
-                        <span style="color: #666;">({{ $interes->aplicado_en ? $interes->aplicado_en->format('d/m/Y') : '' }})</span>
-                      </td>
-                      <td class="text-right font-bold text-danger">
-                        +${{ number_format($interes->monto_interes, 2) }}
-                      </td>
-                      <td></td>
-                      <td style="color: #666; font-size: 8.5px;">Ajuste de valor aplicado</td>
-                    </tr>
-                  @endforeach
-                @endif
+            @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
+              @foreach($interesesAplicados as $interes)
+                <tr class="bg-interes">
+                  <td class="pl-4" style="font-size: 8.5px;">
+                    <strong>INDEXACIÓN POR INFLACIÓN ({{ $interes->porcentaje ?? 0 }}%)</strong>
+                    <span style="color: #666;">({{ $interes->aplicado_en ? \Carbon\Carbon::parse($interes->aplicado_en)->format('d/m/Y') : '' }})</span>
+                  </td>
+                  <td class="text-right font-bold text-danger">
+                    +${{ number_format($interes->monto_interes, 2) }}
+                  </td>
+                  <td></td>
+                  <td style="color: #666; font-size: 8.5px;">{{ $interes->observacion ?? 'Ajuste de valor aplicado' }}</td>
+                </tr>
+              @endforeach
+            @endif
 
-            {{-- ABONOS --}}
-           @if(isset($credito->abonos))
-             @foreach($credito->abonos as $abono)
-               @php 
-                 $montoAplicado = $abono->pivot->monto_aplicado_usd;
-                 $esReembolso = $montoAplicado < 0; 
-               @endphp
-               <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
-                 <td class="pl-4" style="font-size: 8.5px;">
-                   <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> ABN-{{ $abono->id }}
-                   <span style="color: #666;">({{ $abono->created_at->format('d/m/Y h:i A') }})</span>
-                 </td>
-                 <td></td>
-                 <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
-                   {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoAplicado), 2) }}
-                 </td>
-                 <td style="color: #666; font-size: 8.5px;">
-                   {{ $abono->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
-                 </td>
-               </tr>
-             @endforeach
-           @endif
+            {{-- ABONOS (Vía la relación belongsToMany abonos) --}}
+            @if(isset($credito->abonos))
+              @foreach($credito->abonos as $abonoItem)
+                @if($abonoItem->estado === 'Realizado')
+                  @php 
+                    $montoAplicado = $abonoItem->pivot->monto_aplicado_usd ?? 0;
+                    $esReembolso = $montoAplicado < 0; 
+                    $codigoRecibo = $abonoItem->codigo_recibo ?? ('ABN-' . $abonoItem->id);
+                    $fechaAbono = $abonoItem->created_at;
+                  @endphp
+                  <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
+                    <td class="pl-4" style="font-size: 8.5px;">
+                      <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $codigoRecibo }}
+                      <span style="color: #666;">({{ $fechaAbono ? \Carbon\Carbon::parse($fechaAbono)->format('d/m/Y h:i A') : '' }})</span>
+                    </td>
+                    <td></td>
+                    <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
+                      {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoAplicado), 2) }}
+                    </td>
+                    <td style="color: #666; font-size: 8.5px;">
+                      {{ $abonoItem->detalles ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado') }}
+                    </td>
+                  </tr>
+                @endif
+              @endforeach
+            @endif
 
             <!-- SUBTOTAL PENDIENTE DE ESTE CRÉDITO -->
             <tr class="bg-subtotal">
@@ -424,43 +411,33 @@
 
       </tbody>
 
-      {{-- PIE CON TOTALES GENERALES --}}
+      {{-- PIE CON TOTALES GENERALES DEL ESTADO ACTUAL --}}
       @if(isset($creditos) && $creditos->isNotEmpty())
       @php
         $deudaTotalGeneral = $totalDebeGeneral + $totalInteresesGeneral;
         $deudaRestante = $deudaTotalGeneral - $totalAbonoGeneral;
-        $balanceFinal = $deudaRestante - $totalSaldoAFavor;
       @endphp
-      <tfoot class="font-bold" style="font-size: 9.5px;">
+      <tfoot class="bg-footer font-bold" style="font-size: 9.5px;">
         <tr>
-          <td colspan="4" class="text-center text-info">RESUMEN GENERAL</td>
-        </tr>
-        <!-- <tr>
-          <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
+          <td class="text-right">TOTAL CRÉDITOS VIGENTES:</td>
           <td class="text-right text-warning">${{ number_format($totalDebeGeneral, 2) }}</td>
           <td class="text-right text-success">${{ number_format($totalAbonoGeneral, 2) }}</td>
           <td class="text-right">TOTAL ABONADO NETO</td>
         </tr>
         @if($totalInteresesGeneral > 0)
         <tr>
-          <td colspan="3" class="text-right text-warning">TOTAL INDEXACIONES (AJUSTE POR INFLACIÓN):</td>
+          <td colspan="3" class="text-right text-warning">TOTAL INDEXACIONES APLICADAS:</td>
           <td class="text-right text-warning">+${{ number_format($totalInteresesGeneral, 2) }}</td>
-        </tr>
-        @endif
-        @if($totalSaldoAFavor > 0)
-        <tr>
-          <td colspan="3" class="text-right text-info">SALDO A FAVOR / ANTICIPOS DISPONIBLES:</td>
-          <td class="text-right text-info">-${{ number_format($totalSaldoAFavor, 2) }}</td>
         </tr>
         @endif
         <tr style="font-size: 10.5px; border-top: 2px solid #fff;">
           <td colspan="3" class="text-right" style="text-transform: uppercase;">
-            {{ $balanceFinal >= 0 ? 'SALDO NETO PENDIENTE DE PAGO:' : 'BALANCE A FAVOR DEL CLIENTE:' }}
+            SALDO NETO PENDIENTE:
           </td>
-          <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }}">
-            ${{ number_format(abs($balanceFinal), 2) }}
+          <td class="text-right text-warning">
+            ${{ number_format(max(0, $deudaRestante), 2) }}
           </td>
-        </tr> -->
+        </tr>
       </tfoot>
       @endif
     </table>

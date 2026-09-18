@@ -511,3 +511,39 @@ class InsumosImport implements ToModel, WithHeadingRow
 
 
 1. Fallas Lógicas e Inconsistencias DetectadasA. Inconsistencia de UI en el botón "Anular" (entradas.index)El problema: En la vista blade, validas @if(auth()->user()->esAdmin()) para mostrar el botón de anular (papelera/prohibido). Sin embargo, en el backend (destroy), exiges rigurosamente que $entrada->estado === 'PENDIENTE'.   Consecuencia: Un administrador puede ver el botón de anular en una entrada que ya fue APROBADA, hacer clic, pasar el filtro de SweetAlert, enviar la petición HTTP y encontrarse con un error rojo en pantalla ("No se puede eliminar una entrada que ya ha sido procesada...").Solución: El botón de anular en la tabla solo debe mostrarse si el estado de la entrada es PENDIENTE.B. Método fantasma en el modelo User (esAdmin())El problema: En la vista usas @if(auth()->user()->esAdmin()). En el resto del sistema que hemos visto (por ejemplo en InsumosController), los roles se evalúan consultando la propiedad directa del rol o mediante Gates ($user->role === 'admin' o Gate::authorize). Si el método esAdmin() no está declarado explícitamente en tu modelo User, esa directiva Blade arrojará un error de método no encontrado (BadMethodCallException).   C. Riesgo de concurrencia y recálculo en procesarRecepcion()El problema: Cuando un almacenista procesa una recepción por primera vez, creas un registro en el histórico. Si la procesa una segunda vez (por una corrección), el sistema busca el histórico previo, revierte el costo maestro al anterior y vuelve a aplicar el nuevo. Si se realizan múltiples modificaciones parciales concurrentes sin un bloqueo de tabla estricto (DB::transaction lo mitiga parcialmente, pero la lógica de negocio es frágil), el rastreo de costos (costo_anterior) puede corromperse si el histórico se borra o se sobreescribe mal en flujos de re-reversión.   
+
+
+
+
+
+<tfoot class="font-bold" style="font-size: 9.5px;">
+        <tr>
+          <td colspan="4" class="text-center text-info">RESUMEN GENERAL</td>
+        </tr>
+        <!-- <tr>
+          <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
+          <td class="text-right text-warning">${{ number_format($totalDebeGeneral, 2) }}</td>
+          <td class="text-right text-success">${{ number_format($totalAbonoGeneral, 2) }}</td>
+          <td class="text-right">TOTAL ABONADO NETO</td>
+        </tr>
+        @if($totalInteresesGeneral > 0)
+        <tr>
+          <td colspan="3" class="text-right text-warning">TOTAL INDEXACIONES (AJUSTE POR INFLACIÓN):</td>
+          <td class="text-right text-warning">+${{ number_format($totalInteresesGeneral, 2) }}</td>
+        </tr>
+        @endif
+        @if($totalSaldoAFavor > 0)
+        <tr>
+          <td colspan="3" class="text-right text-info">SALDO A FAVOR / ANTICIPOS DISPONIBLES:</td>
+          <td class="text-right text-info">-${{ number_format($totalSaldoAFavor, 2) }}</td>
+        </tr>
+        @endif
+        <tr style="font-size: 10.5px; border-top: 2px solid #fff;">
+          <td colspan="3" class="text-right" style="text-transform: uppercase;">
+            {{ $balanceFinal >= 0 ? 'SALDO NETO PENDIENTE DE PAGO:' : 'BALANCE A FAVOR DEL CLIENTE:' }}
+          </td>
+          <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }}">
+            ${{ number_format(abs($balanceFinal), 2) }}
+          </td>
+        </tr> -->
+      </tfoot>
