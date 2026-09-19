@@ -166,7 +166,7 @@
         <i class="fa fa-chevron-left"></i>
       </button>
 
-      <img id="fbLightboxImg" src="" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+      <img id="fbLightboxImg" src="" loading="lazy" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
 
       <button type="button" onclick="cambiarFoto(1)" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: rgba(0, 0, 0, 0.7); border: none; color: #fff; font-size: 1.2rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 10000000; outline: none; display: flex; align-items: center; justify-content: center;">
         <i class="fa fa-chevron-right"></i>
