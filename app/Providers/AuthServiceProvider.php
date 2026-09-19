@@ -249,7 +249,7 @@ class AuthServiceProvider extends ServiceProvider
     // 1. Quién puede ver la lista de deudores y entrar al detalle
     Gate::define('ver-creditos', function (User $user) {
         $role = strtolower($user->role);
-        return in_array($role, ['admin', 'encargado', 'vendedor']);
+        return in_array($role,  [User::ROLE_SUPERADMIN, User::ROLE_ENCARGADO, User::ROLE_VENDEDOR]);
     });
 
     // 2. Quién puede registrar un abono (cobrar)
