@@ -583,3 +583,42 @@ FROM ventas WHERE id = 438 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta
 INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
 SELECT 440, 122, 6.00, 6.00, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
 FROM ventas WHERE id = 440 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 440);
+
+
+
+
+
+
+
+
+
+
+protected function obtenerCajaActiva($id_local = null)
+{
+    // Si no enviamos un $id_local, calculamos el del usuario actual
+    if (is_null($id_local)) {
+        $user = auth()->user();
+        $local = $user ? $user->localActual() : null;
+        $id_local = $local ? $local->id : ($user->id_local ?? 1);
+    }
+
+    $caja = Caja::where('id_local', $id_local)
+                ->where('estado', 'abierta')
+                ->first();
+
+    return $caja ? $caja->id : null;
+}
+
+
+
+
+// Si es admin y mandó un local, usamos ese. Si no, pasamos null para que use el por defecto.
+$localDestino = (auth()->user()->esAdmin() && request()->filled('id_local')) 
+                ? request('id_local') 
+                : null;
+
+$idCajaActiva = $this->obtenerCajaActiva($localDestino);
+
+if (!$idCajaActiva) {
+    throw new \Exception("No hay una caja abierta en la sucursal correspondiente para procesar este pago.");
+}

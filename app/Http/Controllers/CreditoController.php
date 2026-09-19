@@ -95,7 +95,9 @@ class CreditoController extends Controller
         ->orderBy('nombre', 'asc')
         ->get();
 
-    return view('creditos.index', compact('clientes', 'todosLosClientes'));
+    $locales = $user->esAdmin() ? Local::where('tipo', 'LOCAL')->get() : collect();
+
+    return view('creditos.index', compact('clientes', 'todosLosClientes', 'locales'));
 }
 
     public function show($id)
@@ -155,7 +157,9 @@ class CreditoController extends Controller
             'saldo_a_favor'   => $saldoAFavor,
         ];
 
-        return view('creditos.show', compact('cliente', 'historialAbonos', 'resumen', 'historialIntereses'));
+        $locales = auth()->user()->esAdmin() ? Local::where('tipo', 'LOCAL')->get() : collect();
+
+        return view('creditos.show', compact('cliente', 'historialAbonos', 'resumen', 'historialIntereses', 'locales'));
     }
 
     public function registrarAbono(Request $request, $id)
@@ -163,7 +167,8 @@ class CreditoController extends Controller
         // 1. Validaciones iniciales
         $request->validate([
             'monto_total_usd' => 'required|numeric|min:0.01',
-            'fecha_abono'     => 'required|date'
+            'fecha_abono'     => 'required|date',
+            'id_local'        => auth()->user()->esAdmin() ? 'required|exists:locales,id' : 'nullable' // NUEVO
         ]);
 
         // OBTENER LA TASA DE CAMBIO
@@ -209,7 +214,8 @@ class CreditoController extends Controller
             $creditoCanceladoTotal = false;
             
             DB::transaction(function () use ($request, $creditoReferencia, $cliente, $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs, &$montoTotalUSD, &$creditoCanceladoTotal) {
-                $idCajaActiva = $this->obtenerCajaActiva();
+
+                $idCajaActiva = $this->obtenerCajaActiva($request->id_local);
                 
                 $fechaAbono = Carbon::parse($request->fecha_abono);
                 $montoTotalUSD = round($request->monto_total_usd, 2);
@@ -274,7 +280,7 @@ class CreditoController extends Controller
                     $ventaAnticipo->codigo_factura     = $codigoAnticipo;
                     $ventaAnticipo->id_cliente         = $cliente->id;
                     $ventaAnticipo->id_user            = auth()->id();
-                    $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
+                    $ventaAnticipo->id_local           = auth()->user()->esAdmin() ? $request->id_local : (auth()->user()->id_local ?? 1);
                     $ventaAnticipo->id_caja            = $idCajaActiva;
                     
                     $ventaAnticipo->pago_usd_efectivo  = 0.00;
@@ -773,18 +779,24 @@ class CreditoController extends Controller
         }
     }
 
-    private function obtenerCajaActiva(): int
+    private function obtenerCajaActiva($id_local_request = null): int
     {
         $user = Auth::user();
-        $local = $user ? $user->localActual() : null;
-        $localId = $local ? $local->id : (auth()->user()->id_local ?? 1);
+        
+        // Si es admin y envió un id_local desde el modal, usamos ese. Si no, usamos el del usuario.
+        if ($user->esAdmin() && $id_local_request) {
+            $localId = $id_local_request;
+        } else {
+            $local = $user ? $user->localActual() : null;
+            $localId = $local ? $local->id : ($user->id_local ?? 1);
+        }
 
         $caja = Caja::where('id_local', $localId)
                     ->where('estado', 'abierta')
                     ->first();
 
         if (!$caja) {
-            throw new \Exception('No hay una caja abierta en el local actual para registrar el movimiento.');
+            throw new \Exception('No hay una caja abierta en el local seleccionado para registrar el movimiento.');
         }
 
         return $caja->id;
@@ -895,7 +907,8 @@ class CreditoController extends Controller
             'monto_credito_usd' => 'required|numeric|min:0.01',
             'fecha_credito'     => 'required|date',
             'observacion'       => 'nullable|string',
-            'pin_autorizacion'  => 'nullable|string'
+            'pin_autorizacion'  => 'nullable|string',
+            'id_local'          => auth()->user()->esAdmin() ? 'required|exists:locales,id' : 'nullable'
         ]);
 
         $montoUsd = (float) $request->monto_credito_usd;
@@ -944,7 +957,7 @@ class CreditoController extends Controller
             $venta->codigo_factura     = $codigoFactura;
             $venta->id_cliente         = $cliente->id;
             $venta->id_user            = auth()->id();
-            $venta->id_local           = auth()->user()->id_local ?? 3;
+            $venta->id_local           = auth()->user()->esAdmin() ? $request->id_local : (auth()->user()->id_local ?? 3);
             $venta->id_caja            = $idCajaActiva;
             
             $venta->pago_usd_efectivo  = 0.00;

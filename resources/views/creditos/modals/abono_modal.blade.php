@@ -24,7 +24,18 @@
                                 <label class="font-weight-bold">Fecha del Abono:</label>
                                 <input type="date" name="fecha_abono" id="fecha_abono" class="form-control" value="{{ date('Y-m-d') }}" required>
                             </div>
-
+                            {{-- NUEVO CAMPO: SELECTOR DE LOCAL PARA ADMIN --}}
+                            @if(auth()->user()->esAdmin())
+                            <div class="form-group mb-3">
+                                <label class="font-weight-bold text-primary">Local (Caja a afectar) <span class="text-danger">*</span></label>
+                                <select name="id_local" class="form-control" required>
+                                    <option value="">-- Seleccione un local --</option>
+                                    @foreach($locales as $local)
+                                        <option value="{{ $local->id }}">{{ $local->nombre }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @endif
                             <div class="form-group">
                                 <label class="font-weight-bold text-primary">Monto Total a Abonar (USD):</label>
                                 <div class="input-group">

@@ -27,7 +27,18 @@
                                 @endforeach
                             </select>
                         </div>
-
+                        {{-- NUEVO CAMPO: SELECTOR DE LOCAL PARA ADMIN --}}
+                        @if(auth()->user()->esAdmin())
+                        <div class="col-md-12 form-group">
+                            <label class="font-weight-bold">Local (Caja a afectar) <span class="text-danger">*</span></label>
+                            <select name="id_local" class="form-control" required>
+                                <option value="">-- Seleccione un local --</option>
+                                @foreach($locales as $local)
+                                    <option value="{{ $local->id }}">{{ $local->nombre }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @endif
                         <div class="col-md-6 form-group">
                             <label for="monto_credito_usd_general" class="font-weight-bold">Monto del Crédito ($) <span class="text-danger">*</span></label>
                             <div class="input-group">
