@@ -1468,11 +1468,15 @@ class CreditoController extends Controller
             ->toArray();
 
         foreach ($abonosPeriodo as $abono) {
-            if ($abono->detalles) {
-                foreach ($abono->detalles as $detalle) {
-                    if ($detalle->id_credito) $idsCreditosActivos[] = $detalle->id_credito;
+            $detallesRelacion = $abono->detalles()->get();
+                
+                if ($detallesRelacion->isNotEmpty()) {
+                    foreach ($detallesRelacion as $detalle) {
+                        if ($detalle->id_credito) {
+                            $idsCreditosActivos[] = $detalle->id_credito;
+                        }
+                    }
                 }
-            }
         }
 
         foreach ($interesesPeriodo as $interes) {
