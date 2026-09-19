@@ -510,40 +510,76 @@ class InsumosImport implements ToModel, WithHeadingRow
 
 
 
-1. Fallas Lógicas e Inconsistencias DetectadasA. Inconsistencia de UI en el botón "Anular" (entradas.index)El problema: En la vista blade, validas @if(auth()->user()->esAdmin()) para mostrar el botón de anular (papelera/prohibido). Sin embargo, en el backend (destroy), exiges rigurosamente que $entrada->estado === 'PENDIENTE'.   Consecuencia: Un administrador puede ver el botón de anular en una entrada que ya fue APROBADA, hacer clic, pasar el filtro de SweetAlert, enviar la petición HTTP y encontrarse con un error rojo en pantalla ("No se puede eliminar una entrada que ya ha sido procesada...").Solución: El botón de anular en la tabla solo debe mostrarse si el estado de la entrada es PENDIENTE.B. Método fantasma en el modelo User (esAdmin())El problema: En la vista usas @if(auth()->user()->esAdmin()). En el resto del sistema que hemos visto (por ejemplo en InsumosController), los roles se evalúan consultando la propiedad directa del rol o mediante Gates ($user->role === 'admin' o Gate::authorize). Si el método esAdmin() no está declarado explícitamente en tu modelo User, esa directiva Blade arrojará un error de método no encontrado (BadMethodCallException).   C. Riesgo de concurrencia y recálculo en procesarRecepcion()El problema: Cuando un almacenista procesa una recepción por primera vez, creas un registro en el histórico. Si la procesa una segunda vez (por una corrección), el sistema busca el histórico previo, revierte el costo maestro al anterior y vuelve a aplicar el nuevo. Si se realizan múltiples modificaciones parciales concurrentes sin un bloqueo de tabla estricto (DB::transaction lo mitiga parcialmente, pero la lógica de negocio es frágil), el rastreo de costos (costo_anterior) puede corromperse si el histórico se borra o se sobreescribe mal en flujos de re-reversión.   
+SELECT v.*, c.nombre AS cliente_nombre FROM ventas v INNER JOIN clientes c ON v.id_cliente = c.id WHERE NOT EXISTS ( SELECT 1 FROM detalle_ventas dv WHERE dv.id_venta = v.id ) AND NOT EXISTS ( SELECT 1 FROM creditos cr WHERE cr.id_venta = v.id );
 
 
 
+UPDATE ventas SET estado = 'completada', monto_credito_usd = 7.20 WHERE id = 430;
+UPDATE ventas SET estado = 'completada', monto_credito_usd = 4.20 WHERE id = 434;
+UPDATE ventas SET estado = 'completada', monto_credito_usd = 2.40 WHERE id = 436;
+UPDATE ventas SET estado = 'completada', monto_credito_usd = 29.40 WHERE id = 442;
 
 
-<tfoot class="font-bold" style="font-size: 9.5px;">
-        <tr>
-          <td colspan="4" class="text-center text-info">RESUMEN GENERAL</td>
-        </tr>
-        <!-- <tr>
-          <td class="text-right">TOTAL CRÉDITOS Y COMPRAS:</td>
-          <td class="text-right text-warning">${{ number_format($totalDebeGeneral, 2) }}</td>
-          <td class="text-right text-success">${{ number_format($totalAbonoGeneral, 2) }}</td>
-          <td class="text-right">TOTAL ABONADO NETO</td>
-        </tr>
-        @if($totalInteresesGeneral > 0)
-        <tr>
-          <td colspan="3" class="text-right text-warning">TOTAL INDEXACIONES (AJUSTE POR INFLACIÓN):</td>
-          <td class="text-right text-warning">+${{ number_format($totalInteresesGeneral, 2) }}</td>
-        </tr>
-        @endif
-        @if($totalSaldoAFavor > 0)
-        <tr>
-          <td colspan="3" class="text-right text-info">SALDO A FAVOR / ANTICIPOS DISPONIBLES:</td>
-          <td class="text-right text-info">-${{ number_format($totalSaldoAFavor, 2) }}</td>
-        </tr>
-        @endif
-        <tr style="font-size: 10.5px; border-top: 2px solid #fff;">
-          <td colspan="3" class="text-right" style="text-transform: uppercase;">
-            {{ $balanceFinal >= 0 ? 'SALDO NETO PENDIENTE DE PAGO:' : 'BALANCE A FAVOR DEL CLIENTE:' }}
-          </td>
-          <td class="text-right {{ $balanceFinal >= 0 ? 'text-danger' : 'text-info' }}">
-            ${{ number_format(abs($balanceFinal), 2) }}
-          </td>
-        </tr> -->
-      </tfoot>
+-- 1. Crédito ID 430 (CRD-8SSPAR - $7.20)
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 430, 17, 7.20, 7.20, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 430 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 430);
+
+-- 2. Crédito ID 434 (CRD-WBTFYG - $4.20)
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 434, 17, 4.20, 4.20, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 434 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 434);
+
+-- 3. Crédito ID 436 (CRD-CECOWI - $2.40)
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 436, 17, 2.40, 2.40, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 436 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 436);
+
+-- 5. Crédito ID 442 (CRD-AZRAYT - $29.40)
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 442, 17, 29.40, 29.40, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 442 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 442);
+
+UPDATE ventas 
+SET estado = 'completada' 
+WHERE id IN (431, 235, 432, 433, 435, 437, 438, 440);
+
+-- 1. ID 431 (CRD-5NYLYZ - $9.10) | Cliente ID: 18
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 431, 18, 9.10, 9.10, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 431 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 431);
+
+-- 2. ID 235 (CRD-YNUS87 - $25.90) | Cliente ID: 35
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 235, 35, 25.90, 25.90, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 235 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 235);
+
+-- 3. ID 432 (CRD-VOF6RF - $1.20) | Cliente ID: 98
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 432, 98, 1.20, 1.20, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 432 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 432);
+
+-- 4. ID 433 (CRD-RHQAD2 - $10.00) | Cliente ID: 99
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 433, 99, 10.00, 10.00, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 433 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 433);
+
+-- 5. ID 435 (CRD-FPKTSW - $15.00) | Cliente ID: 105
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 435, 105, 15.00, 15.00, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 435 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 435);
+
+-- 6. ID 437 (CRD-VE4C8T - $94.50) | Cliente ID: 119
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 437, 119, 94.50, 94.50, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 437 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 437);
+
+-- 7. ID 438 (CRD-KR4SD9 - $10.00) | Cliente ID: 120
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 438, 120, 10.00, 10.00, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 438 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 438);
+
+-- 8. ID 440 (CRD-BE0SQN - $6.00) | Cliente ID: 122
+INSERT INTO creditos (id_venta, id_cliente, monto_inicial, saldo_pendiente, saldo_a_favor, fecha_vencimiento, estado, created_at, updated_at)
+SELECT 440, 122, 6.00, 6.00, 0.00, DATE_ADD(created_at, INTERVAL 30 DAY), 'pendiente', created_at, updated_at 
+FROM ventas WHERE id = 440 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta = 440);
