@@ -38,10 +38,16 @@
             </div>
           </div>
           <div class="col-md-6">
-            <div class="form-group">
-              <label>Descripción</label>
-              <input class="form-control" name="descripcion" value="{{ old('descripcion') }}">
-            </div>
+              <div class="form-group">
+                  <label>
+                      Descripción:  
+                      <span id="badge-coincidencia" class="ml-2"></span>
+                  </label>
+                  <input class="form-control" name="descripcion" id="input_descripcion" value="{{ old('descripcion') }}" autocomplete="off">
+                  <div id="lista-coincidencias" class="invalid-feedback" style="display: none; font-size: 0.9em;">
+                      <!-- Aquí se inyectarán las coincidencias -->
+                  </div>
+              </div>
           </div>
         </div>
 
@@ -226,6 +232,54 @@
 
             $inCosto.on('input keyup change', ejecutarCalculo);
             $selModelo.on('change', ejecutarCalculo);
+
+            let temporizador;
+            const $inputDesc =$('#input_descripcion');
+            const $badge =$('#badge-coincidencia');
+            const $lista =$('#lista-coincidencias');
+
+            $inputDesc.on('input', function() {
+                clearTimeout(temporizador);
+                let texto = $(this).val().trim();
+
+                // Si hay menos de 3 caracteres, limpiamos las alertas
+                if(texto.length < 3) {
+                    limpiarClases();
+                    return;
+                }
+
+                temporizador = setTimeout(function() {
+                    $.ajax({
+                        url: '{{ route("insumos.verificar_descripcion") }}',
+                        type: 'GET',
+                        data: { query: texto },
+                        success: function(response) {
+                            limpiarClases();
+                            
+                            if(response.coincidencias.length > 0) {
+                                // Encontró coincidencias: Poner Rojo
+                                $inputDesc.addClass('is-invalid');$badge.html('<span class="badge badge-danger"><i class="fa fa-exclamation-triangle"></i> Producto posiblemente duplicado</span>');
+                                
+                                let htmlMatches = '<strong>Coincidencias encontradas:</strong><ul class="mb-0 pl-3">';
+                                response.coincidencias.forEach(item => {
+                                    htmlMatches += `<li>${item.producto} - ${item.descripcion}</li>`;
+                                });
+                                htmlMatches += '</ul>';
+                                
+                                $lista.html(htmlMatches).show();
+                            } else {
+                                // Sin coincidencias: Poner Verde
+                                $inputDesc.addClass('is-valid');$badge.html('<span class="badge badge-success"><i class="fa fa-check"></i> Descripción única</span>');
+                            }
+                        }
+                    });
+                }, 500); // 500ms de retraso (Debounce)
+            });
+
+            function limpiarClases() {
+                $inputDesc.removeClass('is-valid is-invalid');
+                $badge.empty();$lista.hide().empty();
+            }
         });
     })();
 </script>

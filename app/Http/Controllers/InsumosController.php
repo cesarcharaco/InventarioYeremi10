@@ -885,4 +885,31 @@ class InsumosController extends Controller
         imagedestroy($imgOriginal);
         imagedestroy($imgMiniatura);
     }
+
+    public function verificarDescripcion(Request $request)
+    {
+        $texto = $request->input('query');
+
+        if (!$texto) {
+            return response()->json(['coincidencias' => []]);
+        }
+
+        // Separar el texto por espacios y eliminar elementos vacíos
+        $palabras = array_filter(explode(' ', $texto));
+
+        // Iniciar la consulta
+        $query = DB::table('insumos')->select('producto', 'descripcion');
+
+        // Buscar cada palabra dentro del campo descripción
+        foreach ($palabras as $palabra) {
+            $query->where('descripcion', 'LIKE', '%' . $palabra . '%');
+        }
+
+        // Limitamos a 5 para no saturar la vista si hay muchas coincidencias parciales
+        $coincidencias = $query->limit(5)->get();
+
+        return response()->json([
+            'coincidencias' => $coincidencias
+        ]);
+    }
 }

@@ -79,6 +79,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('actualizar-costo', [InsumosController::class, 'actualizarCosto'])->name('insumos.actualizarCosto');
         Route::post('destroy-manual', [InsumosController::class, 'destroy'])->name('insumos.destroy_manual');
         Route::get('/local/{id}', [InsumosController::class, 'listarPorLocal'])->name('inventario.local');
+        Route::get('/verificar-descripcion', [InsumosController::class, 'verificarDescripcion'])->name('insumos.verificar_descripcion');
 
         Route::post('cambiar-estado', [InsumosController::class, 'cambiarEstadoInsumo'])->name('insumo.cambiarEstado');
         Route::get('{id}/barcode-pdf', [InsumosController::class, 'generarCodigoBarrasPdf'])->name('insumos.barcode_pdf');
