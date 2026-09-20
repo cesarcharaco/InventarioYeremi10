@@ -40,7 +40,7 @@
           <div class="col-md-6">
               <div class="form-group">
                   <label>
-                      Descripción:  
+                      Descripción detallada:  
                       <span id="badge-coincidencia" class="ml-2"></span>
                   </label>
                   <input class="form-control" name="descripcion" id="input_descripcion" value="{{ old('descripcion') }}" autocomplete="off">
