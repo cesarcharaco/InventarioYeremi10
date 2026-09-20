@@ -168,7 +168,7 @@ class CreditoController extends Controller
         $request->validate([
             'monto_total_usd' => 'required|numeric|min:0.01',
             'fecha_abono'     => 'required|date',
-            'id_local'        => auth()->user()->esAdmin() ? 'required|exists:locales,id' : 'nullable' // NUEVO
+            'id_local'        => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable' // NUEVO
         ]);
 
         // OBTENER LA TASA DE CAMBIO
@@ -908,7 +908,7 @@ class CreditoController extends Controller
             'fecha_credito'     => 'required|date',
             'observacion'       => 'nullable|string',
             'pin_autorizacion'  => 'nullable|string',
-            'id_local'          => auth()->user()->esAdmin() ? 'required|exists:locales,id' : 'nullable'
+            'id_local'          => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable'
         ]);
 
         $montoUsd = (float) $request->monto_credito_usd;
