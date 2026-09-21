@@ -1216,6 +1216,62 @@
                 }
             });
         }
+
+            // ==========================================
+            // 1. CALCULADORA - REGISTRAR ABONO
+            // ==========================================
+            $('#calc_usd').on('input', function () {
+                let usd = parseFloat($(this).val()) || 0;
+                $('#calc_bs').val((usd * TASA_BCV).toFixed(2));
+            });
+
+            $('#calc_bs').on('input', function () {
+                let bs = parseFloat($(this).val()) || 0;
+                if (TASA_BCV > 0) {
+                    $('#calc_usd').val((bs / TASA_BCV).toFixed(2));
+                }
+            });
+
+            $('.btn-copiar-bs').on('click', function () {
+                let inputTargetName = $(this).data('target');
+                let montoBs = $('#calc_bs').val() || 0;
+                
+                // Asignar al input de desglose correspondiente y disparar evento de cambio
+                $(`#modalAbono input[name="${inputTargetName}"]`)
+                    .val(parseFloat(montoBs).toFixed(2))
+                    .trigger('input')
+                    .trigger('change');
+            });
+
+            // ==========================================
+            // 2. CALCULADORA - EDITAR ABONO
+            // ==========================================
+            $('#edit_calc_usd').on('input', function () {
+                let usd = parseFloat($(this).val()) || 0;
+                $('#edit_calc_bs').val((usd * TASA_BCV).toFixed(2));
+            });
+
+            $('#edit_calc_bs').on('input', function () {
+                let bs = parseFloat($(this).val()) || 0;
+                if (TASA_BCV > 0) {
+                    $('#edit_calc_usd').val((bs / TASA_BCV).toFixed(2));
+                }
+            });
+
+            $('.btn-copiar-bs-edit').on('click', function () {
+                let targetId = $(this).data('target-id');
+                let montoBs = $('#edit_calc_bs').val() || 0;
+                
+                $(`#${targetId}`)
+                    .val(parseFloat(montoBs).toFixed(2))
+                    .trigger('input')
+                    .trigger('change');
+            });
+
+            // Limpiar calculadoras al cerrar modales
+            $('#modalAbono, #modalEditarAbono').on('hidden.bs.modal', function () {
+                $('#calc_usd, #calc_bs, #edit_calc_usd, #edit_calc_bs').val('');
+            });
     });
 </script>
 @endsection

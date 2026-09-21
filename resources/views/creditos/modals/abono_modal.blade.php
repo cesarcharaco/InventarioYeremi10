@@ -54,6 +54,7 @@
                                 <label>Referencia / Nota:</label>
                                 <textarea name="referencia" class="form-control" rows="2" placeholder="Ej: Pago móvil, transferencia Banesco, etc."></textarea>
                             </div>
+
                         </div>
                         
                         <div class="col-md-6">
@@ -78,6 +79,42 @@
                                 <input type="number" step="0.01" name="pago_pagomovil_bs" class="form-control input-desglose" value="0">
                             </div>
                             <p class="mt-2 small text-muted"><i class="fa fa-info-circle"></i> El desglose ayuda a cuadrar la caja diaria con el monto real que entra.</p>
+                            {{-- WIDGET CALCULADORA BCV --}}
+                            <div class="card bg-light border-info mt-3 shadow-sm">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="font-weight-bold text-info small">
+                                            <i class="fa fa-calculator"></i> Calculadora de Conversión
+                                        </span>
+                                        <span class="badge badge-info p-1">
+                                            Tasa BCV: <b>{{ number_format(bcv_rate('USD') ?? 0, 2, ',', '.') }}</b> Bs.
+                                        </span>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="col-6 mb-2">
+                                            <label class="small text-muted mb-0 font-weight-bold">Monto $</label>
+
+                                            <input type="number" step="0.01" class="form-control form-control-sm" id="calc_usd" placeholder="0.00">
+                                        </div>
+                                        <div class="col-6 mb-2">
+                                            <label class="small text-muted mb-0 font-weight-bold">Monto Bs</label>
+                                            <input type="number" step="0.01" class="form-control form-control-sm" id="calc_bs" placeholder="0.00">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted d-block mb-2">Transferir monto en Bs a:</small>
+                                    <div class="btn-group btn-group-sm w-100" role="group">
+                                        <button type="button" class="btn btn-outline-success btn-copiar-bs" data-target="pago_bs_efectivo" title="Copiar a Efectivo Bs">
+                                            Efectivo Bs
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-copiar-bs" data-target="pago_punto_bs" title="Copiar a Punto Bs">
+                                            Punto Bs
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info btn-copiar-bs" data-target="pago_pagomovil_bs" title="Copiar a Pago Móvil Bs">
+                                            P. Móvil Bs
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

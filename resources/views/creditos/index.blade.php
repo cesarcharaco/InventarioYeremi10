@@ -90,24 +90,40 @@
                                 </td>
                                <td>
                                    @php
-                                       $saldo = $cliente->saldo_total_pendiente ?? 0;
+                                       // 1. Deuda pendiente (solo si es mayor a 0)
+                                       $deuda = (isset($cliente->saldo_total_pendiente) && $cliente->saldo_total_pendiente > 0) 
+                                           ? $cliente->saldo_total_pendiente 
+                                           : 0;
+
+                                       // 2. Cálculo de Saldo a Favor considerando todas las formas de almacenamiento
+                                       $saldoFavor = $cliente->saldo_a_favor 
+                                           ?? $cliente->saldo_favor 
+                                           ?? ($cliente->creditos ? $cliente->creditos->sum('saldo_a_favor') : 0);
+
+                                       // Si viene como valor negativo en el saldo pendiente acumulado
+                                       if ($saldoFavor <= 0 && isset($cliente->saldo_total_pendiente) && $cliente->saldo_total_pendiente < 0) {
+                                           $saldoFavor = abs($cliente->saldo_total_pendiente);
+                                       }
                                    @endphp
 
-                                   @if($saldo < 0)
-                                       {{-- SALDO A FAVOR / ANTICIPO --}}
-                                       <span class="badge badge-info px-3 py-2" data-toggle="tooltip" title="Saldo a Favor">
-                                           +${{ number_format(abs($saldo), 2) }}
-                                       </span>
-                                   @elseif($saldo > 0)
-                                       {{-- DEUDA PENDIENTE --}}
+                                   {{-- MOSTRAR ESTADO DE DEUDA --}}
+                                   @if($deuda > 0)
                                        <span class="badge badge-danger px-3 py-2" data-toggle="tooltip" title="Deuda Pendiente">
-                                           ${{ number_format($saldo, 2) }}
+                                           ${{ number_format($deuda, 2) }}
                                        </span>
                                    @else
-                                       {{-- AL DÍA (SIN DEUDA NI SALDO) --}}
-                                       <span class="badge badge-success px-3 py-2">
+                                       <span class="badge badge-success px-3 py-2" data-toggle="tooltip" title="Cliente Solvente">
                                            $0.00
                                        </span>
+                                   @endif
+
+                                   {{-- MOSTRAR SALDO A FAVOR SI EXISTE --}}
+                                   @if($saldoFavor > 0)
+                                       <div class="mt-1">
+                                           <span class="badge badge-info px-2 py-1" data-toggle="tooltip" title="Saldo a favor disponible">
+                                               <i class="fa fa-plus-circle"></i> A favor: ${{ number_format($saldoFavor, 2) }}
+                                           </span>
+                                       </div>
                                    @endif
                                </td>
                                 <td class="text-center">
