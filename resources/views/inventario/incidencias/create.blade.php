@@ -65,7 +65,7 @@
                     <label class="control-label">Seleccione Local / Depósito <b style="color: red;">*</b></label>
                     <select name="id_local" id="id_local" class="form-control select2" required>
                       <option value="">-- Seleccione un local --</option>
-                      @foreach($locales as$local)
+                      @foreach($locales as $local)
                         <option value="{{ $local->id }}">{{ $local->nombre }}</option>
                       @endforeach
                     </select>
