@@ -50,7 +50,8 @@
                 data-tasa-bcv="{{ $key->tasa_bcv }}" 
                 data-tasa-binance="{{ $key->tasa_binance }}"
                 data-factor-bcv="{{ $key->factor_bcv }}" 
-                data-factor-usdt="{{ $key->factor_usdt }}">
+                data-factor-usdt="{{ $key->factor_usdt }}"
+                data-porcentaje-extra="{{ $key->porcentaje_extra }}">
               
                 <td>
                     <small class="text-primary font-italic">{{ $key->serial }}:</small>
@@ -174,11 +175,15 @@ $(document).ready(function() {
         let tBinance = parseFloat(fila.data('tasa-binance'));
         let fBcv = parseFloat(fila.data('factor-bcv'));
         let fUsdt = parseFloat(fila.data('factor-usdt'));
+        let extra = parseFloat(fila.data('porcentaje-extra')) || 0;
 
-        // Fórmulas originales de tu sistema
-        let vUsdBcv = (fBcv > 0) ? ((tBinance / tBcv) / fBcv) * nuevoCosto : nuevoCosto;
-        let vUsdt = (fUsdt > 0) ? nuevoCosto / fUsdt : nuevoCosto;
-        let vBs = vUsdBcv * tBcv;
+        // 1. Aplicar primero el porcentaje de margen sobre el costo
+            let costoConMargen = nuevoCosto * (1 + extra);
+
+        // 2. Aplicar fórmulas de venta
+            let vUsdBcv = (fBcv > 0) ? ((tBinance / tBcv) / fBcv) * costoConMargen : costoConMargen;
+            let vUsdt = (fUsdt > 0) ? costoConMargen / fUsdt : costoConMargen;
+            let vBs = vUsdBcv * tBcv;
 
         // Actualizar visualmente con color naranja para indicar cambio pendiente
         fila.find('.col-venta-usd').text('$' + vUsdBcv.toFixed(2)).css('color', '#e67e22');

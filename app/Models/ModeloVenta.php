@@ -18,32 +18,27 @@ class ModeloVenta extends Model
 
     public function calcularPrecios($costo)
     {
-        $venta_bcv = 0;
-        $venta_usdt = 0;
+        // 1. Aplicar primero el porcentaje extra / margen si existe ($2.00 * 1.10 = $2.20)
+        $costoBase = ($this->porcentaje_extra > 0) 
+            ? $costo * (1 + $this->porcentaje_extra) 
+            : $costo;
 
-        // --- LÓGICA PARA VENTA BCV / BOLÍVARES ---
+        // 2. LÓGICA PARA VENTA BCV / BOLÍVARES
         if ($this->factor_bcv > 0) {
-            // Fórmula de protección cambiaria (Diferencial de tasas)
+            // Aplica fórmula de protección cambiaria sobre el costo con margen
             $diferencial = ($this->tasa_bcv > 0) ? ($this->tasa_binance / $this->tasa_bcv) : 1;
-            $venta_bcv = ($diferencial / $this->factor_bcv) * $costo;
-        } elseif ($this->porcentaje_extra > 0) {
-            // Margen fijo sobre el costo
-            $venta_bcv = $costo * (1 + $this->porcentaje_extra);
-        }
-
-        // --- LÓGICA PARA VENTA USDT ---
-        if ($this->factor_usdt > 0) {
-            // Si hay un factor USDT específico
-            $venta_usdt = $costo / $this->factor_usdt;
-        } elseif ($this->porcentaje_extra > 0) {
-            // Si es Margen Fijo, aplicamos el mismo margen al USDT
-            $venta_usdt = $costo * (1 + $this->porcentaje_extra);
+            $venta_bcv = ($diferencial / $this->factor_bcv) * $costoBase;
         } else {
-            // Fail-safe: si no hay nada, la venta es el costo
-            $venta_usdt = $costo;
+            $venta_bcv = $costoBase;
         }
 
-        // IMPORTANTE: Las llaves deben coincidir con lo que pides en el Controlador
+        // 3. LÓGICA PARA VENTA USDT
+        if ($this->factor_usdt > 0) {
+            $venta_usdt = $costoBase / $this->factor_usdt;
+        } else {
+            $venta_usdt = $costoBase;
+        }
+
         return [
             'precio_venta_usd'  => round($venta_bcv, 2),
             'precio_venta_bs'   => round($venta_bcv * $this->tasa_bcv, 2),

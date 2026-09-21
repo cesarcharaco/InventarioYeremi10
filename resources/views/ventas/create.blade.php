@@ -931,7 +931,9 @@ $(document).ready(function() {
             $('#display_restante_bs').text("0.00 Bs").removeClass('text-danger');
             $('#contenedor_excedente').show();
             $('#display_excedente_usd').text(`$ ${excesoUSD.toFixed(2)}`);
-
+            if ($('#monto_excedente_hidden').length === 0) {
+                $('#venta-form').append(`<input type="hidden" name="monto_excedente" id="monto_excedente_hidden">`);
+            }
             if (deudaCliente > 0) {
                 if (excesoUSD > deudaCliente) {
                     $('#seccion_abono_excedente').hide();

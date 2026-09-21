@@ -75,7 +75,8 @@ class InsumosController extends Controller
             'modelos_venta.tasa_bcv',
             'modelos_venta.tasa_binance', // Añadido
             'modelos_venta.factor_bcv',
-            'modelos_venta.factor_usdt'
+            'modelos_venta.factor_usdt',
+            'modelos_venta.porcentaje_extra'
         )
         ->get();
 
@@ -119,17 +120,20 @@ class InsumosController extends Controller
                 // Si tBcv es 0, evitamos división por cero
                 if ($tBcv <= 0) $tBcv = 1; 
 
-                // Cálculo Venta USD
+                // 1. Aplicar el porcentaje de margen/extra sobre el costo base ($2.00 * 1.10 = $2.20)
+                $costoConMargen = $costo * (1 + $extra);
+
+                // 2. Cálculo Venta USD (aplica factores sobre el costo con margen aplicado)
                 $usd = ($fBcv > 0) 
-                       ? (($tBinance / $tBcv) / $fBcv) * $costo 
-                       : $costo * (1 + $extra);
+                       ? (($tBinance / $tBcv) / $fBcv) * $costoConMargen 
+                       : $costoConMargen;
 
-                // Cálculo Venta USDT
+                // 3. Cálculo Venta USDT
                 $usdt = ($fUsdt > 0) 
-                        ? $costo / $fUsdt 
-                        : $costo * (1 + $extra);
+                        ? $costoConMargen / $fUsdt 
+                        : $costoConMargen;
 
-                // Cálculo Venta BS
+                // 4. Cálculo Venta BS
                 $bs = $usd * $tBcv;
 
                 // 3. Actualizar la tabla insumos

@@ -191,44 +191,80 @@ public function create()
 
     public function store(Request $request)
     {
+
+
+    $request->validate([
+        'id_caja'              => 'required|exists:cajas,id',
+        'id_cliente'           => 'required|exists:clientes,id',
+        'tipo_documento'       => 'required|string',
+        'total_usd'            => 'required|numeric|min:0',
+        'monto_credito_usd'    => 'nullable|numeric|min:0',
+        
+        // Artículos
+        'articulos'            => 'required|array|min:1',
+        'articulos.*.id_insumo'=> 'required|exists:insumos,id',
+        'articulos.*.cantidad' => 'required|numeric|min:1',
+        'articulos.*.precio_unitario' => 'required|numeric|min:0',
+
+        // Ajustes de Abono y Excedente (Campos de la vista)
+        'pago_excedente_abono' => 'nullable',            // Checkbox en el HTML
+        'monto_excedente'      => 'nullable|numeric|min:0', // Enviado desde el JS
+
+        // Referencias de pago (campos planos, no array)
+        'referencia_zelle'     => 'nullable|string|max:255',
+        'referencia_pagomovil' => 'nullable|string|max:255',
+        'referencia_banesco'   => 'nullable|string|max:255',
+    ]);
+
+
         $user = Auth::user();
         $local = $user->localActual();
         $id_caja = $request->id_caja; 
+        $tasa_bcv = bcv_rate('USD');
 
         if (!$id_caja) {
             return redirect()->back()->with('error', 'Debe especificar una caja válida para procesar la venta.');
         }
 
         // Mapeamos los campos individuales del form al array de referencias
-        $referenciasProcesadas = [];
-        
-        if ($request->pago_zelle_usd > 0) {
-            $referenciasProcesadas[] = [
-                'metodo' => 'Zelle',
+        // 1. Inicializar array local
+        $pagosRegistrar = [];
+        $tasa = $venta->tasa_cambio; // Tasa de la transacción
+
+        // 2. Mapear usando los nombres REALES del formulario
+        if ($request->filled('pago_zelle') && $request->pago_zelle > 0) {
+            $pagosRegistrar[] = [
+                'metodo'     => 'Zelle',
                 'referencia' => $request->referencia_zelle ?? 'S/R',
-                'monto_usd' => $request->pago_zelle_usd,
-                'monto_bs' => 0
-            ];
-        }
-        if ($request->pago_punto_bs > 0) {
-            $referenciasProcesadas[] = [
-                'metodo' => 'Punto',
-                'referencia' => $request->referencia_punto ?? 'S/R',
-                'monto_bs' => $request->pago_punto_bs,
-                'monto_usd' => 0
-            ];
-        }
-        if ($request->pago_pagomovil_bs > 0) {
-            $referenciasProcesadas[] = [
-                'metodo' => 'Pago Movil',
-                'referencia' => $request->referencia_pagomovil ?? 'S/R',
-                'monto_bs' => $request->pago_pagomovil_bs,
-                'monto_usd' => 0
+                'monto_usd'  => (float) $request->pago_zelle,
+                'monto_bs'   => 0,
             ];
         }
 
-        $request->merge(['referencias' => array_merge($request->referencias ?? [], $referenciasProcesadas)]);
-        $tasa_bcv = bcv_rate('USD');
+        if ($request->filled('pago_bs_punto') && $request->pago_bs_punto > 0) {
+            $montoBs = (float) $request->pago_bs_punto;
+            $pagosRegistrar[] = [
+                'metodo'     => 'Punto',
+                'referencia' => $request->referencia_punto ?? 'S/R',
+                'monto_bs'   => $montoBs,
+                'monto_usd'  => $tasa > 0 ? ($montoBs / $tasa) : 0,
+            ];
+        }
+
+        if ($request->filled('pago_bs_pagomovil') && $request->pago_bs_pagomovil > 0) {
+            $montoBs = (float) $request->pago_bs_pagomovil;
+            $pagosRegistrar[] = [
+                'metodo'     => 'Pago Movil',
+                'referencia' => $request->referencia_pagomovil ?? 'S/R',
+                'monto_bs'   => $montoBs,
+                'monto_usd'  => $tasa > 0 ? ($montoBs / $tasa) : 0,
+            ];
+        }
+
+        // 3. Iteración e inserción limpia en BD
+        foreach ($pagosRegistrar as $pago) {
+            $venta->detallesPago()->create($pago);
+        }
 
         DB::beginTransaction();
         try {
@@ -355,28 +391,39 @@ public function create()
             }
 
             // 6. Lógica de ABONO AUTOMÁTICO
-            if ($request->has('aplica_abono') && $request->monto_excedente > 0) {
+            if ($request->has('pago_excedente_abono') && $request->filled('monto_excedente') && $request->monto_excedente > 0) {
+
+                // 1. Buscar el crédito pendiente del cliente
                 $creditoOld = Credito::where('id_cliente', $request->id_cliente)
                                     ->where('estado', 'pendiente')
                                     ->lockForUpdate()
                                     ->first();
 
                 if ($creditoOld) {
+                    $montoExcedente = (float) $request->monto_excedente;
+
+                    // 2. Crear el registro en tu modelo real AbonoCredito
                     AbonoCredito::create([
                         'id_credito'        => $creditoOld->id,
-                        'id_user'           => $user->id,
-                        'id_caja'           => $id_caja,
-                        'monto_pagado_usd'  => $request->monto_excedente,
-                        'pago_usd_efectivo' => $request->exc_usd_efectivo ?? 0,
-                        'pago_bs_efectivo'  => $request->exc_bs_efectivo ?? 0,
-                        'detalles'          => "Abono automático desde Venta: " . $codigo,
+                        'id_user'           => auth()->id(), // o $user->id
+                        'id_caja'           => $request->id_caja ?? $id_caja,
+                        'monto_pagado_usd'  => $montoExcedente,
+                        // Fallback: Si el JS no envía 'exc_*', toma el valor global de efectivo o 0
+                        'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
+                        'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
+                        'detalles'          => "Abono automático desde Venta: " . ($codigo ?? $venta->id),
                         'estado'            => 'Realizado'
                     ]);
 
-                    $creditoOld->decrement('saldo_pendiente', $request->monto_excedente);
+                    // 3. Descontar del saldo del crédito
+                    $creditoOld->decrement('saldo_pendiente', $montoExcedente);
 
+                    // 4. MANTENER LA CONDICIONAL: Marcar como pagado si el saldo llega a 0
                     if ($creditoOld->fresh()->saldo_pendiente <= 0) {
-                        $creditoOld->update(['estado' => 'pagado', 'saldo_pendiente' => 0]);
+                        $creditoOld->update([
+                            'estado'          => 'pagado',
+                            'saldo_pendiente' => 0
+                        ]);
                     }
                 }
             }
