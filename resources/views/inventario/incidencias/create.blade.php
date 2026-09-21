@@ -109,6 +109,11 @@
                         <option value="Devolucion">Devolucion</option>
                         <option value="Entrada">Entrada</option>
                       </optgroup>
+
+                      <optgroup label="Desincorporaciones Neutras">
+                        <option value="Perdido en Tránsito">Perdido en Tránsito</option>
+                        <option value="Ajuste Informativo">Ajuste Informativo</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>

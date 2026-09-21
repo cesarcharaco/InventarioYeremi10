@@ -586,7 +586,25 @@ FROM ventas WHERE id = 440 AND NOT EXISTS (SELECT 1 FROM creditos WHERE id_venta
 
 
 
-
+ALTER TABLE `incidencias` 
+MODIFY COLUMN `tipo` ENUM(
+    'Dañado de Fábrica',
+    'Dañado en Local',
+    'Dañado y Devuelto',
+    'Perdido',
+    'Vencido',
+    'Salida',
+    'Egreso',
+    'Retiro',
+    'Desincorporacion',
+    'Otro',
+    'Ingreso',
+    'Reincorporacion',
+    'Devolucion',
+    'Entrada',
+    'Perdido en Tránsito',
+    'Ajuste Informativo'
+) NOT NULL;
 
 
 

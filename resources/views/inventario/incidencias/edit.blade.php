@@ -125,6 +125,11 @@
                         <option value="Devolucion" {{ old('tipo', $incidencia->tipo) == 'Devolucion' ? 'selected' : '' }}>Devolucion</option>
                         <option value="Entrada" {{ old('tipo', $incidencia->tipo) == 'Entrada' ? 'selected' : '' }}>Entrada</option>
                       </optgroup>
+
+                      <optgroup label="Desincorporaciones Neutras">
+                        <option value="Perdido en Tránsito" {{ old('tipo', $incidencia->tipo) == 'Perdido en Tránsito' ? 'selected' : '' }}>Perdido en Tránsito</option>
+                        <option value="Ajuste Informativo" {{ old('tipo', $incidencia->tipo) == 'Ajuste Informativo' ? 'selected' : '' }}>Ajuste Informativo</option>
+                      </optgroup>
                     </select>
                   </div>
                   </div>
