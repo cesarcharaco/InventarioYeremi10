@@ -106,13 +106,27 @@
                   <div class="form-group">
                     <label class="control-label">Tipo de Incidencia <b style="color: red;">*</b></label>
                     <select name="tipo" id="tipo" class="form-control" required>
-                      <option value="Dañado de Fábrica" @if($incidencia->tipo == "Dañado de Fábrica") selected @endif>Dañado de Fábrica</option>
-                      <option value="Dañado en Local" @if($incidencia->tipo == "Dañado en Local") selected @endif>Dañado en Local</option>
-                      <option value="Dañado y Devuelto" @if($incidencia->tipo == "Dañado y Devuelto") selected @endif>Dañado y Devuelto</option>
-                      <option value="Perdido" @if($incidencia->tipo == "Perdido") selected @endif>Perdido</option>
-                      <option value="Vencido" @if($incidencia->tipo == "Vencido") selected @endif>Vencido</option>
-                      <option value="Otro" @if($incidencia->tipo == "Otro") selected @endif>Otro (Especificar en observación)</option>
+                      <optgroup label="Salidas / Desincorporaciones (Resta Stock)">
+                        <option value="Dañado de Fábrica" {{ old('tipo', $incidencia->tipo) == 'Dañado de Fábrica' ? 'selected' : '' }}>Dañado de Fábrica</option>
+                        <option value="Dañado en Local" {{ old('tipo', $incidencia->tipo) == 'Dañado en Local' ? 'selected' : '' }}>Dañado en Local</option>
+                        <option value="Perdido" {{ old('tipo', $incidencia->tipo) == 'Perdido' ? 'selected' : '' }}>Perdido</option>
+                        <option value="Vencido" {{ old('tipo', $incidencia->tipo) == 'Vencido' ? 'selected' : '' }}>Vencido</option>
+                        <option value="Salida" {{ old('tipo', $incidencia->tipo) == 'Salida' ? 'selected' : '' }}>Salida</option>
+                        <option value="Egreso" {{ old('tipo', $incidencia->tipo) == 'Egreso' ? 'selected' : '' }}>Egreso</option>
+                        <option value="Retiro" {{ old('tipo', $incidencia->tipo) == 'Retiro' ? 'selected' : '' }}>Retiro</option>
+                        <option value="Desincorporacion" {{ old('tipo', $incidencia->tipo) == 'Desincorporacion' ? 'selected' : '' }}>Desincorporacion</option>
+                        <option value="Otro" {{ old('tipo', $incidencia->tipo) == 'Otro' ? 'selected' : '' }}>Otro (Especificar en observación)</option>
+                      </optgroup>
+
+                      <optgroup label="Entradas / Reincorporaciones (Suma Stock)">
+                        <option value="Dañado y Devuelto" {{ old('tipo', $incidencia->tipo) == 'Dañado y Devuelto' ? 'selected' : '' }}>Dañado y Devuelto</option>
+                        <option value="Ingreso" {{ old('tipo', $incidencia->tipo) == 'Ingreso' ? 'selected' : '' }}>Ingreso</option>
+                        <option value="Reincorporacion" {{ old('tipo', $incidencia->tipo) == 'Reincorporacion' ? 'selected' : '' }}>Reincorporacion</option>
+                        <option value="Devolucion" {{ old('tipo', $incidencia->tipo) == 'Devolucion' ? 'selected' : '' }}>Devolucion</option>
+                        <option value="Entrada" {{ old('tipo', $incidencia->tipo) == 'Entrada' ? 'selected' : '' }}>Entrada</option>
+                      </optgroup>
                     </select>
+                  </div>
                   </div>
                 </div>
 

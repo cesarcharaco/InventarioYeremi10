@@ -88,12 +88,27 @@
                   <div class="form-group">
                     <label class="control-label">Tipo de Incidencia <b style="color: red;">*</b></label>
                     <select name="tipo" id="tipo" class="form-control" required>
-                      <option value="Dañado de Fábrica">Dañado de Fábrica</option>
-                      <option value="Dañado en Local">Dañado en Local</option>
-                      <option value="Dañado y Devuelto">Dañado y Devuelto</option>
-                      <option value="Perdido">Perdido</option>
-                      <option value="Vencido">Vencido</option>
-                      <option value="Otro">Otro (Especificar en observación)</option>
+                      <option value="">-- Seleccione el tipo --</option>
+
+                      <optgroup label="Salidas / Desincorporaciones (Resta Stock)">
+                        <option value="Dañado de Fábrica">Dañado de Fábrica</option>
+                        <option value="Dañado en Local">Dañado en Local</option>
+                        <option value="Perdido">Perdido</option>
+                        <option value="Vencido">Vencido</option>
+                        <option value="Salida">Salida</option>
+                        <option value="Egreso">Egreso</option>
+                        <option value="Retiro">Retiro</option>
+                        <option value="Desincorporacion">Desincorporacion</option>
+                        <option value="Otro">Otro (Especificar en observación)</option>
+                      </optgroup>
+
+                      <optgroup label="Entradas / Reincorporaciones (Suma Stock)">
+                        <option value="Dañado y Devuelto">Dañado y Devuelto</option>
+                        <option value="Ingreso">Ingreso</option>
+                        <option value="Reincorporacion">Reincorporacion</option>
+                        <option value="Devolucion">Devolucion</option>
+                        <option value="Entrada">Entrada</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>
@@ -144,7 +159,7 @@
 @section('scripts')
 <script type="text/javascript">
 $(document).ready(function() {
-    $('.select2').select2({ width: '100\%' });$('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
+    $('.select2').select2({ width: '100%' });$('.datepicker').datepicker({ format: "yyyy-mm-dd", autoclose: true, endDate: "0d" });
 
     const ui = {
         cantidad:         $("#cantidad"),

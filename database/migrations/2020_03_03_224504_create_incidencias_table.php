@@ -23,14 +23,21 @@ class CreateIncidenciasTable extends Migration
             
             $table->integer('cantidad');
             $table->enum('tipo', [
-                'Dañado de Fábrica', 
-                'Dañado en Local', 
-                'Dañado y Devuelto', 
-                'Perdido', 
+                'Dañado de Fábrica',
+                'Dañado en Local',
+                'Dañado y Devuelto',
+                'Perdido',
                 'Vencido',
-                'Otro'
+                'Salida',
+                'Egreso',
+                'Retiro',
+                'Desincorporacion',
+                'Otro',
+                'Ingreso',
+                'Reincorporacion',
+                'Devolucion',
+                'Entrada',
             ]);
-            
             $table->text('observacion')->nullable();
             $table->date('fecha_incidencia');
             
