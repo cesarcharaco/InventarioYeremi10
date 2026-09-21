@@ -37,6 +37,8 @@ class CreateIncidenciasTable extends Migration
                 'Reincorporacion',
                 'Devolucion',
                 'Entrada',
+                'Perdido en Tránsito',
+                'Ajuste Informativo',
             ]);
             $table->text('observacion')->nullable();
             $table->date('fecha_incidencia');

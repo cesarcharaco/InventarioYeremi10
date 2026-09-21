@@ -45,11 +45,20 @@ class IncidenciasController extends Controller
         'Entrada',
     ];
 
+    private const TIPOS_NEUTRO = [
+        'Perdido en Tránsito',
+        'Ajuste Informativo',
+    ];
+
     private function esResta(string $tipo): bool
     {
         return in_array($tipo, self::TIPOS_RESTA, true);
     }
 
+    private function esSuma(string $tipo): bool
+    {
+        return in_array($tipo, self::TIPOS_SUMA, true);
+    }
     /**
      * Autorización por local: admin/almacenista gestionan todo; el encargado
      * solo sus locales activos en la pivote users_has_local.
@@ -69,7 +78,7 @@ class IncidenciasController extends Controller
 
     private function reglasValidacionTipo(): array
     {
-        return ['required', Rule::in(array_merge(self::TIPOS_RESTA, self::TIPOS_SUMA))];
+        return ['required', Rule::in(array_merge(self::TIPOS_RESTA, self::TIPOS_SUMA, self::TIPOS_NEUTRO))];
     }
 
     public function index()
@@ -157,9 +166,18 @@ class IncidenciasController extends Controller
             $codigo = $this->generarCodigoUnico();
 
             // 1. Modificar stock según el tipo
+            $esResta = $this->esResta($request->tipo);
+            $esSuma  = $this->esSuma($request->tipo);
+
+            // Solo modifica el stock si la opción NO es neutra
             if ($esResta) {
+                if ($request->cantidad > $stockRecord->cantidad) {
+                    return redirect()->back()
+                        ->with('warning', 'Stock insuficiente. Solo tienes ' . $stockRecord->cantidad . ' unidades disponibles.')
+                        ->withInput();
+                }
                 $stockRecord->decrement('cantidad', $request->cantidad);
-            } else {
+            } elseif ($esSuma) {
                 $stockRecord->increment('cantidad', $request->cantidad);
             }
 
@@ -186,7 +204,7 @@ class IncidenciasController extends Controller
                     'insumo'     => $stockRecord->insumo->producto ?? 'N/A',
                     'cantidad'   => $request->cantidad,
                     'tipo'       => $request->tipo,
-                    'operacion'  => $esResta ? 'decremento' : 'incremento',
+                    'operacion'  => $esResta ? 'decremento' : ($esSuma ? 'incremento' : 'neutro'),
                     'local'      => $stockRecord->local->nombre ?? 'N/A',
                 ],
             ]);
@@ -228,7 +246,7 @@ class IncidenciasController extends Controller
 
     public function update(Request $request, $id)
     {
-        // Unificado con el permiso que valida la vista edit (antes: gestionar-insumos)
+        // Unificado con el permiso que valida la vista edit
         Gate::authorize('registrar-incidencia');
 
         $request->validate([
@@ -262,39 +280,56 @@ class IncidenciasController extends Controller
                 }
             }
 
+            // Evaluar tipos anteriores y nuevos (Resta, Suma o Neutro)
             $esRestaAnterior = $this->esResta($incidencia->tipo);
+            $esSumaAnterior  = $this->esSuma($incidencia->tipo);
+
             $esRestaNueva    = $this->esResta($request->tipo);
+            $esSumaNueva     = $this->esSuma($request->tipo);
 
             // 1. Factibilidad de la REVERSIÓN:
-            // si el tipo anterior SUMÓ stock, hay que poder quitarlo sin quedar en negativo.
-            if (!$esRestaAnterior && $stockViejo->cantidad < $incidencia->cantidad) {
+            // Si el tipo anterior SUMÓ stock, debemos poder descontarlo del origen sin dejarlo en negativo.
+            if ($esSumaAnterior && $stockViejo->cantidad < $incidencia->cantidad) {
                 return redirect()->back()
                     ->with('error', "No se puede editar: el stock actual del registro original ({$stockViejo->cantidad}) es menor que la cantidad registrada ({$incidencia->cantidad}). Anule la incidencia en su lugar.")
                     ->withInput();
             }
 
-            // 2. Stock del NUEVO destino si la nueva operación resta
-            if ($esRestaNueva && $request->cantidad > $stockNuevo->cantidad) {
+            // Calcular el stock disponible proyectado en el destino tras simular la reversión
+            $stockDisponibleNuevo = $stockNuevo->cantidad;
+            if (!$huboCambio) {
+                if ($esRestaAnterior) {
+                    $stockDisponibleNuevo += $incidencia->cantidad;
+                } elseif ($esSumaAnterior) {
+                    $stockDisponibleNuevo -= $incidencia->cantidad;
+                }
+            }
+
+            // 2. Factibilidad de la NUEVA OPERACIÓN:
+            // Si el nuevo tipo RESTA stock, validamos que haya suficiente en el destino
+            if ($esRestaNueva && $request->cantidad > $stockDisponibleNuevo) {
                 return redirect()->back()
-                    ->with('warning', "Stock insuficiente. Máximo disponible en el destino: {$stockNuevo->cantidad}")
+                    ->with('warning', "Stock insuficiente. Máximo disponible en el destino: {$stockDisponibleNuevo}")
                     ->withInput();
             }
 
             // 3. Reversión física en el registro ORIGINAL
             if ($esRestaAnterior) {
                 $stockViejo->increment('cantidad', $incidencia->cantidad);
-            } else {
+            } elseif ($esSumaAnterior) {
                 $stockViejo->decrement('cantidad', $incidencia->cantidad);
             }
+            // Si era neutra previa, no se altera $stockViejo
 
-            // 4. Aplicación en el registro DESTINO (puede ser el mismo)
+            // 4. Aplicación en el registro DESTINO (puede ser el mismo registro o uno nuevo)
             if ($esRestaNueva) {
                 $stockNuevo->decrement('cantidad', $request->cantidad);
-            } else {
+            } elseif ($esSumaNueva) {
                 $stockNuevo->increment('cantidad', $request->cantidad);
             }
+            // Si es neutra nueva, no se altera $stockNuevo
 
-            // 5. Actualizar la incidencia (incluida la ubicación si cambió)
+            // 5. Actualizar la incidencia
             $incidencia->update([
                 'id_insumo'        => $stockNuevo->id_insumo,
                 'id_local'         => $stockNuevo->id_local,
@@ -306,17 +341,17 @@ class IncidenciasController extends Controller
 
             // 6. Auditoría de la edición
             HistorialIncidencias::create([
-                'codigo'              => $incidencia->codigo,
-                'accion'              => 'edicion',
-                'user_id'             => auth()->id(),
+                'codigo'               => $incidencia->codigo,
+                'accion'               => 'edicion',
+                'user_id'              => auth()->id(),
                 'observacion_snapshot' => $request->motivo_edicion ?? 'Edición de valores: ' . $request->observacion,
-                'datos_snapshot'      => [
+                'datos_snapshot'       => [
                     'insumo_id'  => $stockNuevo->id_insumo,
                     'id_insumoc' => $stockNuevo->id,
                     'insumo'     => $stockNuevo->insumo->producto ?? 'N/A',
                     'cantidad'   => $incidencia->cantidad,
                     'tipo'       => $incidencia->tipo,
-                    'operacion'  => $esRestaNueva ? 'decremento' : 'incremento',
+                    'operacion'  => $esRestaNueva ? 'decremento' : ($esSumaNueva ? 'incremento' : 'neutro'),
                     'local'      => $stockNuevo->local->nombre ?? 'N/A',
                     'traslado'   => $huboCambio,
                 ],
@@ -459,20 +494,20 @@ class IncidenciasController extends Controller
             if ($stockRecord) {
                 $cantidadMovida = $datos['cantidad'] ?? 0;
 
-                // Preferir la operación almacenada en el snapshot; fallback por tipo
                 $operacion = $datos['operacion']
-                    ?? ($this->esResta($datos['tipo'] ?? '') ? 'decremento' : 'incremento');
+                    ?? ($this->esResta($datos['tipo'] ?? '') ? 'decremento' : ($this->esSuma($datos['tipo'] ?? '') ? 'incremento' : 'neutro'));
 
                 if ($operacion === 'decremento') {
-                    // La incidencia había restado stock → devolverlo
+                    // Había restado stock → devolverlo
                     $stockRecord->increment('cantidad', $cantidadMovida);
-                } else {
-                    // La incidencia había sumado stock → quitarlo (con guard anti-negativo)
+                } elseif ($operacion === 'incremento') {
+                    // Había sumado stock → quitarlo
                     if ($cantidadMovida > $stockRecord->cantidad) {
                         throw new \Exception("Stock insuficiente para deshacer esta entrada. Stock actual: {$stockRecord->cantidad}");
                     }
                     $stockRecord->decrement('cantidad', $cantidadMovida);
                 }
+                // Si la operación es 'neutro', no se realiza ningún ajuste físico en $stockRecord
             }
 
             HistorialIncidencias::create([
