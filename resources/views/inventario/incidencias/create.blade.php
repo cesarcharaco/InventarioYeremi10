@@ -1,14 +1,8 @@
 @extends('layouts.app')
 @section('title') Registro de Incidencia @endsection
 @section('css')
-
 <style>
-    /* Forzar que Select2 ocupe el 100% del ancho del contenedor */
-    .select2-container {
-        width: 100% !important;
-    }
-
-    /* Forzar la altura y padding del Select2 para que coincida con los form-control */
+    .select2-container { width: 100% !important; }
     .select2-container--default .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
         padding: 0.375rem 0.75rem !important;
@@ -26,10 +20,11 @@
     }
     .select2-container--default .select2-results__option--highlighted[aria-selected] {
         background-color: #63E2F7 !important;
-        color: #0f172a !important; /* Texto oscuro para garantizar alto contraste y legibilidad */
+        color: #0f172a !important;
     }
 </style>
 @endsection
+
 @section('content')
 <main class="app-content">
   @cannot('registrar-incidencia')
@@ -70,7 +65,7 @@
                     <label class="control-label">Seleccione Local / Depósito <b style="color: red;">*</b></label>
                     <select name="id_local" id="id_local" class="form-control select2" required>
                       <option value="">-- Seleccione un local --</option>
-                      @foreach($locales as $local)
+                      @foreach($locales as$local)
                         <option value="{{ $local->id }}">{{ $local->nombre }}</option>
                       @endforeach
                     </select>
@@ -165,12 +160,11 @@ $(document).ready(function() {
     };
 
     const allInsumos = @json($insumos);
+    const tiposResta = ['Dañado de Fábrica', 'Dañado en Local', 'Perdido', 'Vencido', 'Salida', 'Egreso', 'Retiro', 'Desincorporacion', 'Otro'];
     let selectedMaxStock = 0;
 
-    // Al cambiar de local
     ui.local.on('change', function() {
         const localId = $(this).val();
-        
         ui.buscadorInsumo.val('').prop('disabled', !localId);
         ui.insumoHidden.val('');
         ui.seleccionInfo.text('');
@@ -182,11 +176,9 @@ $(document).ready(function() {
         } else {
             ui.buscadorInsumo.attr('placeholder', 'Escribe el serial o nombre del insumo...');
         }
-        
         validateForm();
     });
 
-    // Autocompletado al escribir en el buscador de insumos
     ui.buscadorInsumo.on('keyup', function() {
         const localId = ui.local.val();
         const q = $(this).val().toLowerCase();
@@ -198,37 +190,54 @@ $(document).ready(function() {
 
         const filtrados = allInsumos.filter(item => {
             if (item.id_local != localId) return false;
-            const texto = `[${item.serial}] ${item.producto} ${item.descripcion}`.toLowerCase();
+            const texto = `[${item.serial}] ${item.producto} ${item.descripcion || ''}`.toLowerCase();
             return texto.includes(q);
         });
 
-        let html = '';
         if (filtrados.length === 0) {
-            html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
-        } else {
-            filtrados.forEach(item => {
-                html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id_insumoc}, '${item.serial}', '${item.producto}', '${item.descripcion}', ${item.cantidad}); return false;">
-                            <strong>[${item.serial}]</strong> ${item.producto} - ${item.descripcion} | <span class="text-info">Disponible: ${item.cantidad}</span>
-                         </a>`;
-            });
+            ui.resultadosInsumo.html('<div class="list-group-item text-muted">No se encontraron insumos</div>').show();
+            return;
         }
-        ui.resultadosInsumo.html(html).show();
+
+        let container = $('<div>');
+        filtrados.forEach(item => {
+            let itemLink = $('<a>')
+                .attr('href', '#')
+                .addClass('list-group-item list-group-item-action btn-seleccionar-insumo')
+                .attr('data-id', item.id_insumoc)
+                .attr('data-serial', item.serial)
+                .attr('data-producto', item.producto)
+                .attr('data-descripcion', item.descripcion || '')
+                .attr('data-cantidad', item.cantidad)
+                .html(`<strong>[${item.serial}]</strong> ${item.producto} ${item.descripcion ? '- ' + item.descripcion : ''} | <span class="text-info">Disponible: ${item.cantidad}</span>`);
+            container.append(itemLink);
+        });
+
+        ui.resultadosInsumo.html(container.html()).show();
     });
 
-    // Función global para capturar la selección del item
-    window.seleccionarInsumo = function(id, serial, producto, descripcion, cantidad) {
+    $(document).on('click', '.btn-seleccionar-insumo', function(e) {
+        e.preventDefault();
+        const el = $(this);
+        const id = el.data('id');
+        const serial = el.data('serial');
+        const producto = el.data('producto');
+        const descripcion = el.data('descripcion');
+        const cantidad = parseInt(el.data('cantidad')) || 0;
+
         ui.insumoHidden.val(id);
         selectedMaxStock = cantidad;
         ui.buscadorInsumo.val('');
         ui.resultadosInsumo.hide();
-        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} - ${descripcion} (Stock: ${cantidad})`);
+        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} ${descripcion ? '- ' + descripcion : ''} (Stock: ${cantidad})`);
         validateForm();
-    };
+    });
 
     const validateForm = () => {
         const max = selectedMaxStock;
         const val = parseInt(ui.cantidad.val()) || 0;
         const tipo = ui.tipo.val();
+        const esResta = tiposResta.includes(tipo);
         
         let error = "";
         let isInvalid = false;
@@ -238,8 +247,8 @@ $(document).ready(function() {
         } else if (val <= 0) {
             error = "La cantidad debe ser mayor a 0";
             isInvalid = true;
-        } else if (val > max) {
-            error = `No hay suficiente stock (Máximo: ${max})`;
+        } else if (esResta && val > max) {
+            error = `No hay suficiente stock (Máximo disponible: ${max})`;
             isInvalid = true;
         }
 

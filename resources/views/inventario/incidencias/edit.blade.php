@@ -1,9 +1,7 @@
 @extends('layouts.app')
 @section('title') Actualización de Incidencia @endsection
 @section('css')
-
 <style>
-    /* Forzar la altura y padding del Select2 para que coincida con los form-control */
     .select2-container--default .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
         padding: 0.375rem 0.75rem !important;
@@ -21,10 +19,11 @@
     }
     .select2-container--default .select2-results__option--highlighted[aria-selected] {
         background-color: #63E2F7 !important;
-        color: #0f172a !important; /* Texto oscuro para garantizar alto contraste y legibilidad */
+        color: #0f172a !important;
     }
 </style>
 @endsection
+
 @section('content')
 <main class="app-content">
   @cannot('registrar-incidencia')
@@ -58,16 +57,15 @@
                 @csrf
                 
                 @php
-                    // Buscamos el insumo relacionando el id_insumo e id_local guardados en la incidencia
-                    $insumoActual = $insumos->first(function ($item) use ($incidencia) {
-                        return $item->id_real_insumo == $incidencia->id_insumo && $item->id_local == $incidencia->id_local;
+                    $insumoActual =$insumos->first(function ($item) use ($incidencia) {
+                        return $item->id_real_insumo ==$incidencia->id_insumo && $item->id_local ==$incidencia->id_local;
                     });
 
-                    $localActualId = $insumoActual ? $insumoActual->id_local : $incidencia->id_local;
+                    $localActualId =$insumoActual ? $insumoActual->id_local :$incidencia->id_local;
                     $localActualNombre = $insumoActual ? $insumoActual->local_nombre : 'No asignado';
-                    $detalleInsumoActual = $insumoActual ? "{$insumoActual->producto} | Serial: {$insumoActual->serial}" . ($insumoActual->descripcion ? " | {$insumoActual->descripcion}" : "") : 'No asignado';
+                    $detalleInsumoActual =$insumoActual ? "{$insumoActual->producto} \vert{} Serial: {$insumoActual->serial}" . ($insumoActual->descripcion ? " \vert{} {$insumoActual->descripcion}" : "") : 'No asignado';
                     
-                    // Obtenemos el id_insumoc exacto para que JavaScript lo preseleccione
+                    // Clave calculada para el script JS de edición
                     $currentInsumoCtrolId = $insumoActual ? $insumoActual->id_insumoc : '';
                 @endphp
 
@@ -80,8 +78,8 @@
                       </label>
                       <select name="id_local" id="id_local" class="form-control select2" required>
                         <option value="">-- Seleccione un local --</option>
-                        @foreach($locales as $local)
-                          <option value="{{ $local->id }}" @if($local->id == $localActualId) selected @endif>
+                        @foreach($locales as$local)
+                          <option value="{{ $local->id }}" @if($local->id ==$localActualId) selected @endif>
                             {{ $local->nombre }}
                           </option>
                         @endforeach
@@ -180,11 +178,13 @@ $(document).ready(function() {
     };
 
     const allInsumos = @json($insumos);
-    const currentInsumoId = "{{ $incidencia->id_insumoc }}";
+    const tiposResta = ['Dañado de Fábrica', 'Dañado en Local', 'Perdido', 'Vencido', 'Salida', 'Egreso', 'Retiro', 'Desincorporacion', 'Otro'];
+    
+    // CORREGIDO: Usar la variable PHP previamente calculada $currentInsumoCtrolId
+    const currentInsumoId = "{{ $currentInsumoCtrolId }}";
     const currentIncidenciaCantidad = parseInt("{{ $incidencia->cantidad }}") || 0;
     let selectedMaxStock = 0;
 
-    // Cargar estado inicial del insumo registrado
     const initialItem = allInsumos.find(item => item.id_insumoc == currentInsumoId);
     if (initialItem) {
         let maxStock = (parseInt(initialItem.cantidad) || 0) + currentIncidenciaCantidad;
@@ -192,7 +192,6 @@ $(document).ready(function() {
         ui.seleccionInfo.text(`Registrado: [${initialItem.serial}] ${initialItem.producto} (Stock máx: ${maxStock})`);
     }
 
-    // Evento al cambiar de local
     ui.local.on('change', function() {
         const localId = $(this).val();
         const originalLocalId = "{{ $insumoActual ? $insumoActual->id_local :$incidencia->id_local }}";
@@ -214,7 +213,6 @@ $(document).ready(function() {
         validateForm();
     });
 
-    // Búsqueda en vivo
     ui.buscadorInsumo.on('keyup', function() {
         const localId = ui.local.val();
         const q = $(this).val().toLowerCase();
@@ -226,40 +224,59 @@ $(document).ready(function() {
 
         const filtrados = allInsumos.filter(item => {
             if (item.id_local != localId) return false;
-            const texto = `[${item.serial}] ${item.producto} ${item.descripcion}`.toLowerCase();
+            const texto = `[${item.serial}] ${item.producto} ${item.descripcion || ''}`.toLowerCase();
             return texto.includes(q);
         });
 
-        let html = '';
         if (filtrados.length === 0) {
-            html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
-        } else {
-            filtrados.forEach(item => {
-                let maxStock = parseInt(item.cantidad) || 0;
-                if (item.id_insumoc == currentInsumoId) {
-                    maxStock += currentIncidenciaCantidad;
-                }
-                html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id_insumoc}, '${item.serial}', '${item.producto}', '${item.descripcion}', ${maxStock}); return false;">
-                            <strong>[${item.serial}]</strong> ${item.producto} - ${item.descripcion} | <span class="text-info">Disponible: ${maxStock}</span>
-                         </a>`;
-            });
+            ui.resultadosInsumo.html('<div class="list-group-item text-muted">No se encontraron insumos</div>').show();
+            return;
         }
-        ui.resultadosInsumo.html(html).show();
+
+        let container = $('<div>');
+        filtrados.forEach(item => {
+            let maxStock = parseInt(item.cantidad) || 0;
+            if (item.id_insumoc == currentInsumoId) {
+                maxStock += currentIncidenciaCantidad;
+            }
+
+            let itemLink = $('<a>')
+                .attr('href', '#')
+                .addClass('list-group-item list-group-item-action btn-seleccionar-insumo')
+                .attr('data-id', item.id_insumoc)
+                .attr('data-serial', item.serial)
+                .attr('data-producto', item.producto)
+                .attr('data-descripcion', item.descripcion || '')
+                .attr('data-maxstock', maxStock)
+                .html(`<strong>[${item.serial}]</strong> ${item.producto} ${item.descripcion ? '- ' + item.descripcion : ''} | <span class="text-info">Disponible: ${maxStock}</span>`);
+            container.append(itemLink);
+        });
+
+        ui.resultadosInsumo.html(container.html()).show();
     });
 
-    window.seleccionarInsumo = function(id, serial, producto, descripcion, maxStock) {
+    $(document).on('click', '.btn-seleccionar-insumo', function(e) {
+        e.preventDefault();
+        const el = $(this);
+        const id = el.data('id');
+        const serial = el.data('serial');
+        const producto = el.data('producto');
+        const descripcion = el.data('descripcion');
+        const maxStock = parseInt(el.data('maxstock')) || 0;
+
         ui.insumoHidden.val(id);
         selectedMaxStock = maxStock;
         ui.buscadorInsumo.val('');
         ui.resultadosInsumo.hide();
-        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} - ${descripcion} (Stock: ${maxStock})`);
+        ui.seleccionInfo.text(`Seleccionado: [${serial}] ${producto} ${descripcion ? '- ' + descripcion : ''} (Stock: ${maxStock})`);
         validateForm();
-    };
+    });
 
     const validateForm = () => {
         const max = selectedMaxStock;
         const val = parseInt(ui.cantidad.val()) || 0;
         const tipo = ui.tipo.val();
+        const esResta = tiposResta.includes(tipo);
         
         let error = "";
         let isInvalid = false;
@@ -269,8 +286,8 @@ $(document).ready(function() {
         } else if (val <= 0) {
             error = "La cantidad debe ser mayor a 0";
             isInvalid = true;
-        } else if (val > max) {
-            error = `No hay suficiente stock (Máximo: ${max})`;
+        } else if (esResta && val > max) {
+            error = `No hay suficiente stock (Máximo permitido: ${max})`;
             isInvalid = true;
         }
 
