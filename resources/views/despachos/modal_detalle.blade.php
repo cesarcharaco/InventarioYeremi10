@@ -26,7 +26,7 @@
                 <td>{{ $item->insumos->descripcion ?? 'N/A' }}</td>
                 <td class="text-center text-muted">{{ $item->cantidad_enviada }}</td>
                 <td class="text-center font-weight-bold">
-                    @if(in_array($despacho->estado, ['Recibido', 'Con Observaciones', 'recibido_con_incidencias']))
+                    @if(in_array($despacho->estado, ['Recibido', 'Cancelado', 'recibido_con_incidencias']))
                         <span class="{{ $item->cantidad_recibida < $item->cantidad_enviada ? 'text-danger' : 'text-success' }}">
                             {{ $item->cantidad_recibida }}
                         </span>

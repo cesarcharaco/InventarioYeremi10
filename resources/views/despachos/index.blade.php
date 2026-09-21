@@ -65,7 +65,7 @@
               <option value="Pendiente">Pendiente</option>
               <option value="En Tránsito">En Tránsito</option>
               <option value="Recibido">Recibido</option>
-              <option value="Con Observaciones">Con Observaciones</option>
+              <option value="recibido_con_incidencias">Recibido con Incidencias</option>
               <option value="Rechazado">Rechazado</option>
               <option value="Cancelado">Cancelado</option>
             </select>

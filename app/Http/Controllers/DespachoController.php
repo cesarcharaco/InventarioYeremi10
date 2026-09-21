@@ -3,20 +3,55 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Despachos;       
-use App\Models\DespachoDetalles; 
+use App\Models\Despachos;
+use App\Models\DespachoDetalles;
 use App\Models\Local;
-use App\Models\Insumos;         
-use App\Models\InsumosC;        
+use App\Models\Insumos;
+use App\Models\InsumosC;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Carbon\Carbon;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Notification; 
+use Illuminate\Support\Facades\Notification;
 use App\Notifications\DespachoNotification;
 use Yajra\DataTables\Facades\DataTables;
+
 class DespachoController extends Controller
 {
+    /**
+     * PARCHE #5 — Catálogo único de estados.
+     * Idealmente estas constantes deberían vivir en el modelo Despachos
+     * y consumirse desde ahí en badges, filtros y validaciones.
+     */
+    private const ESTADO_PENDIENTE = 'Pendiente';
+    private const ESTADO_TRANSITO  = 'En Tránsito';
+    private const ESTADO_RECIBIDO  = 'Recibido';
+    private const ESTADO_OBS       = 'recibido_con_incidencias';
+    private const ESTADO_RECHAZADO = 'Rechazado';
+    private const ESTADO_CANCELADO = 'Cancelado';
+
+    /**
+     * PARCHE #4 — Generación de código server-side, dentro de la transacción.
+     * Recomendación adicional: agregar unique constraint a `despachos.codigo` en BD.
+     */
+    private function generarCodigo(string $prefijo): string
+    {
+        $ultimoId = (int) Despachos::max('id') + 1;
+        return $prefijo . date('Ymd') . '-' . str_pad($ultimoId, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Helper: locales asignados a un encargado (evita repetir el query de la pivote).
+     */
+    private function localesDelUsuario(User $user)
+    {
+        return DB::table('users_has_local')
+            ->where('id_user', $user->id)
+            ->pluck('id_local');
+    }
+
     /**
      * Muestra el historial de despachos
      */
@@ -26,12 +61,8 @@ class DespachoController extends Controller
 
         $user = auth()->user();
 
-        // Cargamos los locales para poblar los selectores de los filtros en la vista
         if ($user->role === User::ROLE_ENCARGADO) {
-            $localesIds = DB::table('users_has_local')
-                ->where('id_user', $user->id)
-                ->pluck('id_local');
-            
+            $localesIds = $this->localesDelUsuario($user);
             $locales = Local::whereIn('id', $localesIds)->get();
         } else {
             $locales = Local::all();
@@ -48,17 +79,14 @@ class DespachoController extends Controller
         Gate::authorize('ver-logistica');
 
         $user = auth()->user();
-        
-        // Iniciamos la consulta base con relaciones optimizadas
+
         $query = Despachos::with(['origen', 'destino'])
             ->select('despachos.*')
             ->orderBy('created_at', 'desc');
 
-        // 1. Blindaje por roles: Si es ENCARGADO, filtramos sus locales permitidos
+        // Blindaje por roles: el encargado solo ve despachos de sus locales
         if ($user->role === User::ROLE_ENCARGADO) {
-            $localesIds = DB::table('users_has_local')
-                ->where('id_user', $user->id)
-                ->pluck('id_local');
+            $localesIds = $this->localesDelUsuario($user);
 
             $query->where(function ($q) use ($localesIds) {
                 $q->whereIn('id_local_origen', $localesIds)
@@ -66,7 +94,6 @@ class DespachoController extends Controller
             });
         }
 
-        // 2. Aplicación de Filtros Personalizados
         if ($request->filled('fecha_desde')) {
             $query->whereDate('fecha_despacho', '>=', $request->fecha_desde);
         }
@@ -88,113 +115,105 @@ class DespachoController extends Controller
         }
 
         return DataTables::of($query)
-            ->addColumn('origen_nombre', function($row) {
+            ->addColumn('origen_nombre', function ($row) {
                 return $row->origen->nombre ?? 'N/D';
             })
-            ->addColumn('destino_nombre', function($row) {
+            ->addColumn('destino_nombre', function ($row) {
                 return $row->destino->nombre ?? 'N/D';
             })
-            ->editColumn('codigo', function($row) {
+            ->editColumn('codigo', function ($row) {
                 return '<strong class="text-primary">' . e($row->codigo) . '</strong>';
             })
-            ->editColumn('fecha_despacho', function($row) {
-                return $row->fecha_despacho ? \Carbon\Carbon::parse($row->fecha_despacho)->format('d/m/Y h:i A') : 'N/D';
+            ->editColumn('fecha_despacho', function ($row) {
+                return $row->fecha_despacho ? Carbon::parse($row->fecha_despacho)->format('d/m/Y h:i A') : 'N/D';
             })
-            ->editColumn('transportado_por', function($row) {
+            ->editColumn('transportado_por', function ($row) {
                 $html = e($row->transportado_por);
                 if ($row->vehiculo_placa) {
                     $html .= '<small class="text-muted d-block">Placa: ' . e($row->vehiculo_placa) . '</small>';
                 }
                 return $html;
             })
-            ->editColumn('estado', function($row) {
-                if ($row->estado == 'En Tránsito') {
-                    return '<span class="badge badge-warning text-dark p-2"><i class="fa fa-truck"></i> En Tránsito</span>';
-                } elseif ($row->estado == 'Recibido') {
-                    return '<span class="badge badge-success p-2"><i class="fa fa-check-circle"></i> Recibido</span>';
-                } elseif ($row->estado == 'Con Observaciones') {
-                    return '<span class="badge badge-info p-2"><i class="fa fa-exclamation-circle"></i> Con Observaciones</span>';
-                } elseif ($row->estado == 'Rechazado' || $row->estado == 'Cancelado') {
-                    return '<span class="badge badge-danger p-2"><i class="fa fa-times-circle"></i> ' . e($row->estado) . '</span>';
-                } elseif ($row->estado == 'Pendiente') {
-                    return '<span class="badge badge-secondary p-2"><i class="fa fa-clock"></i> Pendiente</span>';
-                } else {
-                    return '<span class="badge badge-secondary p-2">' . e($row->estado) . '</span>';
+            ->editColumn('estado', function ($row) {
+                // PARCHE #5: badges alineados con el catálogo único de estados
+                switch ($row->estado) {
+                    case self::ESTADO_TRANSITO:
+                        return '<span class="badge badge-warning text-dark p-2"><i class="fa fa-truck"></i> En Tránsito</span>';
+                    case self::ESTADO_RECIBIDO:
+                        return '<span class="badge badge-success p-2"><i class="fa fa-check-circle"></i> Recibido</span>';
+                    case self::ESTADO_OBS:
+                        return '<span class="badge badge-info p-2"><i class="fa fa-exclamation-circle"></i> Con Incidencias</span>';
+                    case self::ESTADO_RECHAZADO:
+                    case self::ESTADO_CANCELADO:
+                        return '<span class="badge badge-danger p-2"><i class="fa fa-times-circle"></i> ' . e($row->estado) . '</span>';
+                    case self::ESTADO_PENDIENTE:
+                        return '<span class="badge badge-secondary p-2"><i class="fa fa-clock"></i> Pendiente</span>';
+                    default:
+                        return '<span class="badge badge-secondary p-2">' . e($row->estado) . '</span>';
                 }
             })
-            ->addColumn('acciones', function($row) {
+            ->addColumn('acciones', function ($row) {
                 $html = '<div class="d-flex justify-content-center align-items-center" style="gap: 5px;">';
-                
-                // Botón Ver Detalle (Siempre disponible)
-                $html .= '<button class="btn btn-info btn-sm text-white" onclick="verDetalle('.$row->id.', \''.$row->codigo.'\')" title="Ver Detalle"><i class="fa fa-eye"></i></button>';
 
-                // Acciones exclusivas para solicitudes Pendientes
-                if ($row->estado == 'Pendiente') {
+                $html .= '<button class="btn btn-info btn-sm text-white" onclick="verDetalle(' . $row->id . ', \'' . $row->codigo . '\')" title="Ver Detalle"><i class="fa fa-eye"></i></button>';
+
+                if ($row->estado === self::ESTADO_PENDIENTE) {
                     if (auth()->user()->can('procesar-solicitud')) {
-                        $html .= '<button class="btn btn-primary btn-sm" onclick="procesarEnvioPendienteModal('.$row->id.')" title="Procesar y Enviar Solicitud"><i class="fa fa-paper-plane"></i></button>';   
+                        $html .= '<button class="btn btn-primary btn-sm" onclick="procesarEnvioPendienteModal(' . $row->id . ')" title="Procesar y Enviar Solicitud"><i class="fa fa-paper-plane"></i></button>';
                     }
                     if (auth()->user()->can('editar-solicitud')) {
-                        $html .= '<a href="'.route('despacho.solicitud.edit', $row->id).'" class="btn btn-warning btn-sm" title="Editar Solicitud Pendiente"><i class="fa fa-edit"></i></a>';
-                        $html .= '<button class="btn btn-danger btn-sm" onclick="eliminarSolicitud('.$row->id.')" title="Eliminar Solicitud"><i class="fa fa-trash"></i></button>';
+                        $html .= '<a href="' . route('despacho.solicitud.edit', $row->id) . '" class="btn btn-warning btn-sm" title="Editar Solicitud Pendiente"><i class="fa fa-edit"></i></a>';
+                        $html .= '<button class="btn btn-danger btn-sm" onclick="eliminarSolicitud(' . $row->id . ')" title="Eliminar Solicitud"><i class="fa fa-trash"></i></button>';
                     }
                 }
 
-                // Acciones exclusivas para despachos En Tránsito
-                if ($row->estado == 'En Tránsito') {
-                    /*if (auth()->user()->can('editar-despacho')) {
-                        $html .= '<a href="'.route('despacho.edit', $row->id).'" class="btn btn-warning btn-sm" title="Editar Despacho"><i class="fa fa-edit"></i></a>';
-                    }*/
+                if ($row->estado === self::ESTADO_TRANSITO) {
                     if (auth()->user()->can('eliminar-despacho')) {
-                        $html .= '<button class="btn btn-danger btn-sm" onclick="eliminarDespacho('.$row->id.')" title="Eliminar Despacho"><i class="fa fa-trash"></i></button>';
+                        $html .= '<button class="btn btn-danger btn-sm" onclick="eliminarDespacho(' . $row->id . ')" title="Eliminar Despacho"><i class="fa fa-trash"></i></button>';
                     }
                     if (auth()->user()->can('recibir-despacho')) {
-                        $html .= '<button class="btn btn-success btn-sm" onclick="confirmarRecepcion('.$row->id.')" title="Confirmar Recepción"><i class="fa fa-check-square"></i></button>';
+                        $html .= '<button class="btn btn-success btn-sm" onclick="confirmarRecepcion(' . $row->id . ')" title="Confirmar Recepción"><i class="fa fa-check-square"></i></button>';
                     }
-                }   
+                }
 
                 $html .= '</div>';
                 return $html;
             })
-            ->filterColumn('origen_nombre', function($q, $kw) {
-                $q->whereHas('origen', function($query) use ($kw) {
+            ->filterColumn('origen_nombre', function ($q, $kw) {
+                $q->whereHas('origen', function ($query) use ($kw) {
                     $query->where('nombre', 'LIKE', "%{$kw}%");
                 });
             })
-            ->filterColumn('destino_nombre', function($q, $kw) {
-                $q->whereHas('destino', function($query) use ($kw) {
+            ->filterColumn('destino_nombre', function ($q, $kw) {
+                $q->whereHas('destino', function ($query) use ($kw) {
                     $query->where('nombre', 'LIKE', "%{$kw}%");
                 });
             })
             ->rawColumns(['codigo', 'fecha_despacho', 'transportado_por', 'estado', 'acciones'])
             ->make(true);
     }
+
     /**
      * Muestra el formulario para crear un nuevo despacho
      */
     public function create()
     {
         Gate::authorize('crear-despacho');
-        
-        // Obtenemos el usuario autenticado (¡Esto faltaba para evitar el error de variable indefinida!)
+
         $usuario = auth()->user();
 
-        // 1. Locales de Origen: Depende de los privilegios del usuario
         if (Gate::allows('seleccionar-cualquier-origen')) {
             $localesOrigen = Local::all();
         } else {
-            // El encargado solo puede usar los locales que tiene asignados en su perfil
-            $localesOrigen = $usuario->local; // Asegúrate de que la relación en el modelo User sea correcta
+            $localesOrigen = $usuario->local;
         }
 
-        // 2. Locales de Destino: La mercancía puede ser enviada a cualquier local o depósito de la red
         $localesDestino = Local::all();
 
-        // Solo traemos insumos con estado global 'En Venta'
         $insumos = Insumos::where('estado', 'En Venta')->get();
-        
-        // Generar un código único sugerido: DESP-AñoMesDia-ID
-        $ultimoId = Despachos::max('id') + 1;
-        $codigo = 'DESP-' . date('Ymd') . '-' . str_pad($ultimoId, 3, '0', STR_PAD_LEFT);
+
+        // Valor sugerido para mostrar en el formulario; el definitivo se genera server-side en store()
+        $codigo = $this->generarCodigo('DESP-');
 
         return view('despachos.create', compact('localesOrigen', 'localesDestino', 'insumos', 'codigo'));
     }
@@ -203,107 +222,127 @@ class DespachoController extends Controller
      * Procesa y guarda el despacho en la base de datos (Salida de Depósito)
      */
     public function store(Request $request)
-        {
-            Gate::authorize('crear-despacho');
+    {
+        Gate::authorize('crear-despacho');
 
-            $user = auth()->user();
+        $user = auth()->user();
 
-            // Validar si el usuario es encargado y está intentando despachar desde un local ajeno[cite: 15]
-            if ($user->role === User::ROLE_ENCARGADO) {
-                $esSuLocal = DB::table('users_has_local')
-                    ->where('id_user', $user->id)
-                    ->where('id_local', $request->id_local_origen)
-                    ->exists();
+        // PARCHE #4: validación estricta de FKs y arrays (distinct evita líneas duplicadas)
+        $request->validate([
+            'id_local_origen'  => 'required|exists:local,id|different:id_local_destino',
+            'id_local_destino' => 'required|exists:local,id',
+            'transportado_por' => 'required|string|max:100',
+            'id_insumo'        => 'required|array',
+            'id_insumo.*'      => [
+                'required',
+                Rule::exists('insumos', 'id')->where('estado', 'En Venta')
+            ],
+            'cantidad'         => 'required|array',
+            'cantidad.*'       => 'required|integer|min:1',
+        ],[
+            // Opcional: Mensaje personalizado para que el usuario sepa por qué falló
+            'id_insumo.*.exists' => 'Uno de los insumos seleccionados no existe o está suspendido.'
+        ]);
 
-                if (!$esSuLocal) {
-                    return redirect()->back()->with('error', 'No tienes autorización para despachar mercancía desde este local de origen.')->withInput();
-                }
-            }
-              
-            $request->validate([
-                'id_local_origen'  => 'required|different:id_local_destino',
-                'id_local_destino' => 'required',
-                'transportado_por' => 'required|string|max:100',
-                'id_insumo'        => 'required|array',
-                'id_insumo.*'      => 'required|exists:insumos,id',
-                'cantidad'         => 'required|array',
-                'cantidad.*'       => 'required|integer|min:1',
-            ]);
-
-            // Validación añadida: Verificar que el local o depósito de destino tenga al menos un usuario asignado
-            $tieneUsuariosDestino = DB::table('users_has_local')
-                ->where('id_local', $request->id_local_destino)
+        // Blindaje multi-tienda: el encargado solo despacha desde sus locales
+        if ($user->role === User::ROLE_ENCARGADO) {
+            $esSuLocal = DB::table('users_has_local')
+                ->where('id_user', $user->id)
+                ->where('id_local', $request->id_local_origen)
                 ->exists();
 
-            if (!$tieneUsuariosDestino) {
-                return redirect()->back()->with('error', 'No es posible generar el despacho porque no hay usuario asignado a dicho local o depósito.')->withInput();
+            if (!$esSuLocal) {
+                return redirect()->back()->with('error', 'No tienes autorización para despachar mercancía desde este local de origen.')->withInput();
             }
+        }
 
-            try {
-                DB::beginTransaction();
+        $tieneUsuariosDestino = DB::table('users_has_local')
+            ->where('id_local', $request->id_local_destino)
+            ->exists();
 
-                // 1. Crear la Cabecera del Despacho (En Tránsito)[cite: 15]
-                $despacho = Despachos::create([
-                    'codigo'           => $request->codigo,
-                    'id_local_origen'  => $request->id_local_origen,
-                    'id_local_destino' => $request->id_local_destino,
-                    'transportado_por' => $request->transportado_por,
-                    'vehiculo_placa'   => $request->vehiculo_placa,
-                    'observacion'      => $request->observacion,
-                    'estado'           => 'En Tránsito',
-                    'fecha_despacho'   => Carbon::now(),
-                ]);
+        if (!$tieneUsuariosDestino) {
+            return redirect()->back()->with('error', 'No es posible generar el despacho porque no hay usuario asignado a dicho local o depósito.')->withInput();
+        }
 
-                // 2. Procesar cada Insumo enviado[cite: 15]
-                foreach ($request->id_insumo as $key => $insumo_id) {
-                    $cantidadADespachar = $request->cantidad[$key];
+        try {
+            DB::beginTransaction();
 
-                    $registroOrigen = InsumosC::where('id_local', $request->id_local_origen)
-                        ->where('id_insumo', $insumo_id)
-                        ->first();
+            // PARCHE #4: código generado server-side dentro de la transacción (nunca desde el request)
+            $codigo = $this->generarCodigo('DESP-');
 
-                    $item = Insumos::find($insumo_id);
-                    $nombreItem = $item ? $item->producto : "ID: $insumo_id";
+            $despacho = Despachos::create([
+                'codigo'           => $codigo,
+                'id_local_origen'  => $request->id_local_origen,
+                'id_local_destino' => $request->id_local_destino,
+                'transportado_por' => $request->transportado_por,
+                'vehiculo_placa'   => $request->vehiculo_placa,
+                'observacion'      => $request->observacion,
+                'estado'           => self::ESTADO_TRANSITO,
+                'fecha_despacho'   => Carbon::now(),
+            ]);
 
-                    if (!$registroOrigen || $registroOrigen->cantidad < $cantidadADespachar) {
-                        throw new \Exception("Stock insuficiente para: $nombreItem en el depósito de origen.");
-                    }
+            foreach ($request->id_insumo as $key => $insumo_id) {
+                $cantidadADespachar = $request->cantidad[$key];
 
-                    if ($registroOrigen->estado_local !== 'Disponible') {
-                        throw new \Exception("El insumo $nombreItem se encuentra SUSPENDIDO en este local.");
-                    }
+                // PARCHE #3: bloqueo pesimista para eliminar la race condition de stock
+                $registroOrigen = InsumosC::where('id_local', $request->id_local_origen)
+                    ->where('id_insumo', $insumo_id)
+                    ->lockForUpdate()
+                    ->first();
 
-                    $registroOrigen->decrement('cantidad', $cantidadADespachar);
+                $item = Insumos::find($insumo_id);
+                $nombreItem = $item ? $item->producto : "ID: $insumo_id";
 
-                    DespachoDetalles::create([
-                        'id_despacho'         => $despacho->id,
-                        'id_insumo'           => $insumo_id,
-                        'cantidad_enviada'    => $cantidadADespachar,
-                        'cantidad_recibida'   => 0, 
-                    ]);
+                if (!$registroOrigen || $registroOrigen->cantidad < $cantidadADespachar) {
+                    throw new \Exception("Stock insuficiente para: $nombreItem en el depósito de origen.");
                 }
 
-                // ==========================================
-                // 3. ENVÍO DE NOTIFICACIONES A DESTINO[cite: 15]
-                // ==========================================
+                $registroOrigen->decrement('cantidad', $cantidadADespachar);
+
+                DespachoDetalles::create([
+                    'id_despacho'       => $despacho->id,
+                    'id_insumo'         => $insumo_id,
+                    'cantidad_enviada'  => $cantidadADespachar,
+                    'cantidad_recibida' => 0,
+                ]);
+            }
+
+            DB::commit();
+
+            // PARCHE #7: notificaciones FUERA de la transacción.
+            // Si fallan, el despacho ya está persistido y el usuario solo pierde el aviso.
+            try {
                 $userIdsDestino = DB::table('users_has_local')
                     ->where('id_local', $despacho->id_local_destino)
                     ->pluck('id_user');
 
                 if ($userIdsDestino->isNotEmpty()) {
-                    $usuariosARecibir = User::whereIn('id', $userIdsDestino)->get();
-                    Notification::send($usuariosARecibir, new DespachoNotification($despacho, 'creado'));
+                    Notification::send(
+                        User::whereIn('id', $userIdsDestino)->get(),
+                        new DespachoNotification($despacho, 'creado')
+                    );
                 }
-                
-                DB::commit();
-                return redirect()->route('despacho.print', $despacho->id)
-                        ->with('success', 'Despacho emitido con éxito. Puede imprimir el comprobante a continuación.');
-
             } catch (\Exception $e) {
-                DB::rollback();
-                return redirect()->back()->with('error', $e->getMessage())->withInput();
+                Log::warning('Fallo al enviar notificación de despacho creado: ' . $e->getMessage());
             }
+
+            return redirect()->route('despacho.print', $despacho->id)
+                ->with('success', 'Despacho emitido con éxito. Puede imprimir el comprobante a continuación.');
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('Error en DespachoController@store: ' . $e->getMessage(), [
+                'user_id' => $user->id,
+                'origen'  => $request->id_local_origen,
+            ]);
+            // PARCHE #8: mensaje controlado al cliente, detalle solo en el log
+            $mensaje = str_contains($e->getMessage(), 'Stock insuficiente') || str_contains($e->getMessage(), 'SUSPENDIDO')
+                ? $e->getMessage()
+                : 'Ocurrió un error interno al generar el despacho. Intente nuevamente.';
+            return redirect()->back()->with('error', $mensaje)->withInput();
         }
+    }
+
     /**
      * Función privada para gestionar el stock en la ubicación de destino
      */
@@ -314,14 +353,12 @@ class DespachoController extends Controller
             ->first();
 
         if ($registroDestino) {
-            // Si el producto ya existe en la tienda, aumentamos el stock
             $registroDestino->increment('cantidad', $cantidad);
         } else {
-            // Si el producto nunca ha estado en esa tienda, creamos el registro inicial
             InsumosC::create([
-                'id_local' => $id_local,
+                'id_local'  => $id_local,
                 'id_insumo' => $id_insumo,
-                'cantidad' => $cantidad
+                'cantidad'  => $cantidad,
             ]);
         }
     }
@@ -332,40 +369,48 @@ class DespachoController extends Controller
         try {
             $user = auth()->user();
 
-            // 1. Buscamos el despacho cargando todas sus relaciones de una vez (Eager Loading optimizado)
             $despacho = Despachos::with(['origen', 'destino', 'detalles.insumos'])->findOrFail($id);
 
-            // 2. Blindaje Multi-tienda: Si es encargado, verificar que su local sea origen o destino
             if ($user->role === User::ROLE_ENCARGADO) {
-                $localesIds = DB::table('users_has_local')
-                    ->where('id_user', $user->id)
-                    ->pluck('id_local');
+                $localesIds = $this->localesDelUsuario($user);
 
-                $involucrado = $localesIds->contains($despacho->id_local_origen) || 
+                $involucrado = $localesIds->contains($despacho->id_local_origen) ||
                                $localesIds->contains($despacho->id_local_destino);
 
                 if (!$involucrado) {
-                    return response("No tienes autorización para ver los detalles de este despacho.", 403);
+                    abort(403, 'No tienes autorización para ver los detalles de este despacho.');
                 }
             }
 
-            // 3. Como ya usamos 'detalles.insumos' en el with(), podemos pasarlos directo
             $detalles = $despacho->detalles;
 
             return view('despachos.modal_detalle', compact('despacho', 'detalles'));
 
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw $e; // deja que Laravel renderice el 404 estándar
         } catch (\Exception $e) {
-            return response("Error en Servidor: " . $e->getMessage(), 500);
+            // PARCHE #8: nunca exponer $e->getMessage() al cliente
+            Log::error('Error en DespachoController@show: ' . $e->getMessage(), ['despacho_id' => $id]);
+            return response('No se pudo cargar el detalle del despacho.', 500);
         }
     }
-    
+
+    /**
+     * Confirma la recepción física de un despacho En Tránsito
+     */
     public function confirmarRecepcion(Request $request, $id)
     {
         Gate::authorize('recibir-despacho');
 
+        // PARCHE #5: catálogo de estados unificado (se eliminó la regla duplicada
+        // de observacion_recepcion y el valor 'recibido_con_incidencias' inválido)
         $request->validate([
-            'estado'                 => 'required|in:Recibido,recibido_con_incidencias,Cancelado',
-            'observacion_recepcion'  => 'nullable|string|max:1000',
+            'estado' => ['required', Rule::in([
+                self::ESTADO_RECIBIDO,
+                self::ESTADO_OBS,
+                self::ESTADO_RECHAZADO,
+                self::ESTADO_CANCELADO,
+            ])],
             'observacion_recepcion' => 'nullable|string|max:1000',
             'cantidades_recibidas'  => 'required|array',
             'cantidades_recibidas.*'=> 'required|integer|min:0',
@@ -374,10 +419,17 @@ class DespachoController extends Controller
         try {
             DB::beginTransaction();
 
-            $despacho = Despachos::with('detalles')->findOrFail($id);
+            // PARCHEES #1 y #3: lock sobre la cabecera + guard estricto de estado
+            $despacho = Despachos::with('detalles')->lockForUpdate()->findOrFail($id);
             $user = auth()->user();
 
-            // 1. Blindaje Multi-tienda: Validar que el encargado pertenezca al local de destino
+            if ($despacho->estado !== self::ESTADO_TRANSITO) {
+                return response()->json([
+                    'error' => 'Este despacho ya fue procesado o aún no ha sido despachado. Recargue la página.'
+                ], 422);
+            }
+
+            // Blindaje multi-tienda: solo el encargado del local destino puede recibir
             if ($user->role === User::ROLE_ENCARGADO) {
                 $esSuLocalDestino = DB::table('users_has_local')
                     ->where('id_user', $user->id)
@@ -389,66 +441,104 @@ class DespachoController extends Controller
                 }
             }
 
-            // 2. Actualizar la cabecera del despacho
-            $despacho->estado = $request->estado; // 'Recibido', 'Con Observaciones', 'Rechazado'
+            // Validación estricta: las claves deben corresponder EXACTAMENTE a los detalles
+            $idsDetalles = $despacho->detalles->pluck('id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+            $idsRecibidos = collect(array_keys($request->cantidades_recibidas))->map(fn ($v) => (int) $v)->sort()->values()->all();
+
+            if ($idsDetalles !== $idsRecibidos) {
+                return response()->json(['error' => 'Las cantidades recibidas no corresponden a los ítems del despacho.'], 422);
+            }
+
+            $despacho->estado = $request->estado;
             $despacho->observacion_recepcion = $request->observacion_recepcion;
             $despacho->fecha_recepcion = Carbon::now();
             $despacho->save();
 
-            // 3. Procesar cada ítem del detalle
-            foreach ($despacho->detalles as $detalle) {
-                $idDetalle = $detalle->id;
-                
-                // Tomamos la cantidad que el usuario indicó que llegó físicamente
-                $cantidadRecibida = $request->cantidades_recibidas[$idDetalle] ?? 0;
+            $esRechazoTotal = in_array($request->estado, [self::ESTADO_CANCELADO, self::ESTADO_RECHAZADO], true);
 
-                // Validar lógica física: No puedes recibir más de lo que se despachó originalmente
+            foreach ($despacho->detalles as $detalle) {
+                $cantidadRecibida = (int) $request->cantidades_recibidas[$detalle->id];
+
                 if ($cantidadRecibida > $detalle->cantidad_enviada) {
                     throw new \Exception("La cantidad recibida no puede ser mayor a la cantidad enviada para el ítem.");
                 }
 
-                // Guardar lo que realmente llegó en el detalle
                 $detalle->cantidad_recibida = $cantidadRecibida;
                 $detalle->save();
 
-                // 4. Actualizar stock en destino (Solo si el despacho NO fue rechazado por completo)
-                if ($request->estado !== 'Cancelado' && $cantidadRecibida > 0) {
+                if ($esRechazoTotal) {
+                    // PARCHE #2: la mercancía regresa físicamente al origen.
+                    // Sin esto, el stock desaparece del sistema (fuga de inventario).
                     $this->gestionarStockDestino(
-                        $despacho->id_local_destino, 
-                        $detalle->id_insumo, 
+                        $despacho->id_local_origen,
+                        $detalle->id_insumo,
+                        $detalle->cantidad_enviada
+                    );
+                } elseif ($cantidadRecibida > 0) {
+                    $this->gestionarStockDestino(
+                        $despacho->id_local_destino,
+                        $detalle->id_insumo,
                         $cantidadRecibida
                     );
+                    // Nota de negocio: si deseas tratar la diferencia
+                    // (cantidad_enviada - cantidad_recibida) como merma en tránsito,
+                    // descuéntala aquí de un depósito virtual o regístrela en una
+                    // tabla de auditoría. Hoy simplemente queda sin contabilizar.
                 }
-            }
-            // ==========================================
-            // 5. ENVÍO DE NOTIFICACIÓN DE VUELTA AL ORIGEN
-            // ==========================================
-
-            $userIdsOrigen = DB::table('users_has_local')
-                ->where('id_local', $despacho->id_local_origen)
-                ->pluck('id_user');
-
-            if ($userIdsOrigen->isNotEmpty()) {
-                $usuariosOrigen = User::whereIn('id', $userIdsOrigen)->get();
-                // Le pasamos el despacho y el tipo 'recibido'
-                Notification::send($usuariosOrigen, new DespachoNotification($despacho, 'recibido'));
             }
 
             DB::commit();
+
+            // PARCHE #7: notificación de vuelta al origen, fuera de la transacción
+            try {
+                $userIdsOrigen = DB::table('users_has_local')
+                    ->where('id_local', $despacho->id_local_origen)
+                    ->pluck('id_user');
+
+                if ($userIdsOrigen->isNotEmpty()) {
+                    Notification::send(
+                        User::whereIn('id', $userIdsOrigen)->get(),
+                        new DespachoNotification($despacho, 'recibido')
+                    );
+                }
+            } catch (\Exception $e) {
+                Log::warning('Fallo al enviar notificación de recepción: ' . $e->getMessage());
+            }
+
             return response()->json(['success' => 'La recepción del despacho se ha procesado e inventariado correctamente.']);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json(['error' => 'Error al procesar la recepción: ' . $e->getMessage()], 500);
+            Log::error('Error en DespachoController@confirmarRecepcion: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => auth()->id(),
+            ]);
+            // PARCHE #8: mensaje genérico controlado
+            return response()->json(['error' => 'Ocurrió un error interno al procesar la recepción. Intente nuevamente.'], 500);
         }
     }
 
+    /**
+     * PARCHE #6: JSON del despacho con blindaje multi-tienda (se elimina el IDOR)
+     */
     public function getJson($id)
     {
         Gate::authorize('recibir-despacho');
 
-        // Usando los nombres reales de tus modelos: origen, destino y detalles.insumos
+        $user = auth()->user();
+
         $despacho = Despachos::with(['detalles.insumos', 'origen', 'destino'])->findOrFail($id);
+
+        if ($user->role === User::ROLE_ENCARGADO) {
+            $localesIds = $this->localesDelUsuario($user);
+
+            $involucrado = $localesIds->contains($despacho->id_local_origen) ||
+                           $localesIds->contains($despacho->id_local_destino);
+
+            if (!$involucrado) {
+                return response()->json(['error' => 'No tienes autorización para consultar este despacho.'], 403);
+            }
+        }
 
         return response()->json($despacho);
     }
@@ -459,10 +549,8 @@ class DespachoController extends Controller
 
         $user = auth()->user();
 
-        // 1. Carga del despacho con sus detalles, insumos y relaciones
         $despacho = Despachos::with(['detalles.insumos', 'origen', 'destino'])->findOrFail($id);
-        
-        // 2. Blindaje Multi-tienda: Si es encargado, verificar que el despacho haya salido de su local
+
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalOrigen = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -475,25 +563,21 @@ class DespachoController extends Controller
             }
         }
 
-        // 3. Validación de estado: Solo se puede editar si sigue en tránsito
-        if ($despacho->estado !== 'En Tránsito') {
+        if ($despacho->estado !== self::ESTADO_TRANSITO) {
             return redirect()->route('despacho.index')
-                ->with('error', 'No se puede editar un despacho que ya ha sido procesado (Recibido, con observaciones o rechazado).');
+                ->with('error', 'No se puede editar un despacho que ya ha sido procesado (Recibido, con incidencias o rechazado).');
         }
 
-        // 4. Locales para los selects (separados por permisos al igual que en create)
         if (Gate::allows('seleccionar-cualquier-origen')) {
             $localesOrigen = Local::all();
         } else {
             $localesOrigen = $user->local;
         }
-        
+
         $localesDestino = Local::all();
 
-        // 5. Insumos disponibles para venta
-        $insumos = Insumos::where('estado', 'En Venta')->get(); 
+        $insumos = Insumos::where('estado', 'En Venta')->get();
 
-        // Nota: Revisa si tu carpeta de vistas se llama 'despachos' (plural) o 'despacho' (singular)
         return view('despachos.edit', compact('despacho', 'localesOrigen', 'localesDestino', 'insumos'));
     }
 
@@ -504,7 +588,6 @@ class DespachoController extends Controller
         $user = auth()->user();
         $despacho = Despachos::with('detalles')->findOrFail($id);
 
-        // 1. Blindaje Multi-tienda para el Encargado
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalOrigen = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -516,63 +599,90 @@ class DespachoController extends Controller
             }
         }
 
-        // 2. Validación de estado: Solo se edita si está En Tránsito
-        if ($despacho->estado !== 'En Tránsito') {
+        if ($despacho->estado !== self::ESTADO_TRANSITO) {
             return redirect()->route('despacho.index')
-                ->with('error', 'No se puede editar un despacho que ya ha sido procesado (Recibido, con observaciones o rechazado).');
+                ->with('error', 'No se puede editar un despacho que ya ha sido procesado (Recibido, con incidencias o rechazado).');
         }
 
         $request->validate([
+            'id_local_origen'  => 'required|exists:local,id|different:id_local_destino',
+            'id_local_destino' => 'required|exists:local,id',
             'transportado_por' => 'required|string|max:100',
             'id_insumo'        => 'required|array',
-            'id_insumo.*'      => 'required|exists:insumos,id',
+            'id_insumo.*'      => [
+                'required',
+                Rule::exists('insumos', 'id')->where('estado', 'En Venta')
+            ],
             'cantidad'         => 'required|array',
             'cantidad.*'       => 'required|integer|min:1',
+        ],[
+            // Opcional: Mensaje personalizado para que el usuario sepa por qué falló
+            'id_insumo.*.exists' => 'Uno de los insumos seleccionados no existe o está suspendido.'
         ]);
 
         try {
             DB::beginTransaction();
 
-            // PASO 1: REVERTIR EL STOCK SOLO EN ORIGEN 
-            // (El destino no se toca porque la mercancía aún no había sido recibida allí)
-            foreach ($despacho->detalles as $detalle) {
-                InsumosC::where('id_local', $despacho->id_local_origen)
-                    ->where('id_insumo', $detalle->id_insumo)
-                    ->increment('cantidad', $detalle->cantidad_enviada);
+            // ============================================================
+            // PARCHE: pre-validación completa ANTES de mutar el stock.
+            // Se simula el stock disponible (stock actual + lo que este despacho
+            // tiene en tránsito) y se valida todo el carrito de una vez.
+            // Así, un solo ítem suspendido/sin stock NO destruye la edición
+            // completa del usuario con un rollback tardío.
+            // ============================================================
+            $idsInsumos = array_unique($request->id_insumo);
+
+            // PARCHE #3: bloquear todas las filas de origen involucradas (viejas + nuevas)
+            $registrosBloqueados = InsumosC::where('id_local', $despacho->id_local_origen)
+                ->whereIn('id_insumo', $idsInsumos)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id_insumo');
+
+            $stockSimulado = [];
+            foreach ($idsInsumos as $insumoId) {
+                $base = $registrosBloqueados->get($insumoId)->cantidad ?? 0;
+                // Devolver al simulado lo que este despacho tenía en tránsito
+                $base += $despacho->detalles->where('id_insumo', $insumoId)->sum('cantidad_enviada');
+                $stockSimulado[$insumoId] = $base;
             }
 
-            // PASO 2: ACTUALIZAR CABECERA
+            foreach ($request->id_insumo as $key => $insumo_id) {
+                $item = Insumos::find($insumo_id);
+                
+                if ($stockSimulado[$insumo_id] < $request->cantidad[$key]) {
+                    throw new \Exception("Stock insuficiente en origen para el insumo: {$item->producto}");
+                }
+                $stockSimulado[$insumo_id] -= $request->cantidad[$key];
+            }
+
+            // A partir de aquí todo está validado: ejecutar los cambios.
+
+            // PASO 1: revertir el stock en origen (con filas ya bloqueadas)
+            foreach ($despacho->detalles as $detalle) {
+                $reg = $registrosBloqueados->get($detalle->id_insumo);
+                if ($reg) {
+                    $reg->increment('cantidad', $detalle->cantidad_enviada);
+                }
+            }
+
+            // PASO 2: actualizar cabecera
             $despacho->update([
                 'transportado_por' => $request->transportado_por,
                 'vehiculo_placa'   => $request->vehiculo_placa,
                 'observacion'      => $request->observacion,
             ]);
 
-            // PASO 3: BORRAR DETALLES VIEJOS Y PROCESAR LOS NUEVOS
+            // PASO 3: reemplazar detalles
             $despacho->detalles()->delete();
 
             foreach ($request->id_insumo as $key => $insumo_id) {
                 $cantidadNueva = $request->cantidad[$key];
-                $item = Insumos::findOrFail($insumo_id);
 
-                // Validar estado del insumo
-                if ($item->estado !== 'En Venta') {
-                    throw new \Exception("El insumo {$item->producto} se encuentra suspendido.");
-                }
+                // Reutilizamos las filas ya bloqueadas para descontar
+                $reg = $registrosBloqueados->get($insumo_id);
+                $reg->decrement('cantidad', $cantidadNueva);
 
-                // Validar stock actualizado en origen
-                $registroOrigen = InsumosC::where('id_local', $despacho->id_local_origen)
-                    ->where('id_insumo', $insumo_id)
-                    ->first();
-
-                if (!$registroOrigen || $registroOrigen->cantidad < $cantidadNueva) {
-                    throw new \Exception("Stock insuficiente en origen para el insumo: {$item->producto}");
-                }
-
-                // Descontar la nueva cantidad del origen de inmediato
-                $registroOrigen->decrement('cantidad', $cantidadNueva);
-
-                // Crear el nuevo detalle (manteniendo cantidad_enviada y cantidad_recibida en 0)
                 DespachoDetalles::create([
                     'id_despacho'       => $despacho->id,
                     'id_insumo'         => $insumo_id,
@@ -586,17 +696,29 @@ class DespachoController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            return redirect()->back()->with('error', 'Error en la actualización: ' . $e->getMessage())->withInput();
+            Log::error('Error en DespachoController@update: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => $user->id,
+            ]);
+            // Mensajes de negocio controlados; error genérico para lo demás (PARCHE #8)
+            $mensaje = (str_contains($e->getMessage(), 'suspendido') || str_contains($e->getMessage(), 'Stock insuficiente'))
+                ? $e->getMessage()
+                : 'Ocurrió un error interno al actualizar el despacho. Intente nuevamente.';
+            return redirect()->back()->with('error', $mensaje)->withInput();
         }
     }
-    public function destroy($id)
+
+    /**
+     * Elimina un despacho En Tránsito y devuelve el stock al origen.
+     * Ahora responde JSON ante peticiones AJAX (consistencia con destroySolicitud).
+     */
+    public function destroy(Request $request, $id)
     {
         Gate::authorize('eliminar-despacho');
 
         $user = auth()->user();
         $despacho = Despachos::with('detalles')->findOrFail($id);
 
-        // 1. Blindaje Multi-tienda: Si es encargado, verificar que el despacho se originó en su local
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalOrigen = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -604,46 +726,62 @@ class DespachoController extends Controller
                 ->exists();
 
             if (!$esSuLocalOrigen) {
-                return redirect()->route('despacho.index')
-                    ->with('error', 'No tienes autorización para eliminar despachos que no se originan en tu local.');
+                $msg = 'No tienes autorización para eliminar despachos que no se originan en tu local.';
+                return $request->expectsJson()
+                    ? response()->json(['message' => $msg], 403)
+                    : redirect()->route('despacho.index')->with('error', $msg);
             }
         }
 
-        // 2. Validación de estado: Solo se puede eliminar si la mercancía no ha sido entregada
-        if ($despacho->estado !== 'En Tránsito') {
-            return redirect()->route('despacho.index')
-                ->with('error', 'No se puede eliminar un despacho que ya ha sido procesado (Recibido, con observaciones o rechazado).');
+        if ($despacho->estado !== self::ESTADO_TRANSITO) {
+            $msg = 'No se puede eliminar un despacho que ya ha sido procesado (Recibido, con incidencias o rechazado).';
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 422)
+                : redirect()->route('despacho.index')->with('error', $msg);
         }
 
         try {
             DB::beginTransaction();
 
-            // 3. Revertir el stock exclusivamente en el LOCAL DE ORIGEN
             foreach ($despacho->detalles as $detalle) {
                 $registroOrigen = InsumosC::where('id_local', $despacho->id_local_origen)
                     ->where('id_insumo', $detalle->id_insumo)
+                    ->lockForUpdate()
                     ->first();
-                
+
                 if ($registroOrigen) {
-                    // Devolvemos exactamente lo que se había enviado
                     $registroOrigen->increment('cantidad', $detalle->cantidad_enviada);
                 }
-                
-                // Nota: No tocamos el destino porque, al estar 'En Tránsito', 
-                // la mercancía jamás había ingresado al inventario de la tienda receptora.
+                // Si no existe la fila en origen (drift de datos), no es silencioso en el log:
+                else {
+                    Log::warning("destroy(): fila InsumosC ausente al revertir stock", [
+                        'despacho_id' => $despacho->id,
+                        'local'       => $despacho->id_local_origen,
+                        'insumo'      => $detalle->id_insumo,
+                    ]);
+                }
             }
 
-            // 4. Eliminar los detalles y la cabecera del despacho
             $despacho->detalles()->delete();
             $despacho->delete();
 
             DB::commit();
-            return redirect()->route('despacho.index')
-                ->with('success', 'Despacho eliminado correctamente. El stock ha sido devuelto al depósito de origen.');
+
+            $msg = 'Despacho eliminado correctamente. El stock ha sido devuelto al depósito de origen.';
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 200)
+                : redirect()->route('despacho.index')->with('success', $msg);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return redirect()->back()->with('error', 'Error al eliminar el despacho: ' . $e->getMessage());
+            Log::error('Error en DespachoController@destroy: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => $user->id,
+            ]);
+            $msg = 'Ocurrió un error interno al eliminar el despacho. Intente nuevamente.';
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 500)
+                : redirect()->back()->with('error', $msg);
         }
     }
 
@@ -653,38 +791,48 @@ class DespachoController extends Controller
     public function createSolicitud()
     {
         Gate::authorize('crear-solicitud');
-        
+
         $usuario = auth()->user();
 
-        // 1. Locales de Origen: El depósito central o cualquier almacén que pueda abastecer
         $localesOrigen = Local::all();
 
-        // 2. Locales de Destino: Si es encargado, su local por defecto; si es admin, cualquiera de la red
         if ($usuario->role === User::ROLE_ENCARGADO) {
-            // Usamos el método helper que ya tienes definido en el modelo User
-            $localesDestino = $usuario->localActual(); 
+            $localesDestino = $usuario->localActual();
         } else {
             $localesDestino = Local::all();
         }
 
-        // Insumos disponibles en el sistema
         $insumos = Insumos::where('estado', 'En Venta')->get();
-        
-        // Generar un código único para la solicitud
-        $ultimoId = Despachos::max('id') + 1;
-        $codigo = 'SOL-' . date('Ymd') . '-' . str_pad($ultimoId, 3, '0', STR_PAD_LEFT);
+
+        // Valor sugerido para el formulario; el definitivo se genera server-side
+        $codigo = $this->generarCodigo('SOL-');
 
         return view('despachos.create_solicitud', compact('localesOrigen', 'localesDestino', 'insumos', 'codigo'));
     }
 
     /**
-     * Procesa y guarda la solicitud en la base de datos con estado 'Pendiente' (Sin afectar stock aún)
+     * Procesa y guarda la solicitud con estado 'Pendiente' (sin afectar stock)
      */
     public function storeSolicitud(Request $request)
     {
         Gate::authorize('crear-solicitud');
 
         $user = auth()->user();
+
+        // PARCHE #4: validación estricta (exists + distinct)
+        $request->validate([
+            'id_local_origen'  => 'required|exists:local,id|different:id_local_destino',
+            'id_local_destino' => 'required|exists:local,id',
+            'id_insumo'        => 'required|array',
+            'id_insumo.*'      => [
+                'required',
+                Rule::exists('insumos', 'id')->where('estado', 'En Venta')
+            ],
+            'cantidad'         => 'required|array',
+            'cantidad.*'       => 'required|integer|min:1',
+        ],[
+            'id_insumo.*.exists' => 'El insumo solicitado no existe o se encuentra suspendido actualmente.'
+        ]);
 
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalDestino = DB::table('users_has_local')
@@ -696,25 +844,19 @@ class DespachoController extends Controller
                 return redirect()->back()->with('error', 'No tienes autorización para generar solicitudes destinadas a este local.')->withInput();
             }
         }
-          
-        $request->validate([
-            'id_local_origen'  => 'required|different:id_local_destino',
-            'id_local_destino' => 'required',
-            'id_insumo'        => 'required|array',
-            'id_insumo.*'      => 'required|exists:insumos,id',
-            'cantidad'         => 'required|array',
-            'cantidad.*'       => 'required|integer|min:1',
-        ]);
 
         try {
             DB::beginTransaction();
 
+            // PARCHE #4: código server-side
+            $codigo = $this->generarCodigo('SOL-');
+
             $despacho = Despachos::create([
-                'codigo'           => $request->codigo,
+                'codigo'           => $codigo,
                 'id_local_origen'  => $request->id_local_origen,
                 'id_local_destino' => $request->id_local_destino,
                 'transportado_por' => 'Pendiente de asignar',
-                'estado'           => 'Pendiente',
+                'estado'           => self::ESTADO_PENDIENTE,
                 'observacion'      => $request->observacion,
                 'fecha_despacho'   => null,
             ]);
@@ -722,70 +864,62 @@ class DespachoController extends Controller
             foreach ($request->id_insumo as $key => $insumo_id) {
                 $cantidadSolicitada = $request->cantidad[$key];
                 $item = Insumos::findOrFail($insumo_id);
-
-                // ¡AQUÍ ESTABA EL DETALLE! Validar que el insumo esté disponible para la venta
-                if ($item->estado !== 'En Venta') {
-                    throw new \Exception("El insumo {$item->producto} se encuentra suspendido y no puede ser solicitado.");
-                }
-
+   
                 DespachoDetalles::create([
                     'id_despacho'       => $despacho->id,
                     'id_insumo'         => $insumo_id,
-                    'cantidad_enviada'  => $cantidadSolicitada, 
-                    'cantidad_recibida' => 0, 
+                    'cantidad_enviada'  => $cantidadSolicitada,
+                    'cantidad_recibida' => 0,
                 ]);
             }
 
-            $userIdsOrigen = DB::table('users_has_local')
-                ->where('id_local', $despacho->id_local_origen)
-                ->pluck('id_user');
-
-            if ($userIdsOrigen->isNotEmpty()) {
-                $usuariosOrigen = User::whereIn('id', $userIdsOrigen)->get();
-                Notification::send($usuariosOrigen, new DespachoNotification($despacho, 'solicitud_creada'));
-            }
-            
             DB::commit();
+
+            // PARCHE #7: notificación fuera de la transacción
+            try {
+                $userIdsOrigen = DB::table('users_has_local')
+                    ->where('id_local', $despacho->id_local_origen)
+                    ->pluck('id_user');
+
+                if ($userIdsOrigen->isNotEmpty()) {
+                    Notification::send(
+                        User::whereIn('id', $userIdsOrigen)->get(),
+                        new DespachoNotification($despacho, 'solicitud_creada')
+                    );
+                }
+            } catch (\Exception $e) {
+                Log::warning('Fallo al enviar notificación de solicitud: ' . $e->getMessage());
+            }
+
             return redirect()->route('despacho.print', $despacho->id)
-                                   ->with('success', 'Despacho emitido con éxito. Puede imprimir el comprobante a continuación.');
+                ->with('success', 'Solicitud registrada con éxito. Puede imprimir el comprobante a continuación.');
 
         } catch (\Exception $e) {
             DB::rollback();
-            return redirect()->back()->with('error', 'Error al registrar la solicitud: ' . $e->getMessage())->withInput();
+            Log::error('Error en DespachoController@storeSolicitud: ' . $e->getMessage(), [
+                'user_id' => $user->id,
+            ]);
+            $mensaje = str_contains($e->getMessage(), 'suspendido')
+                ? $e->getMessage()
+                : 'Ocurrió un error interno al registrar la solicitud. Intente nuevamente.';
+            return redirect()->back()->with('error', $mensaje)->withInput();
         }
     }
 
     /**
-     * Procesa el envío de una solicitud pendiente: verifica stock, descuenta inventario y pasa a 'En Tránsito'
+     * Procesa el envío de una solicitud pendiente: verifica stock, descuenta
+     * inventario y pasa a 'En Tránsito'
      */
     public function procesarEnvioPendiente(Request $request, $id)
     {
-        Gate::authorize('procesar-solicitud'); // O el permiso que use el almacenista
+        Gate::authorize('procesar-solicitud');
 
         $user = auth()->user();
-        $despacho = Despachos::with('detalles')->findOrFail($id);
-
-        // 1. Validar que el despacho se encuentre estrictamente en estado Pendiente
-        if ($despacho->estado !== 'Pendiente') {
-            return response()->json(['error' => 'Esta solicitud ya ha sido procesada o cancelada previamente.'], 422);
-        }
-
-        // 2. Blindaje Multi-tienda: Validar que el almacenista pertenezca al local de origen si es encargado
-        if ($user->role === User::ROLE_ENCARGADO) {
-            $esSuLocalOrigen = DB::table('users_has_local')
-                ->where('id_user', $user->id)
-                ->where('id_local', $despacho->id_local_origen)
-                ->exists();
-
-            if (!$esSuLocalOrigen) {
-                return response()->json(['error' => 'No tienes autorización para despachar mercancía desde este origen.'], 403);
-            }
-        }
 
         $request->validate([
             'transportado_por' => 'required|string|max:100',
             'vehiculo_placa'   => 'nullable|string|max:50',
-            // Permite ajustar cantidades reales enviadas por si el almacén no tiene stock completo de todo
+            'observacion'      => 'nullable|string|max:1000',
             'cantidades_enviadas'   => 'required|array',
             'cantidades_enviadas.*' => 'required|integer|min:0',
         ]);
@@ -793,14 +927,50 @@ class DespachoController extends Controller
         try {
             DB::beginTransaction();
 
-            // 3. Validar y descontar stock del depósito de origen para cada ítem
+            // PARCHES #1 y #3: lock sobre cabecera + guard de estado
+            $despacho = Despachos::with('detalles')->lockForUpdate()->findOrFail($id);
+
+            if ($despacho->estado !== self::ESTADO_PENDIENTE) {
+                return response()->json(['error' => 'Esta solicitud ya ha sido procesada o cancelada previamente.'], 422);
+            }
+
+            if ($user->role === User::ROLE_ENCARGADO) {
+                $esSuLocalOrigen = DB::table('users_has_local')
+                    ->where('id_user', $user->id)
+                    ->where('id_local', $despacho->id_local_origen)
+                    ->exists();
+
+                if (!$esSuLocalOrigen) {
+                    return response()->json(['error' => 'No tienes autorización para despachar mercancía desde este origen.'], 403);
+                }
+            }
+
+            // Validación estricta de claves: deben corresponder exactamente a los detalles
+            $idsDetalles = $despacho->detalles->pluck('id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+            $idsEnviados = collect(array_keys($request->cantidades_enviadas))->map(fn ($v) => (int) $v)->sort()->values()->all();
+
+            if ($idsDetalles !== $idsEnviados) {
+                return response()->json(['error' => 'Las cantidades enviadas no corresponden a los ítems de la solicitud.'], 422);
+            }
+
+            $algunItemEnviado = false;
+
             foreach ($despacho->detalles as $detalle) {
                 $idDetalle = $detalle->id;
-                $cantidadAEnviar = $request->cantidades_enviadas[$idDetalle] ?? 0;
+                $cantidadAEnviar = (int) $request->cantidades_enviadas[$idDetalle];
+
+                // No se permite enviar más de lo solicitado originalmente
+                if ($cantidadAEnviar > $detalle->cantidad_enviada) {
+                    throw new \Exception("No se puede enviar más de lo solicitado para el ítem ID {$detalle->id_insumo}.");
+                }
 
                 if ($cantidadAEnviar > 0) {
+                    $algunItemEnviado = true;
+
+                    // PARCHE #3: bloqueo pesimista
                     $registroOrigen = InsumosC::where('id_local', $despacho->id_local_origen)
                         ->where('id_insumo', $detalle->id_insumo)
+                        ->lockForUpdate()
                         ->first();
 
                     $item = Insumos::find($detalle->id_insumo);
@@ -814,46 +984,62 @@ class DespachoController extends Controller
                         throw new \Exception("El insumo $nombreItem se encuentra suspendido en el local de origen.");
                     }
 
-                    // Descontar inventario físicamente
                     $registroOrigen->decrement('cantidad', $cantidadAEnviar);
 
-                    // Actualizar la cantidad enviada definitiva en el detalle
                     $detalle->cantidad_enviada = $cantidadAEnviar;
                     $detalle->save();
                 } else {
-                    // Si deciden no enviar nada de este ítem específico
                     $detalle->cantidad_enviada = 0;
                     $detalle->save();
                 }
             }
 
-            // 4. Actualizar la cabecera cambiando el estado a En Tránsito
+            // Evita despachos "vacíos": al menos un ítem debe viajar
+            if (!$algunItemEnviado) {
+                return response()->json(['error' => 'Debe enviar al menos un ítem para procesar la solicitud.'], 422);
+            }
+
             $despacho->update([
                 'transportado_por' => $request->transportado_por,
                 'vehiculo_placa'   => $request->vehiculo_placa,
                 'observacion'      => $request->observacion ?? $despacho->observacion,
-                'estado'           => 'En Tránsito',
+                'estado'           => self::ESTADO_TRANSITO,
                 'fecha_despacho'   => Carbon::now(),
             ]);
 
-            // 5. Notificar al local de destino que su pedido ya va en camino
-            $userIdsDestino = DB::table('users_has_local')
-                ->where('id_local', $despacho->id_local_destino)
-                ->pluck('id_user');
+            DB::commit();
 
-            if ($userIdsDestino->isNotEmpty()) {
-                $usuariosDestino = User::whereIn('id', $userIdsDestino)->get();
-                Notification::send($usuariosDestino, new DespachoNotification($despacho, 'creado'));
+            // PARCHE #7: notificación fuera de la transacción
+            try {
+                $userIdsDestino = DB::table('users_has_local')
+                    ->where('id_local', $despacho->id_local_destino)
+                    ->pluck('id_user');
+
+                if ($userIdsDestino->isNotEmpty()) {
+                    Notification::send(
+                        User::whereIn('id', $userIdsDestino)->get(),
+                        new DespachoNotification($despacho, 'creado')
+                    );
+                }
+            } catch (\Exception $e) {
+                Log::warning('Fallo al enviar notificación de solicitud en tránsito: ' . $e->getMessage());
             }
 
-            DB::commit();
             return response()->json(['success' => 'Solicitud procesada con éxito. El despacho se encuentra ahora En Tránsito.']);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json(['error' => 'Error al procesar el envío: ' . $e->getMessage()], 500);
+            Log::error('Error en DespachoController@procesarEnvioPendiente: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => $user->id,
+            ]);
+            $mensaje = (str_contains($e->getMessage(), 'Stock insuficiente') || str_contains($e->getMessage(), 'suspendido'))
+                ? $e->getMessage()
+                : 'Ocurrió un error interno al procesar el envío. Intente nuevamente.';
+            return response()->json(['error' => $mensaje], 500);
         }
     }
+
     public function editSolicitud($id)
     {
         Gate::authorize('editar-solicitud');
@@ -861,13 +1047,11 @@ class DespachoController extends Controller
         $user = auth()->user();
         $despacho = Despachos::with(['detalles.insumos', 'origen', 'destino'])->findOrFail($id);
 
-        // 1. REGLA CLAVE: Si ya no está pendiente, prohibir la edición
-        if ($despacho->estado !== 'Pendiente') {
+        if ($despacho->estado !== self::ESTADO_PENDIENTE) {
             return redirect()->route('despacho.index')
                 ->with('error', 'No se puede modificar una solicitud que ya ha sido procesada o despachada.');
         }
 
-        // 2. Blindaje Multi-tienda: Si es encargado, verificar que la solicitud pertenezca a su local de destino
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalDestino = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -880,7 +1064,6 @@ class DespachoController extends Controller
             }
         }
 
-        // 3. Cargar los mismos datos que 'createSolicitud' para que los selects y tablas funcionen igual
         $localesOrigen = Local::all();
 
         if ($user->role === User::ROLE_ENCARGADO) {
@@ -891,7 +1074,6 @@ class DespachoController extends Controller
 
         $insumos = Insumos::where('estado', 'En Venta')->get();
 
-        // 4. Retornar la vista enviando todas las variables necesarias
         return view('despachos.edit_solicitud', compact('despacho', 'localesOrigen', 'localesDestino', 'insumos'));
     }
 
@@ -902,13 +1084,11 @@ class DespachoController extends Controller
         $user = auth()->user();
         $despacho = Despachos::with('detalles')->findOrFail($id);
 
-        // 1. REGLA CLAVE: Si ya no está pendiente, prohibir la modificación
-        if ($despacho->estado !== 'Pendiente') {
+        if ($despacho->estado !== self::ESTADO_PENDIENTE) {
             return redirect()->route('despacho.index')
                 ->with('error', 'No se puede modificar una solicitud que ya ha sido procesada o despachada.');
         }
 
-        // 2. Blindaje Multi-tienda para el Encargado (validando el nuevo local destino)
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalDestino = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -921,45 +1101,42 @@ class DespachoController extends Controller
             }
         }
 
+        // PARCHE #4: exists + distinct
         $request->validate([
-            'id_local_origen'  => 'required|different:id_local_destino',
-            'id_local_destino' => 'required',
+            'id_local_origen'  => 'required|exists:local,id|different:id_local_destino',
+            'id_local_destino' => 'required|exists:local,id',
             'id_insumo'        => 'required|array',
-            'id_insumo.*'      => 'required|exists:insumos,id',
+            'id_insumo.*'      => [
+                'required',
+                Rule::exists('insumos', 'id')->where('estado', 'En Venta')
+            ],
             'cantidad'         => 'required|array',
             'cantidad.*'       => 'required|integer|min:1',
+        ],[
+            'id_insumo.*.exists' => 'El insumo solicitado no existe o se encuentra suspendido actualmente.'
         ]);
 
         try {
             DB::beginTransaction();
 
-            // Nota: Como la solicitud está 'Pendiente', el stock aún no se había descontado en origen,
-            // por lo que NO es necesario hacer operaciones inversas de inventario aquí.
+            // Al estar Pendiente, el stock aún no se había descontado: no hay reversas que hacer.
 
-            // PASO 1: ACTUALIZAR CABECERA DE LA SOLICITUD
             $despacho->update([
                 'id_local_origen'  => $request->id_local_origen,
                 'id_local_destino' => $request->id_local_destino,
                 'observacion'      => $request->observacion,
             ]);
 
-            // PASO 2: BORRAR LOS DETALLES VIEJOS
             $despacho->detalles()->delete();
 
-            // PASO 3: PROCESAR Y REGISTRAR LOS NUEVOS DETALLES
             foreach ($request->id_insumo as $key => $insumo_id) {
                 $cantidadSolicitada = $request->cantidad[$key];
                 $item = Insumos::findOrFail($insumo_id);
 
-                // Validar que el insumo siga activo para la venta
-                if ($item->estado !== 'En Venta') {
-                    throw new \Exception("El insumo {$item->producto} se encuentra suspendido.");
-                }
-
                 DespachoDetalles::create([
                     'id_despacho'       => $despacho->id,
                     'id_insumo'         => $insumo_id,
-                    'cantidad_enviada'  => $cantidadSolicitada, // Al estar pendiente, guarda la cantidad que se está pidiendo
+                    'cantidad_enviada'  => $cantidadSolicitada,
                     'cantidad_recibida' => 0,
                 ]);
             }
@@ -969,25 +1146,35 @@ class DespachoController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            return redirect()->back()->with('error', 'Error al actualizar la solicitud: ' . $e->getMessage())->withInput();
+            Log::error('Error en DespachoController@updateSolicitud: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => $user->id,
+            ]);
+            $mensaje = str_contains($e->getMessage(), 'suspendido')
+                ? $e->getMessage()
+                : 'Ocurrió un error interno al actualizar la solicitud. Intente nuevamente.';
+            return redirect()->back()->with('error', $mensaje)->withInput();
         }
     }
 
+    /**
+     * TODO (requiere migración de permisos): este método debería usar un Gate
+     * propio 'eliminar-solicitud' en lugar de reutilizar 'editar-solicitud'.
+     * Se mantiene el permiso actual para no romper el sistema de roles existente.
+     */
     public function destroySolicitud(Request $request, $id)
     {
-        Gate::authorize('editar-solicitud'); 
+        Gate::authorize('editar-solicitud');
 
         $user = auth()->user();
         $despacho = Despachos::with('detalles')->findOrFail($id);
 
-        // 1. Validar estado Pendiente
-        if ($despacho->estado !== 'Pendiente') {
+        if ($despacho->estado !== self::ESTADO_PENDIENTE) {
             return response()->json([
                 'message' => 'No se puede eliminar una solicitud que ya ha sido procesada o despachada.'
             ], 422);
         }
 
-        // 2. Blindaje Multi-tienda
         if ($user->role === User::ROLE_ENCARGADO) {
             $esSuLocalDestino = DB::table('users_has_local')
                 ->where('id_user', $user->id)
@@ -1009,15 +1196,15 @@ class DespachoController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'message' => 'Solicitud de pedido eliminada correctamente.'
-            ], 200);
+            return response()->json(['message' => 'Solicitud de pedido eliminada correctamente.'], 200);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json([
-                'message' => 'Error al eliminar la solicitud: ' . $e->getMessage()
-            ], 500);
+            Log::error('Error en DespachoController@destroySolicitud: ' . $e->getMessage(), [
+                'despacho_id' => $id,
+                'user_id'     => $user->id,
+            ]);
+            return response()->json(['message' => 'Ocurrió un error interno al eliminar la solicitud. Intente nuevamente.'], 500);
         }
     }
 
@@ -1031,16 +1218,12 @@ class DespachoController extends Controller
         try {
             $user = auth()->user();
 
-            // Cargar el despacho con sus relaciones optimizadas
             $despacho = Despachos::with(['origen', 'destino', 'detalles.insumos'])->findOrFail($id);
 
-            // Blindaje multi-tienda para encargados
             if ($user->role === User::ROLE_ENCARGADO) {
-                $localesIds = DB::table('users_has_local')
-                    ->where('id_user', $user->id)
-                    ->pluck('id_local');
+                $localesIds = $this->localesDelUsuario($user);
 
-                $involucrado = $localesIds->contains($despacho->id_local_origen) || 
+                $involucrado = $localesIds->contains($despacho->id_local_origen) ||
                                $localesIds->contains($despacho->id_local_destino);
 
                 if (!$involucrado) {
@@ -1048,20 +1231,36 @@ class DespachoController extends Controller
                 }
             }
 
-            // Retorna una vista optimizada exclusivamente para impresión térmica o carta
             return view('despachos.print', compact('despacho'));
 
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            return redirect()->route('despacho.index')->with('error', 'Error al generar el comprobante: ' . $e->getMessage());
+            Log::error('Error en DespachoController@printComprobante: ' . $e->getMessage(), ['despacho_id' => $id]);
+            return redirect()->route('despacho.index')->with('error', 'No se pudo generar el comprobante. Intente nuevamente.');
         }
     }
 
     /**
-     * Retorna en formato JSON los insumos con stock > 0 para un local específico
+     * Retorna en formato JSON los insumos con stock > 0 para un local específico.
+     * PARCHE #6: un encargado solo puede consultar el stock de SUS locales.
      */
     public function getInsumosPorLocal($idLocal)
     {
         Gate::authorize('ver-logistica');
+
+        $user = auth()->user();
+
+        if ($user->role === User::ROLE_ENCARGADO) {
+            $esSuLocal = DB::table('users_has_local')
+                ->where('id_user', $user->id)
+                ->where('id_local', $idLocal)
+                ->exists();
+
+            if (!$esSuLocal) {
+                return response()->json(['error' => 'No tienes autorización para consultar el inventario de este local.'], 403);
+            }
+        }
 
         try {
             $insumos = DB::table('insumos_has_cantidades as insumos_c')
@@ -1080,7 +1279,8 @@ class DespachoController extends Controller
 
             return response()->json($insumos);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            Log::error('Error en DespachoController@getInsumosPorLocal: ' . $e->getMessage(), ['local' => $idLocal]);
+            return response()->json(['error' => 'No se pudo consultar el inventario. Intente nuevamente.'], 500);
         }
     }
 }
