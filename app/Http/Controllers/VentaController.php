@@ -192,7 +192,9 @@ public function create()
     public function store(Request $request)
     {
 
-
+    if (Gate::denies('operar-caja')) {
+        return redirect()->back()->with('error', 'No tienes permiso.');
+    }
     $request->validate([
         'id_caja'              => 'required|exists:cajas,id',
         'id_cliente'           => 'required|exists:clientes,id',
@@ -229,9 +231,7 @@ public function create()
         // Mapeamos los campos individuales del form al array de referencias
         // 1. Inicializar array local
         $pagosRegistrar = [];
-        $tasa = $venta->tasa_cambio; // Tasa de la transacción
-
-        // 2. Mapear usando los nombres REALES del formulario
+        
         if ($request->filled('pago_zelle') && $request->pago_zelle > 0) {
             $pagosRegistrar[] = [
                 'metodo'     => 'Zelle',
@@ -247,7 +247,7 @@ public function create()
                 'metodo'     => 'Punto',
                 'referencia' => $request->referencia_punto ?? 'S/R',
                 'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa > 0 ? ($montoBs / $tasa) : 0,
+                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv : 0,
             ];
         }
 
@@ -257,7 +257,7 @@ public function create()
                 'metodo'     => 'Pago Movil',
                 'referencia' => $request->referencia_pagomovil ?? 'S/R',
                 'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa > 0 ? ($montoBs / $tasa) : 0,
+                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv : 0,
             ];
         }
 
@@ -354,29 +354,41 @@ public function create()
             }
 
             // 5. Detalles de Venta y Descuento de Stock
-            foreach ($request->articulos as $item) {
-                $venta->detalles()->create([
-                    'id_insumo'        => $item['id_insumo'],
-                    'cantidad'         => $item['cantidad'],
-                    'precio_unitario'  => $item['precio_unitario'],
-                    'subtotal'         => $item['cantidad'] * $item['precio_unitario']
-                ]);
+            // 5. Detalles de Venta y Descuento de Stock
+            // Consultamos los usuarios a notificar UNA sola vez fuera del bucle
+            $gerentes = User::whereIn('role', ['admin', 'encargado', 'almacenista'])->get();
 
+            foreach ($request->articulos as $item) {
+                // 1. Cargar el insumo base para obtener el nombre real y el stock mínimo
+                $insumoBase = Insumos::find($item['id_insumo']);
+
+                // 2. Verificar existencia en el local
                 $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
                                        ->where('id_local', $local->id)
                                        ->first();
 
+                // Corrección: Usar $insumoBase->producto para evitar el error de $item['nombre']
                 if (!$existencia || $existencia->cantidad < $item['cantidad']) {
-                    throw new \Exception("Stock insuficiente para: " . $item['nombre']);
+                    $nombreProducto = $insumoBase ? $insumoBase->producto : "ID " . $item['id_insumo'];
+                    throw new \Exception("Stock insuficiente para: " . $nombreProducto);
                 }
 
-                $existencia->decrement('cantidad', $item['cantidad']);
+                // 3. Registrar detalle incluyendo los datos de Promoción
+                $venta->detalles()->create([
+                    'id_insumo'                     => $item['id_insumo'],
+                    'cantidad'                      => $item['cantidad'],
+                    'precio_unitario'               => $item['precio_unitario'],
+                    'subtotal'                      => round($item['cantidad'] * $item['precio_unitario'], 2),
+                    'promocion_regla_id'            => !empty($item['promocion_regla_id']) ? $item['promocion_regla_id'] : null,
+                    'porcentaje_descuento_aplicado' => $item['porcentaje_descuento_aplicado'] ?? 0,
+                ]);
 
-                $insumoBase = Insumos::find($item['id_insumo']);
+                // 4. Descontar Stock
+                $existencia->decrement('cantidad', $item['cantidad']);
                 $nuevaCantidad = $existencia->fresh()->cantidad;
 
-                if ($nuevaCantidad <= $insumoBase->stock_min) {
-                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
+                // 5. Alerta de Stock Bajo
+                if ($insumoBase && $nuevaCantidad <= $insumoBase->stock_min) {
                     $detalles = [
                         'titulo'  => '¡Stock Agotándose!',
                         'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
