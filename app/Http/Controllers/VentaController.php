@@ -351,17 +351,33 @@ public function create()
                 'aplica_abono'         => $request->has('pago_excedente_abono')
             ]);
 
-            // 4. Referencias Bancarias
-            if ($request->has('referencias')) {
-                foreach ($request->referencias as $ref) {
-                    $venta->referencias()->create([
-                        'metodo'     => $ref['metodo'],
-                        'referencia' => $ref['referencia'],
-                        'monto_bs'   => $ref['monto_bs'] ?? 0,
-                        'monto_usd'  => $ref['monto_usd'] ?? 0,
-                    ]);
-                }
-            }
+            
+           // 4. Referencias Bancarias (campos planos)
+           if ($request->filled('referencia_zelle')) {
+               $venta->referencias()->create([
+                   'metodo'     => 'Zelle',
+                   'referencia' => $request->referencia_zelle,
+                   'monto_bs'   => 0,
+                   'monto_usd'  => $request->pago_zelle ?? 0,
+               ]);
+           }
+
+           if ($request->filled('referencia_pagomovil')) {
+               $venta->referencias()->create([
+                   'metodo'     => 'Pago Móvil',
+                   'referencia' => $request->referencia_pagomovil,
+                   'monto_bs'   => $request->pago_bs_pagomovil ?? 0,
+                   'monto_usd'  => $tasa_bcv > 0 ? ($request->pago_bs_pagomovil / $tasa_bcv) : 0,
+               ]);
+           }
+
+           if ($request->filled('referencia_banesco')) {
+               $venta->referencias()->create([
+                   'metodo'     => 'Banesco',
+                   'referencia' => $request->referencia_banesco,
+                   'monto_bs'   => $request->pago_bs_banesco ?? 0,
+                   'monto_usd'  => $tasa_bcv > 0 ? ($request->pago_bs_banesco / $tasa_bcv) : 0,
+               ]);
 
             // 5. Detalles de Venta y Descuento de Stock
             // 5. Detalles de Venta y Descuento de Stock
