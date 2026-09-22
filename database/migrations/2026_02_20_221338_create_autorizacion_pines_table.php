@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('autorizacion_pines', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('id_local')->unique(); // Un registro por local
-            $table->string('pin', 6);
+            $table->string('pin', 255);
             $table->decimal('monto', 12, 2);
             $table->string('vendedor');
             $table->string('cliente');

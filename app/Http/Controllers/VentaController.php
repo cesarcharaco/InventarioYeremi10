@@ -190,332 +190,360 @@ public function create()
    
 
     public function store(Request $request)
-    {
-
+{
     if (Gate::denies('operar-caja')) {
         return redirect()->back()->with('error', 'No tienes permiso.');
     }
+
+    // 1. VALIDACIONES ESTRICTAS RESTAURADAS
+    // No omitimos nada. Si la vista lo manda, lo validamos.
     $request->validate([
         'id_caja'              => 'required|exists:cajas,id',
         'id_cliente'           => 'required|exists:clientes,id',
-        'tipo_documento'       => 'required|string',
-        'total_usd'            => 'required|numeric|min:0',
-        'monto_credito_usd'    => 'nullable|numeric|min:0',
+        'tipo_documento'       => 'required|in:nota_entrega,factura,sin_documento',
+        'correlativo_nota'     => 'nullable|string',
         
-        // Artículos
+        // Totales y Descuentos
+        'total_usd'            => 'required|numeric|min:0',
+        'total_bs'             => 'required|numeric|min:0',
+        'descuento_usd'        => 'nullable|numeric|min:0',
+        'descuento_bs'         => 'nullable|numeric|min:0',
+        'porcentaje_descuento' => 'nullable|numeric|min:0',
+        
+        // Métodos de Pago
+        'pago_usd_efectivo'    => 'nullable|numeric|min:0',
+        'pago_bs_efectivo'     => 'nullable|numeric|min:0',
+        'pago_zelle_usd'       => 'nullable|numeric|min:0',
+        'pago_punto_bs'        => 'nullable|numeric|min:0',
+        'pago_pagomovil_bs'    => 'nullable|numeric|min:0',
+
+        // Referencias
+        'referencia_zelle'     => 'nullable|string|max:255',
+        'referencia_pagomovil' => 'nullable|string|max:255',
+
+        // Crédito y Excedente
+        'monto_credito_usd'    => 'nullable|numeric|min:0',
+        'monto_excedente'      => 'nullable|numeric|min:0',
+        'pago_excedente_abono' => 'nullable',
+        
+        // Otros
+        'observacion'          => 'nullable|string',
+        'pin_autorizacion'     => 'nullable|string',
+
+        // Artículos (Array)
         'articulos'            => 'required|array|min:1',
         'articulos.*.id_insumo'=> 'required|exists:insumos,id',
         'articulos.*.cantidad' => 'required|numeric|min:1',
         'articulos.*.precio_unitario' => 'required|numeric|min:0',
-
-        // Ajustes de Abono y Excedente (Campos de la vista)
-        'pago_excedente_abono' => 'nullable',            // Checkbox en el HTML
-        'monto_excedente'      => 'nullable|numeric|min:0', // Enviado desde el JS
-
-        // Referencias de pago (campos planos, no array)
-        'referencia_zelle'     => 'nullable|string|max:255',
-        'referencia_pagomovil' => 'nullable|string|max:255',
-        'referencia_banesco'   => 'nullable|string|max:255',
+        'articulos.*.porcentaje_descuento_aplicado' => 'nullable|numeric|min:0',
+        'articulos.*.promocion_regla_id' => 'nullable'
     ]);
 
+    // Validaciones lógicas manuales para las referencias
+    if ($request->pago_zelle_usd > 0 && empty($request->referencia_zelle)) {
+        return redirect()->back()->withInput()->withErrors(['referencia_zelle' => 'La referencia de Zelle es obligatoria al tener un monto asignado.']);
+    }
+    if ($request->pago_pagomovil_bs > 0 && empty($request->referencia_pagomovil)) {
+        return redirect()->back()->withInput()->withErrors(['referencia_pagomovil' => 'La referencia de Pago Móvil es obligatoria al tener un monto asignado.']);
+    }
 
-        $user = Auth::user();
-        $local = $user->localActual();
-        $id_caja = $request->id_caja; 
-        $tasa_bcv = bcv_rate('USD');
+    $user = Auth::user();
+    $local = $user->localActual();
+    $id_caja = $request->id_caja; 
+    
+    $tasa_bcv = bcv_rate('USD');
+    if (!$tasa_bcv || $tasa_bcv <= 0) {
+        return redirect()->back()->withInput()->with('error', 'Error crítico: No se pudo obtener la tasa BCV del sistema.');
+    }
 
-        if (!$id_caja) {
-            return redirect()->back()->with('error', 'Debe especificar una caja válida para procesar la venta.');
+    $pagosRegistrar = [];
+
+    // Efectivo USD
+    if ($request->filled('pago_usd_efectivo') && $request->pago_usd_efectivo > 0) {
+        $pagosRegistrar[] = [
+            'metodo'     => 'Efectivo USD',
+            'referencia' => 'S/R',
+            'monto_usd'  => (float) $request->pago_usd_efectivo,
+            'monto_bs'   => 0,
+        ];
+    }
+
+    // Efectivo Bs
+    if ($request->filled('pago_bs_efectivo') && $request->pago_bs_efectivo > 0) {
+        $montoBs = (float) $request->pago_bs_efectivo;
+        $pagosRegistrar[] = [
+            'metodo'     => 'Efectivo Bs',
+            'referencia' => 'S/R',
+            'monto_bs'   => $montoBs,
+            'monto_usd'  => $montoBs / $tasa_bcv,
+        ];
+    }
+
+    // Zelle USD
+    if ($request->filled('pago_zelle_usd') && $request->pago_zelle_usd > 0) {
+        $pagosRegistrar[] = [
+            'metodo'     => 'Zelle',
+            'referencia' => $request->referencia_zelle,
+            'monto_usd'  => (float) $request->pago_zelle_usd,
+            'monto_bs'   => 0,
+        ];
+    }
+
+    // Punto / Biopago Bs
+    if ($request->filled('pago_punto_bs') && $request->pago_punto_bs > 0) {
+        $montoBs = (float) $request->pago_punto_bs;
+        $pagosRegistrar[] = [
+            'metodo'     => 'Punto',
+            'referencia' => 'S/R',
+            'monto_bs'   => $montoBs,
+            'monto_usd'  => $montoBs / $tasa_bcv,
+        ];
+    }
+
+    // Pago Móvil Bs
+    if ($request->filled('pago_pagomovil_bs') && $request->pago_pagomovil_bs > 0) {
+        $montoBs = (float) $request->pago_pagomovil_bs;
+        $pagosRegistrar[] = [
+            'metodo'     => 'Pago Móvil',
+            'referencia' => $request->referencia_pagomovil,
+            'monto_bs'   => $montoBs,
+            'monto_usd'  => $montoBs / $tasa_bcv,
+        ];
+    }
+
+    DB::beginTransaction();
+    try {
+        // 2. CORRECCIÓN MATEMÁTICA
+        // Total a Favor = Todo el dinero físico/virtual que entra + Lo que el cliente queda debiendo (Crédito)
+        $totalPagosUsd = array_sum(array_column($pagosRegistrar, 'monto_usd'));
+        $montoCredito = (float) ($request->monto_credito_usd ?? 0);
+        $totalAFavor = $totalPagosUsd + $montoCredito;
+
+        // Total a Cobrar = El costo final de la venta + Lo que el cliente pagó de más para abonar a deuda
+        $totalUsd = (float) $request->total_usd;
+        $montoExcedente = (float) ($request->monto_excedente ?? 0);
+        $totalACobrar = $totalUsd + $montoExcedente;
+
+        // Tolerancia de 0.05 para absorber diferencias ínfimas por conversiones Bs -> USD
+        if (abs($totalAFavor - $totalACobrar) > 0.05) {
+            throw new \Exception("Inconsistencia financiera. Dinero ingresado/crédito ($" . round($totalAFavor, 2) . ") no cuadra con el valor de venta/excedente ($" . round($totalACobrar, 2) . ").");
         }
 
-        // Mapeamos los campos individuales del form al array de referencias
-        // 1. Inicializar array local
-        $pagosRegistrar = [];
+        $correlativoFiscal = null; 
+        $correlativoNota = null;
+
+        // Determinar el código del documento
+        if ($request->tipo_documento === 'nota_entrega') {
+            $ultimoNota = DB::table('ventas_info_adicional')
+                ->where('tipo_documento', 'nota_entrega')
+                ->whereNotNull('correlativo_nota')
+                ->orderBy('id', 'desc')
+                ->lockForUpdate()
+                ->first();
         
-        if ($request->filled('pago_zelle') && $request->pago_zelle > 0) {
-            $pagosRegistrar[] = [
+            $siguiente = $ultimoNota ? (intval($ultimoNota->correlativo_nota) + 1) : 1;
+            $correlativoNota = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
+            $codigo = 'NE-' . $correlativoNota;
+
+            if (Venta::where('codigo_factura', $codigo)->exists()) {
+                throw new \Exception("Conflicto de correlativo en Nota de Entrega, intente nuevamente.");
+            }
+        } elseif ($request->tipo_documento === 'factura') {
+            $correlativoFiscal = Correlativo::where('estado', 'disponible')
+                ->orderBy('id', 'asc')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$correlativoFiscal) {
+                throw new \Exception("No hay correlativos fiscales disponibles en el sistema. Debe cargar un nuevo lote.");
+            }
+
+            $codigo = 'FAC-' . $correlativoFiscal->numero_factura;
+            if (Venta::where('codigo_factura', $codigo)->exists()) {
+                throw new \Exception("Conflicto de correlativo fiscal, intente nuevamente.");
+            }
+        } else { 
+            $codigo = 'V-' . uniqid();
+        }
+
+        // Crear la Venta (Cabecera)
+        $venta = Venta::create([
+            'codigo_factura'    => $codigo,
+            'id_cliente'        => $request->id_cliente,
+            'id_user'           => $user->id, 
+            'id_local'          => $local->id,
+            'id_caja'           => $id_caja,
+            'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
+            'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
+            'monto_credito_usd' => $request->monto_credito_usd ?? 0,
+            'total_usd'         => $request->total_usd,
+            'estado'            => 'completada',
+            'observacion'       => $request->observacion
+        ]);
+
+        /*foreach ($pagosRegistrar as $pago) {
+            $venta->detalles()->create($pago);
+        }*/
+
+        if ($correlativoFiscal) {
+            $correlativoFiscal->update([
+                'estado'    => 'usado',
+                'venta_id'  => $venta->id,
+                'fecha_uso' => now()
+            ]);
+        }
+
+        // 3. CÁLCULO DE IMPUESTOS EN EL BACKEND Y CORRECCIÓN DE CAMPOS
+        // Tu request envía 'descuento_usd', no 'monto_descuento_usd'
+        $totalBs = (float) $request->total_bs;
+        $baseImponible = $totalBs / 1.16;
+        $iva = $baseImponible * 0.16;
+
+        $venta->infoAdicional()->create([
+            'tipo_documento'       => $request->tipo_documento,
+            'correlativo_nota'     => $request->tipo_documento === 'factura' ? $correlativoFiscal->numero_factura : $correlativoNota,
+            'numero_control'       => $correlativoFiscal ? $correlativoFiscal->numero_control : null, 
+            'porcentaje_descuento' => $request->porcentaje_descuento ?? 0,
+            'monto_descuento_usd'  => $request->descuento_usd ?? 0, 
+            'base_imponible_bs'    => $baseImponible,
+            'iva_bs'               => $iva,
+            'aplica_abono'         => $request->has('pago_excedente_abono')
+        ]);
+
+        // 4. CORRECCIÓN DE NOMBRES EN REFERENCIAS (Evita que se guarden en $0)
+        if ($request->filled('referencia_zelle')) {
+            $venta->referencias()->create([
                 'metodo'     => 'Zelle',
-                'referencia' => $request->referencia_zelle ?? 'S/R',
-                'monto_usd'  => (float) $request->pago_zelle,
+                'referencia' => $request->referencia_zelle,
                 'monto_bs'   => 0,
-            ];
+                'monto_usd'  => $request->pago_zelle_usd ?? 0, 
+            ]);
         }
 
-        if ($request->filled('pago_bs_punto') && $request->pago_bs_punto > 0) {
-            $montoBs = (float) $request->pago_bs_punto;
-            $pagosRegistrar[] = [
-                'metodo'     => 'Punto',
-                'referencia' => $request->referencia_punto ?? 'S/R',
-                'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv) : 0,
-            ];
+        if ($request->filled('referencia_pagomovil')) {
+            $venta->referencias()->create([
+                'metodo'     => 'Pago Móvil',
+                'referencia' => $request->referencia_pagomovil,
+                'monto_bs'   => $request->pago_pagomovil_bs ?? 0, 
+                'monto_usd'  => ($request->pago_pagomovil_bs / $tasa_bcv),
+            ]);
         }
 
-        if ($request->filled('pago_bs_pagomovil') && $request->pago_bs_pagomovil > 0) {
-            $montoBs = (float) $request->pago_bs_pagomovil;
-            $pagosRegistrar[] = [
-                'metodo'     => 'Pago Movil',
-                'referencia' => $request->referencia_pagomovil ?? 'S/R',
-                'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv) : 0,
-            ];
-        }
+        $gerentes = User::whereIn('role', ['admin', 'encargado', 'almacenista'])->get();
 
-        if (abs(array_sum(array_column($pagosRegistrar, 'monto_usd')) - $request->total_usd) > 0.01) {
-            throw new \Exception("Los pagos no coinciden con el total de la venta.");
-        }
+        foreach ($request->articulos as $item) {
+            $insumoBase = Insumos::find($item['id_insumo']);
+            $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
+                                   ->where('id_local', $local->id)
+                                   ->lockForUpdate()
+                                   ->first();
 
-        // 3. Iteración e inserción limpia en BD
-       
-
-        DB::beginTransaction();
-        try {
-            $correlativoFiscal = null; 
-            $correlativoNota = null;
-
-            // 1. Determinar el código (Factura, Nota de Entrega o Sin Documento)
-            if ($request->tipo_documento === 'nota_entrega') {
-                
-                // Buscar y bloquear exclusivamente el último correlativo de tipo nota_entrega
-                $ultimoNota = DB::table('ventas_info_adicional')
-                    ->where('tipo_documento', 'nota_entrega')
-                    ->whereNotNull('correlativo_nota')
-                    ->orderBy('id', 'desc')
-                    ->lockForUpdate()
-                    ->first();
-            
-                $siguiente = $ultimoNota ? (intval($ultimoNota->correlativo_nota) + 1) : 1;
-                $correlativoNota = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
-
-                $codigo = 'NE-' . $correlativoNota;
-                if (Venta::where('codigo_factura', $codigo)->exists()) {
-                    throw new \Exception("Conflicto de correlativo, intente nuevamente.");
-                }
-            } elseif ($request->tipo_documento === 'factura') {
-                
-                // Buscar el siguiente correlativo fiscal disponible con bloqueo de fila
-                $correlativoFiscal = Correlativo::where('estado', 'disponible')
-                    ->orderBy('id', 'asc')
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$correlativoFiscal) {
-                    throw new \Exception("No hay correlativos de factura fiscal disponibles en el sistema. Por favor cargue un nuevo lote.");
-                }
-
-                // Asignamos el prefijo FAC- + el número de factura
-                $codigo = 'FAC-' . $correlativoFiscal->numero_factura;
-                if (Venta::where('codigo_factura', $codigo)->exists()) {
-                    throw new \Exception("Conflicto de correlativo, intente nuevamente.");
-                }
-            } else { // sin_documento
-                $codigo = 'V-' . uniqid();
+            if (!is_numeric($item['cantidad']) || $item['cantidad'] <= 0 || !$existencia || $existencia->cantidad < $item['cantidad']) {
+                $nombreProducto = $insumoBase ? "{$insumoBase->producto} ({$insumoBase->descripcion})" : "Producto desconocido";
+                throw new \Exception("Stock insuficiente o inválido para: " . $nombreProducto);
             }
 
-            // 2. Crear la Venta (Cabecera)
-            $venta = Venta::create([
-                'codigo_factura'    => $codigo,
-                'id_cliente'        => $request->id_cliente,
-                'id_user'           => $user->id, 
-                'id_local'          => $local->id,
-                'id_caja'           => $id_caja,
-                'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
-                'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
-                'monto_credito_usd' => $request->monto_credito_usd ?? 0,
-                'total_usd'         => $request->total_usd,
-                'estado'            => 'completada',
-                'observacion'       => $request->observacion
+            $venta->detalles()->create([
+                'id_insumo'                     => $item['id_insumo'],
+                'cantidad'                      => $item['cantidad'],
+                'precio_unitario'               => $item['precio_unitario'],
+                'subtotal'                      => round($item['cantidad'] * $item['precio_unitario'], 2),
+                'promocion_regla_id'            => !empty($item['promocion_regla_id']) ? $item['promocion_regla_id'] : null,
+                'porcentaje_descuento_aplicado' => $item['porcentaje_descuento_aplicado'] ?? 0,
             ]);
 
-            foreach ($pagosRegistrar as $pago) {
-                $venta->detallesPago()->create($pago);
-            }
-            // 2.1 Si fue factura fiscal, marcamos el correlativo como usado
-            if ($correlativoFiscal) {
-                $correlativoFiscal->update([
-                    'estado'    => 'usado',
-                    'venta_id'  => $venta->id,
-                    'fecha_uso' => now()
-                ]);
-            }
+            $existencia->decrement('cantidad', $item['cantidad']);
+            $nuevaCantidad = $existencia->fresh()->cantidad;
 
-            // 3. Extensión de información (Tabla: ventas_info_adicional)
-            $venta->infoAdicional()->create([
-                'tipo_documento'       => $request->tipo_documento,
-                'correlativo_nota' => $request->tipo_documento === 'factura' ? $correlativoFiscal->numero_factura : $correlativoNota,
-                'numero_control'       => $correlativoFiscal ? $correlativoFiscal->numero_control : null, 
-                'porcentaje_descuento' => $request->porcentaje_descuento ?? 0,
-                'monto_descuento_usd'  => $request->monto_descuento_usd ?? 0,
-                'base_imponible_bs'    => $request->base_imponible_bs ?? 0,
-                'iva_bs'               => $request->iva_bs ?? 0,
-                'aplica_abono'         => $request->has('pago_excedente_abono')
-            ]);
-
-            
-           // 4. Referencias Bancarias (campos planos)
-           if ($request->filled('referencia_zelle')) {
-               $venta->referencias()->create([
-                   'metodo'     => 'Zelle',
-                   'referencia' => $request->referencia_zelle,
-                   'monto_bs'   => 0,
-                   'monto_usd'  => $request->pago_zelle ?? 0,
-               ]);
-           }
-
-           if ($request->filled('referencia_pagomovil')) {
-               $venta->referencias()->create([
-                   'metodo'     => 'Pago Móvil',
-                   'referencia' => $request->referencia_pagomovil,
-                   'monto_bs'   => $request->pago_bs_pagomovil ?? 0,
-                   'monto_usd'  => $tasa_bcv > 0 ? ($request->pago_bs_pagomovil / $tasa_bcv) : 0,
-               ]);
-           }
-
-           if ($request->filled('referencia_banesco')) {
-               $venta->referencias()->create([
-                   'metodo'     => 'Banesco',
-                   'referencia' => $request->referencia_banesco,
-                   'monto_bs'   => $request->pago_bs_banesco ?? 0,
-                   'monto_usd'  => $tasa_bcv > 0 ? ($request->pago_bs_banesco / $tasa_bcv) : 0,
-               ]);
-
-            // 5. Detalles de Venta y Descuento de Stock
-            // 5. Detalles de Venta y Descuento de Stock
-            // Consultamos los usuarios a notificar UNA sola vez fuera del bucle
-            $gerentes = User::whereIn('role', ['admin', 'encargado', 'almacenista'])->get();
-
-            foreach ($request->articulos as $item) {
-                // 1. Cargar el insumo base para obtener el nombre real y el stock mínimo
-                $insumoBase = Insumos::find($item['id_insumo']);
-
-                // 2. Verificar existencia en el local
-                $existencia = InsumosC::where('id_insumo', $item['id_insumo'])
-                                       ->where('id_local', $local->id)
-                                       ->first();
-
-                // Corrección: Usar $insumoBase->producto para evitar el error de $item['nombre']
-               if (!is_numeric($item['cantidad']) || $item['cantidad'] <= 0 || !$existencia || $existencia->cantidad < $item['cantidad']) {
-                   $nombreProducto = $insumoBase 
-                       ? "{$insumoBase->producto}: {$insumoBase->descripcion}" 
-                       : "Producto desconocido";
-                   throw new \Exception("Stock insuficiente o cantidad inválida para: " . $nombreProducto);
-               }
-
-
-                // 3. Registrar detalle incluyendo los datos de Promoción
-                $venta->detalles()->create([
-                    'id_insumo'                     => $item['id_insumo'],
-                    'cantidad'                      => $item['cantidad'],
-                    'precio_unitario'               => $item['precio_unitario'],
-                    'subtotal'                      => round($item['cantidad'] * $item['precio_unitario'], 2),
-                    'promocion_regla_id'            => !empty($item['promocion_regla_id']) ? $item['promocion_regla_id'] : null,
-                    'porcentaje_descuento_aplicado' => $item['porcentaje_descuento_aplicado'] ?? 0,
-                ]);
-
-                // 4. Descontar Stock
-                $existencia->decrement('cantidad', $item['cantidad']);
-                $nuevaCantidad = $existencia->fresh()->cantidad;
-
-                // 5. Alerta de Stock Bajo
-                if ($insumoBase && $nuevaCantidad <= $insumoBase->stock_min) {
-                    $detalles = [
-                        'titulo'  => '¡Stock Agotándose!',
-                        'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
-                        'url'     => route('insumos.index'),
-                        'icono'   => 'fas fa-exclamation-triangle text-danger'
-                    ];
-
-                    foreach ($gerentes as $gerente) {
-                        $gerente->notify(new StockBajoNotification($detalles));
-                    }
-                }
-            }
-
-            // 6. Lógica de ABONO AUTOMÁTICO
-            if ($request->has('pago_excedente_abono') && $request->filled('monto_excedente') && $request->monto_excedente > 0) {
-
-                // 1. Buscar el crédito pendiente del cliente
-                $creditoOld = Credito::where('id_cliente', $request->id_cliente)
-                                    ->where('estado', 'pendiente')
-                                    ->lockForUpdate()
-                                    ->first();
-
-                if ($creditoOld) {
-                    $montoExcedente = (float) $request->monto_excedente;
-
-                    // 2. Crear el registro en tu modelo real AbonoCredito
-                    AbonoCredito::create([
-                        'id_credito'        => $creditoOld->id,
-                        'id_user'           => auth()->id(), // o $user->id
-                        'id_caja'           => $request->id_caja ?? $id_caja,
-                        'monto_pagado_usd'  => $montoExcedente,
-                        // Fallback: Si el JS no envía 'exc_*', toma el valor global de efectivo o 0
-                        'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
-                        'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
-                        'detalles'          => "Abono automático desde Venta: " . ($codigo ?? $venta->id),
-                        'estado'            => 'Realizado'
-                    ]);
-
-                    // 3. Descontar del saldo del crédito
-                    $creditoOld->decrement('saldo_pendiente', $montoExcedente);
-
-                    // 4. MANTENER LA CONDICIONAL: Marcar como pagado si el saldo llega a 0
-                    if ($creditoOld->fresh()->saldo_pendiente <= 0) {
-                        $creditoOld->update([
-                            'estado'          => 'pagado',
-                            'saldo_pendiente' => 0
-                        ]);
-                    }
-                }
-            }
-
-            // 7. Si esta venta genera un crédito NUEVO
-            if ($request->monto_credito_usd > 0) {
-                Credito::create([
-                    'id_venta'          => $venta->id,
-                    'id_cliente'        => $request->id_cliente,
-                    'monto_inicial'     => $request->monto_credito_usd,
-                    'saldo_pendiente'   => $request->monto_credito_usd,
-                    'fecha_vencimiento' => now()->addDays(15), 
-                    'estado'            => 'pendiente',
-                    'tasa_cambio_origen'=> $tasa_bcv
-                ]);
-
-                $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
+            if ($insumoBase && $nuevaCantidad <= $insumoBase->stock_min) {
                 $detalles = [
-                    'titulo'  => '💸 Nueva Venta a Crédito',
-                    'mensaje' => "Se otorgó un crédito de {$request->monto_credito_usd}$ a {$request->cliente_nombre}.",
-                    'url'     => route('creditos.index'),
-                    'icono'   => 'fas fa-hand-holding-usd text-info'
+                    'titulo'  => '¡Stock Agotándose!',
+                    'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
+                    'url'     => route('insumos.index'),
+                    'icono'   => 'fas fa-exclamation-triangle text-danger'
                 ];
 
                 foreach ($gerentes as $gerente) {
                     $gerente->notify(new StockBajoNotification($detalles));
                 }
             }
-
-            DB::commit();
-
-            // 8. Respuesta con modal de impresión
-            if (in_array($request->tipo_documento, ['nota_entrega', 'factura'])) {
-                $tipoNombre = $request->tipo_documento === 'factura' ? 'Factura' : 'Nota de Entrega';
-
-                return redirect()->route('ventas.create')
-                    ->with('success', "Venta {$codigo} guardada exitosamente.")
-                    ->with('imprimir_documento', [
-                        'venta_id' => $venta->id,
-                        'codigo'   => $codigo,
-                        'tipo'     => $tipoNombre,
-                    ]);
-            }
-
-            return redirect()->route('ventas.create')->with('success', "Venta {$codigo} guardada.");
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return redirect()->back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
+
+        // Lógica de ABONO AUTOMÁTICO
+        if ($request->has('pago_excedente_abono') && $montoExcedente > 0) {
+            $creditoOld = Credito::where('id_cliente', $request->id_cliente)
+                                ->where('estado', 'pendiente')
+                                ->lockForUpdate()
+                                ->first();
+
+            if ($creditoOld) {
+                AbonoCredito::create([
+                    'id_credito'        => $creditoOld->id,
+                    'id_user'           => $user->id,
+                    'id_caja'           => $id_caja,
+                    'monto_pagado_usd'  => $montoExcedente,
+                    'pago_usd_efectivo' => $request->pago_usd_efectivo ?? 0,
+                    'pago_bs_efectivo'  => $request->pago_bs_efectivo ?? 0,
+                    'detalles'          => "Abono automático desde Venta: " . $codigo,
+                    'estado'            => 'Realizado'
+                ]);
+
+                $creditoOld->decrement('saldo_pendiente', $montoExcedente);
+
+                if ($creditoOld->fresh()->saldo_pendiente <= 0.01) {
+                    $creditoOld->update([
+                        'estado'          => 'pagado',
+                        'saldo_pendiente' => 0
+                    ]);
+                }
+            }
+        }
+
+        // Nuevo Crédito
+        if ($montoCredito > 0) {
+            Credito::create([
+                'id_venta'          => $venta->id,
+                'id_cliente'        => $request->id_cliente,
+                'monto_inicial'     => $montoCredito,
+                'saldo_pendiente'   => $montoCredito,
+                'fecha_vencimiento' => now()->addDays(15), 
+                'estado'            => 'pendiente',
+                'tasa_cambio_origen'=> $tasa_bcv
+            ]);
+
+            $detalles = [
+                'titulo'  => '💸 Nueva Venta a Crédito',
+                'mensaje' => "Se otorgó un crédito de {$montoCredito}$ a un cliente.",
+                'url'     => route('creditos.index'),
+                'icono'   => 'fas fa-hand-holding-usd text-info'
+            ];
+
+            foreach ($gerentes as $gerente) {
+                $gerente->notify(new StockBajoNotification($detalles));
+            }
+        }
+
+        DB::commit();
+
+        if (in_array($request->tipo_documento, ['nota_entrega', 'factura'])) {
+            $tipoNombre = $request->tipo_documento === 'factura' ? 'Factura' : 'Nota de Entrega';
+            return redirect()->route('ventas.create')
+                ->with('success', "Venta {$codigo} guardada exitosamente.")
+                ->with('imprimir_documento', [
+                    'venta_id' => $venta->id,
+                    'codigo'   => $codigo,
+                    'tipo'     => $tipoNombre,
+                ]);
+        }
+
+        return redirect()->route('ventas.create')->with('success', "Venta {$codigo} guardada exitosamente.");
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return redirect()->back()->withInput()->with('error', 'Error en transacción: ' . $e->getMessage());
     }
+}
+
 
     public function show($id)
     {
@@ -546,55 +574,56 @@ public function create()
             ], 422);
         }
 
-        $pin = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
+        // 2. Generar PIN de 6 dígitos en texto plano
+        $pinPlano = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
 
-        // 2. Guardar o actualizar la solicitud del local
+        // 3. Guardar el PIN en texto plano (sin Hash::make)
         AutorizacionPin::updateOrCreate(
             [
                 'id_local' => $local->id,
             ],
             [
-                'vendedor' => $user->name, 
-                'pin' => $pin,
-                'monto' => $request->monto_total,
-                'cliente' => $request->cliente_nombre,
-                'estado' => 'activo',
+                'vendedor'   => $user->name, 
+                'pin'        => $pinPlano, // <-- Se guarda legible (ej: 123456)
+                'monto'      => $request->monto_total,
+                'cliente'    => $request->cliente_nombre,
+                'estado'     => 'activo',
                 'updated_at' => now()
             ]
         );
 
-        // 3. Obtener los IDs de usuarios asignados a este local
+        // 4. Obtener los IDs de usuarios asignados al local
         $usuariosLocalIds = DB::table('users_has_local')
             ->where('id_local', $local->id)
             ->pluck('id_user');
 
-        // 4. Buscar administradores y encargados usando cadenas de texto (igual que en el resto del controlador)
-        $usuariosLocalIds = DB::table('users_has_local')
-            ->where('id_local', $venta->id_local)
-            ->pluck('id_user');
-
+        // 5. Buscar administradores y encargados del local
         $destinatarios = User::where('role', 'admin')
             ->orWhere(function($query) use ($usuariosLocalIds) {
-                $query->whereIn('role', ['encargado', 'almacen', 'ventas'])
+                $query->where('role', 'encargado')
                       ->whereIn('id', $usuariosLocalIds);
             })
             ->get();
 
-
+        // 6. Preparar mensaje para notificación
         $detalles = [
-            'titulo'  => '🔐 Solicitud de PIN',
-            'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para una venta de {$request->monto_total}$",
+            'titulo'  => '🔐 Solicitud de PIN de Autorización',
+            'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para venta de {$request->monto_total}$. Código PIN: {$pinPlano}",
             'url'     => '#', 
             'icono'   => 'fas fa-key text-warning'
         ];
 
-        foreach ($destinatarios as $destinatario) {
-            $destinatario->notify(new StockBajoNotification($detalles));
+        try {
+            foreach ($destinatarios as $destinatario) {
+                $destinatario->notify(new StockBajoNotification($detalles));
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error enviando notificación de PIN: ' . $e->getMessage());
         }
 
         return response()->json([
             'success' => true, 
-            'message' => 'PIN generado y enviado al encargado del local/Administrador'
+            'message' => 'PIN generado y enviado exitosamente.'
         ]);
     }
 
@@ -610,7 +639,6 @@ public function create()
             ], 422);
         }
 
-        // Limpiamos espacios en blanco accidentales que envíe el input
         $pinIngresado = trim($request->pin);
 
         if (empty($pinIngresado)) {
@@ -620,17 +648,15 @@ public function create()
             ], 422);
         }
 
-        // 2. Usamos una transacción con bloqueo para evitar que un doble clic queme el PIN dos veces
         return DB::transaction(function () use ($local, $pinIngresado) {
-            
             $auth = AutorizacionPin::where('id_local', $local->id)
                         ->where('estado', 'activo')
-                        ->lockForUpdate() // Bloquea la fila temporalmente para evitar peticiones concurrentes
+                        ->lockForUpdate()
                         ->latest('updated_at')
                         ->first();
 
-            // 3. Comparamos de forma estricta asegurando que ambos sean cadenas de texto
-            if ($auth && Hash::check($pinIngresado, $auth->pin)) {
+            // Compara el PIN ingresado directamente en texto plano
+            if ($auth && $auth->pin === $pinIngresado) {
                 $auth->update(['estado' => 'usado']); 
                 return response()->json(['success' => true]);
             }
@@ -641,6 +667,7 @@ public function create()
             ], 422);
         });
     }
+
 
     public function getDeudaPendiente($id)
 {

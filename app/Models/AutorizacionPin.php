@@ -25,8 +25,8 @@ class AutorizacionPin extends Model
         return $this->belongsTo(Local::class, 'id_local');
     }
 
-    public function setPinAttribute($value)
+    /*public function setPinAttribute($value)
     {
         $this->attributes['pin'] = Hash::make($value);
-    }
+    }*/
 }
