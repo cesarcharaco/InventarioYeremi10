@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Hash;
 
 class VentaController extends Controller
 {
@@ -91,16 +92,15 @@ public function create()
         return redirect()->back()->with('error', 'No tienes permiso.');
     }
     
-    $local = auth()->user()->localActual(); // Usamos tu método del modelo User
+   $user = Auth::user();
+   $local = $user->localActual(); // Usamos tu método del modelo User
 
     $oferta = ConfigOfertas::obtenerActiva($local ? $local->id : null);
     
     $ofertasActivas = !is_null($oferta);
     $motivoOferta = $oferta ? $oferta->motivo : '';
 
-    $user = Auth::user();
-    $local = $user->localActual();
-    
+     
     if (!$local) {
         return redirect()->route('home')->with('error', 'No tienes un local activo asignado.');
     }
@@ -115,7 +115,7 @@ public function create()
     }
 
     $tasa_bcv = bcv_rate('USD');
-    if ($tasa_bcv == 0) {
+    if (!$tasa_bcv || $tasa_bcv <= 0) {
         return redirect()->route('home')->with('error', 'Actualizando valor de TASA BCV');
     }
 
@@ -139,17 +139,17 @@ public function create()
         $q->where('id_local', $local->id);
     }])
     ->leftJoin('promociones_reglas as pr', function($join) use ($local, $hoy) {
-        $join->on('pr.local_id', '=', DB::raw($local->id))
-             ->where('pr.activo', '=', 1)
+        $join->where('pr.local_id', $local->id)
+             ->where('pr.activo', 1)
              ->whereDate('pr.fecha_inicio', '<=', $hoy)
              ->whereDate('pr.fecha_fin', '>=', $hoy)
              ->where(function($q) {
                  $q->where(function($sub) {
                      $sub->where('pr.alcance', 'insumo')
-                         ->on('pr.referencia_id', '=', 'insumos.id');
+                         ->whereColumn('pr.referencia_id', 'insumos.id');
                  })->orWhere(function($sub) {
                      $sub->where('pr.alcance', 'categoria')
-                         ->on('pr.referencia_id', '=', 'insumos.categoria_id');
+                         ->whereColumn('pr.referencia_id', 'insumos.categoria_id');
                  });
              });
     })
@@ -247,7 +247,7 @@ public function create()
                 'metodo'     => 'Punto',
                 'referencia' => $request->referencia_punto ?? 'S/R',
                 'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv : 0,
+                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv) : 0,
             ];
         }
 
@@ -257,14 +257,16 @@ public function create()
                 'metodo'     => 'Pago Movil',
                 'referencia' => $request->referencia_pagomovil ?? 'S/R',
                 'monto_bs'   => $montoBs,
-                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv : 0,
+                'monto_usd'  => $tasa_bcv> 0 ? ($montoBs / $tasa_bcv) : 0,
             ];
         }
 
-        // 3. Iteración e inserción limpia en BD
-        foreach ($pagosRegistrar as $pago) {
-            $venta->detallesPago()->create($pago);
+        if (abs(array_sum(array_column($pagosRegistrar, 'monto_usd')) - $request->total_usd) > 0.01) {
+            throw new \Exception("Los pagos no coinciden con el total de la venta.");
         }
+
+        // 3. Iteración e inserción limpia en BD
+       
 
         DB::beginTransaction();
         try {
@@ -286,6 +288,9 @@ public function create()
                 $correlativoNota = str_pad($siguiente, 7, '0', STR_PAD_LEFT);
 
                 $codigo = 'NE-' . $correlativoNota;
+                if (Venta::where('codigo_factura', $codigo)->exists()) {
+                    throw new \Exception("Conflicto de correlativo, intente nuevamente.");
+                }
             } elseif ($request->tipo_documento === 'factura') {
                 
                 // Buscar el siguiente correlativo fiscal disponible con bloqueo de fila
@@ -300,7 +305,9 @@ public function create()
 
                 // Asignamos el prefijo FAC- + el número de factura
                 $codigo = 'FAC-' . $correlativoFiscal->numero_factura;
-
+                if (Venta::where('codigo_factura', $codigo)->exists()) {
+                    throw new \Exception("Conflicto de correlativo, intente nuevamente.");
+                }
             } else { // sin_documento
                 $codigo = 'V-' . uniqid();
             }
@@ -320,6 +327,9 @@ public function create()
                 'observacion'       => $request->observacion
             ]);
 
+            foreach ($pagosRegistrar as $pago) {
+                $venta->detallesPago()->create($pago);
+            }
             // 2.1 Si fue factura fiscal, marcamos el correlativo como usado
             if ($correlativoFiscal) {
                 $correlativoFiscal->update([
@@ -368,10 +378,13 @@ public function create()
                                        ->first();
 
                 // Corrección: Usar $insumoBase->producto para evitar el error de $item['nombre']
-                if (!$existencia || $existencia->cantidad < $item['cantidad']) {
-                    $nombreProducto = $insumoBase ? $insumoBase->producto : "ID " . $item['id_insumo'];
-                    throw new \Exception("Stock insuficiente para: " . $nombreProducto);
-                }
+               if (!is_numeric($item['cantidad']) || $item['cantidad'] <= 0 || !$existencia || $existencia->cantidad < $item['cantidad']) {
+                   $nombreProducto = $insumoBase 
+                       ? "{$insumoBase->producto}: {$insumoBase->descripcion}" 
+                       : "Producto desconocido";
+                   throw new \Exception("Stock insuficiente o cantidad inválida para: " . $nombreProducto);
+               }
+
 
                 // 3. Registrar detalle incluyendo los datos de Promoción
                 $venta->detalles()->create([
@@ -540,12 +553,17 @@ public function create()
             ->pluck('id_user');
 
         // 4. Buscar administradores y encargados usando cadenas de texto (igual que en el resto del controlador)
+        $usuariosLocalIds = DB::table('users_has_local')
+            ->where('id_local', $venta->id_local)
+            ->pluck('id_user');
+
         $destinatarios = User::where('role', 'admin')
             ->orWhere(function($query) use ($usuariosLocalIds) {
-                $query->where('role', 'encargado')
+                $query->whereIn('role', ['encargado', 'almacen', 'ventas'])
                       ->whereIn('id', $usuariosLocalIds);
             })
             ->get();
+
 
         $detalles = [
             'titulo'  => '🔐 Solicitud de PIN',
@@ -596,10 +614,8 @@ public function create()
                         ->first();
 
             // 3. Comparamos de forma estricta asegurando que ambos sean cadenas de texto
-            if ($auth && $pinIngresado === (string) $auth->pin) {
-                // Marcamos como usado inmediatamente
+            if ($auth && Hash::check($pinIngresado, $auth->pin)) {
                 $auth->update(['estado' => 'usado']); 
-                
                 return response()->json(['success' => true]);
             }
 
@@ -740,6 +756,12 @@ public function create()
 
             // 2. Devolver el stock al local correspondiente
             foreach ($venta->detalles as $detalle) {
+                // Validar cantidad antes de procesar
+                if (!is_numeric($detalle->cantidad) || $detalle->cantidad <= 0) {
+                    Log::warning("Cantidad inválida al anular venta {$venta->id}, insumo {$detalle->id_insumo}");
+                    continue;
+                }
+
                 $insumoCantidad = DB::table('insumos_has_cantidades')
                     ->where('id_insumo', $detalle->id_insumo)
                     ->where('id_local', $venta->id_local)
@@ -749,8 +771,13 @@ public function create()
                     DB::table('insumos_has_cantidades')
                         ->where('id', $insumoCantidad->id)
                         ->increment('cantidad', $detalle->cantidad);
+                } else {
+                    // Registrar en logs si el insumo no existe en el local
+                    Log::warning("Intento de devolución de stock en insumo inexistente: Venta {$venta->id}, insumo {$detalle->id_insumo}, local {$venta->id_local}");
                 }
             }
+
+
 
             // 3. Manejar créditos asociados si existen
             if ($venta->credito) {

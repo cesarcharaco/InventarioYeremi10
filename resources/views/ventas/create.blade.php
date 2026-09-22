@@ -1412,63 +1412,7 @@ $(document).ready(function() {
     });
     @endif
 
-    /*// 1. Cuando hacen clic en "Ingresar PIN" desde el modal de aviso, 
-        // cerramos el aviso y abrimos el modal limpio para digitar los números.
-        $(document).on('click', '#btnIrAPin', function() {
-            $('#modalAvisoAutorizacion').modal('hide');
-            $('#modalIngresoPin').modal('show');
-            
-            // Limpiar el campo y darle foco automáticamente
-            $('#pin_input_field').val('');
-            setTimeout(function() {
-                $('#pin_input_field').focus();
-            }, 500);
-        });
-
-        // 2. Al hacer clic en "Confirmar" dentro del modalIngresoPin
-        $(document).on('click', '#btnValidarPin', function() {
-            let pinIngresado = $('#pin_input_field').val().trim();
-
-            if (pinIngresado === '') {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'PIN requerido',
-                    text: 'Por favor, ingresa los dígitos del PIN.'
-                });
-                return;
-            }
-
-            // Asignar el PIN capturado al input oculto que viaja en tu formulario principal
-            $('#pin_autorizacion_directo').val(pinIngresado);
-
-            // Actualizar los elementos visuales de la vista si los tienes (estado en verde)
-            $('#estado_pin_texto').html('PIN cargado correctamente: <b>' + pinIngresado + '</b>')
-                                  .removeClass('text-dark')
-                                  .addClass('text-success font-weight-bold');
-            
-            $('#bloque_pin_warning').removeClass('alert-warning border-warning')
-                                    .addClass('alert-success border-success');
-
-            // Cerrar el modal de ingreso de PIN
-            $('#modalIngresoPin').modal('hide');
-
-            // Notificación flotante de confirmación rápida
-            Swal.fire({
-                icon: 'success',
-                title: '¡PIN Adjuntado!',
-                text: 'El código se ha guardado listo para enviar.',
-                timer: 1300,
-                showConfirmButton: false
-            });
-        });
-
-        // Opcional: Permitir enviar presionando la tecla Enter dentro del input del PIN
-        $('#pin_input_field').on('keypress', function(e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                $('#btnValidarPin').click();
-            }
-        });*/
+    
 });
 </script>
 @endsection

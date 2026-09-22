@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
+use Illuminate\Support\Facades\Hash;
 class AutorizacionPin extends Model
 {
     // Definimos la tabla (importante porque el plural en español es complejo para Laravel)
@@ -23,5 +23,10 @@ class AutorizacionPin extends Model
     public function local(): BelongsTo
     {
         return $this->belongsTo(Local::class, 'id_local');
+    }
+
+    public function setPinAttribute($value)
+    {
+        $this->attributes['pin'] = Hash::make($value);
     }
 }
