@@ -12,6 +12,7 @@ use App\Models\InsumosC;
 use App\Models\Cliente;
 use App\Models\Caja;
 use App\Models\AbonoCredito;
+use App\Models\AbonoDetalle;
 use App\Models\PagoReferencia;
 use App\Models\AutorizacionPin;
 use App\Models\ConfigOfertas;
@@ -499,21 +500,80 @@ public function create()
             }
         }
 
+        
         // Nuevo Crédito
-        if ($montoCredito > 0) {
-            Credito::create([
-                'id_venta'          => $venta->id,
-                'id_cliente'        => $request->id_cliente,
-                'monto_inicial'     => $montoCredito,
-                'saldo_pendiente'   => $montoCredito,
-                'fecha_vencimiento' => now()->addDays(15), 
-                'estado'            => 'pendiente',
-                'tasa_cambio_origen'=> $tasa_bcv
-            ]);
+            // Nuevo Crédito
+            if ($montoCredito > 0) {
+                // 1. Obtener directamente de la BD el ÚNICO anticipo activo del cliente (Sin Eloquent)
+                    $anticipo = DB::table('creditos')
+                        ->where('id_cliente', $request->id_cliente)
+                        ->where('saldo_a_favor', '>', 0)
+                        ->latest('id')
+                        ->first();
+
+                    $saldoAFavorDisponible = $anticipo ? (float) $anticipo->saldo_a_favor : 0.0;
+
+                // 2. Determinar montos para el cruce
+                $montoAbonadoConFavor = min($montoCredito, $saldoAFavorDisponible);
+                $nuevoSaldoPendiente  = $montoCredito - $montoAbonadoConFavor;
+                $estadoNuevoCredito   = ($nuevoSaldoPendiente <= 0) ? 'pagado' : 'pendiente';
+
+                // 3. Crear el nuevo Crédito de la venta
+                $credito = Credito::create([
+                    'id_venta'           => $venta->id,
+                    'id_cliente'         => $request->id_cliente,
+                    'monto_inicial'      => $montoCredito,
+                    'saldo_pendiente'    => $nuevoSaldoPendiente,
+                    'saldo_a_favor'      => 0,
+                    'fecha_vencimiento'  => now()->addDays(15), 
+                    'estado'             => $estadoNuevoCredito,
+                    'tasa_cambio_origen' => $tasa_bcv
+                ]);
+
+                // 4. Descontar progresivamente el saldo a favor de los anticipos del cliente
+                if ($montoAbonadoConFavor > 0) {
+                    $nuevoSaldoFavor = $saldoAFavorDisponible - $montoAbonadoConFavor;
+                    $nuevoEstadoAnt  = ($nuevoSaldoFavor <= 0) ? 'pagado' : 'anticipo';
+
+                    // Actualización atómica en la base de datos
+                    DB::table('creditos')
+                        ->where('id', $anticipo->id)
+                        ->update([
+                            'saldo_a_favor' => $nuevoSaldoFavor,
+                            'estado'        => $nuevoEstadoAnt,
+                            'updated_at'    => now()
+                        ]);
+
+                    // 5. Registrar el Abono y su Detalle vinculados al nuevo crédito
+                    $abono = AbonoCredito::create([
+                        'id_cliente'        => $request->id_cliente,
+                        'id_user'           => Auth::id(),
+                        'id_caja'           => $id_caja ?? null,
+                        'monto_total_usd'   => $montoAbonadoConFavor,
+                        'pago_usd_efectivo' => 0,
+                        'pago_bs_efectivo'  => 0,
+                        'pago_punto_bs'     => 0,
+                        'pago_pagomovil_bs' => 0,
+                        'detalles'          => 'Abono automático por Cruce de Saldo a Favor / Anticipo',
+                        'estado'            => 'Realizado'
+                    ]);
+
+                    AbonoDetalle::create([
+                        'id_abono'           => $abono->id,
+                        'id_credito'         => $credito->id,
+                        'monto_aplicado_usd' => $montoAbonadoConFavor,
+                    ]);
+                }
+            
+
+            // 6. Notificaciones a gerencia
+            $mensajeNotificacion = ($nuevoSaldoPendiente > 0) 
+                ? "Se otorgó un crédito de {$montoCredito}$ (Cubierto {$montoAbonadoConFavor}$ con saldo a favor. Restante: {$nuevoSaldoPendiente}$)."
+                : "Venta a crédito de {$montoCredito}$ saldada completamente con Saldo a Favor previo del cliente.";
 
             $detalles = [
-                'titulo'  => '💸 Nueva Venta a Crédito',
-                'mensaje' => "Se otorgó un crédito de {$montoCredito}$ a un cliente.",
+                'titulo'  => '💸 Nueva Venta a Crédito / Cruce de Saldo',
+                'mensaje' => $mensajeNotificacion,
                 'url'     => route('creditos.index'),
                 'icono'   => 'fas fa-hand-holding-usd text-info'
             ];

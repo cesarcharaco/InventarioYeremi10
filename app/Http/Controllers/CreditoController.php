@@ -141,7 +141,7 @@ class CreditoController extends Controller
 
         // Intereses aplicados solo a deudas pendientes
         $totalInteresesPendientes = $creditosPendientes->sum(function($c) { 
-            return $c->intereses->sum('monto_interes'); 
+            return $c->intereses->where('estado', 'aplicado')->sum('monto_interes'); 
         });
 
         // Saldo a favor acumulado
@@ -674,6 +674,7 @@ class CreditoController extends Controller
         return view('creditos.modals.modal_interes', compact('credito'))->render();
     }
 
+    // CÓDIGO CORREGIDO (CreditoController.php - aplicarInteres):
     public function aplicarInteres(Request $request, $id)
     {
         $request->validate([
@@ -683,33 +684,41 @@ class CreditoController extends Controller
         
         try {
             $res = DB::transaction(function () use ($request, $id) {
-                $credito = Credito::lockForUpdate()->findOrFail($id);
+                $creditoRef = Credito::findOrFail($id);
+                
+                // Obtener TODOS los créditos pendientes con saldo del cliente
+                $creditosPendientes = Credito::where('id_cliente', $creditoRef->id_cliente)
+                    ->where('estado', 'pendiente')
+                    ->where('saldo_pendiente', '>', 0)
+                    ->lockForUpdate()
+                    ->get();
 
-                // FIX: solo se indexa deuda real; sobre un anticipo (saldo negativo)
-                // el "interés" reduciría el saldo a favor en vez de sumar
-                if ($credito->estado !== 'pendiente' || $credito->saldo_pendiente <= 0) {
-                    throw new \Exception('Solo se pueden aplicar intereses a créditos pendientes con saldo mayor a cero.');
+                if ($creditosPendientes->isEmpty()) {
+                    throw new \Exception('No hay créditos pendientes con saldo mayor a cero para aplicar intereses.');
                 }
-                $saldoAnterior = $credito->saldo_pendiente;
-                $montoInteres = $saldoAnterior * ($request->porcentaje / 100);
-                $saldoNuevo = $saldoAnterior + $montoInteres;
 
-                CreditoInteres::create([
-                    'id_credito'    => $credito->id,
-                    'id_user'       => Auth::id(),
-                    'monto_interes' => $montoInteres,
-                    'porcentaje'    => $request->porcentaje,
-                    'saldo_anterior'=> $saldoAnterior,
-                    'saldo_nuevo'   => $saldoNuevo,
-                    'aplicado_en'   => now(),
-                    'estado'        => 'aplicado',
-                    'observacion'   => $request->observacion
-                ]);
+                foreach ($creditosPendientes as $credito) {
+                    $saldoAnterior = $credito->saldo_pendiente;
+                    $montoInteres = $saldoAnterior * ($request->porcentaje / 100);
+                    $saldoNuevo = $saldoAnterior + $montoInteres;
 
-                $credito->saldo_pendiente = $saldoNuevo;
-                $credito->save();
+                    CreditoInteres::create([
+                        'id_credito'    => $credito->id,
+                        'id_user'       => Auth::id(),
+                        'monto_interes' => $montoInteres,
+                        'porcentaje'    => $request->porcentaje,
+                        'saldo_anterior'=> $saldoAnterior,
+                        'saldo_nuevo'   => $saldoNuevo,
+                        'aplicado_en'   => now(),
+                        'estado'        => 'aplicado',
+                        'observacion'   => $request->observacion
+                    ]);
 
-                return ['success' => true, 'mensaje' => "Interés aplicado exitosamente."];
+                    $credito->saldo_pendiente = $saldoNuevo;
+                    $credito->save();
+                }
+
+                return ['success' => true, 'mensaje' => "Interés aplicado exitosamente a los créditos pendientes."];
             });
 
             return response()->json($res);
@@ -722,7 +731,7 @@ class CreditoController extends Controller
     {
         $credito = Credito::with(['intereses'])->findOrFail($id);
         
-        $totalIntereses = $credito->total_intereses;
+       $totalIntereses = $credito->intereses->where('estado', 'aplicado')->sum('monto_interes');
         
         // Sumar montos aplicados desde la tabla abono_detalles filtrando cabeceras válidas
         $totalAbonos = AbonoDetalle::where('id_credito', $id)
@@ -836,47 +845,108 @@ class CreditoController extends Controller
     {
         $cliente = Cliente::findOrFail($cliente_id);
 
-        // Créditos ordenados cronológicamente de más antiguo a más reciente (Solo pendientes y anticipos)
+        // 1. Obtener créditos vigentes (Pendientes y Anticipos)
         $creditos = Credito::where('id_cliente', $cliente_id)
             ->whereIn('estado', ['pendiente', 'anticipo'])
             ->with([
                 'venta.detalles.insumo',
                 'intereses' => function($q) {
-                    $q->where('estado', 'aplicado')
-                      ->orderBy('aplicado_en', 'asc'); // Ordenar indexaciones por fecha
+                    $q->where('estado', 'aplicado');
                 },
                 'abonos' => function($q) {
-                    $q->where('abonos_credito.estado', 'Realizado')
-                      ->orderBy('abonos_credito.created_at', 'asc'); // Ordenar abonos por fecha
+                    $q->where('abonos_credito.estado', 'Realizado');
                 }
             ])
-            ->orderBy('created_at', 'asc')
             ->get();
 
         $creditosIds = $creditos->pluck('id');
 
-        $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
-            ->where('estado', 'aplicado')
-            ->orderBy('aplicado_en', 'asc')
+        // 2. Construir Historial Unificado de Movimientos
+        $movimientos = collect();
+
+        foreach ($creditos as $credito) {
+            $esAnticipo = ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0);
+            
+            if ($esAnticipo) {
+                $movimientos->push([
+                    'fecha'       => $credito->created_at,
+                    'tipo'        => 'ANTICIPO',
+                    'titulo'      => 'Saldo a Favor / Anticipo',
+                    'monto'       => abs($credito->saldo_pendiente),
+                    'observacion' => $credito->observacion ?? optional($credito->venta)->observacion ?? 'Dinero disponible a favor del cliente',
+                    'detalles'    => []
+                ]);
+            } else {
+                // Registrar la Compra / Crédito tomado
+                $detallesProductos = [];
+                if ($credito->venta && $credito->venta->detalles) {
+                    foreach ($credito->venta->detalles as $det) {
+                        $nombreProd = optional($det->insumo)->producto ?? 'Producto / Mercancía';
+                        $cant = $det->cantidad;
+                        $detallesProductos[] = "{$cant}x {$nombreProd}";
+                    }
+                }
+
+                $movimientos->push([
+                    'fecha'       => $credito->created_at,
+                    'tipo'        => 'CREDITO',
+                    'titulo'      => !empty($detallesProductos) ? 'Mercancía llevada a crédito' : 'Crédito / Préstamo directo',
+                    'monto'       => $credito->monto_inicial,
+                    'observacion' => $credito->observacion ?? optional($credito->venta)->observacion ?? '',
+                    'detalles'    => $detallesProductos
+                ]);
+
+                // Registrar Indexaciones / Ajustes por Inflación
+                foreach ($credito->intereses as $interes) {
+                    $movimientos->push([
+                        'fecha'       => Carbon::parse($interes->aplicado_en),
+                        'tipo'        => 'INDEXACION',
+                        'titulo'      => "Ajuste por inflación ({$interes->porcentaje}%)",
+                        'monto'       => $interes->monto_interes,
+                        'observacion' => $interes->observacion ?? 'Ajuste de valor aplicado a la deuda',
+                        'detalles'    => []
+                    ]);
+                }
+            }
+        }
+
+        // 3. Obtener Abonos globales vinculados
+        $abonos = AbonoCredito::where('id_cliente', $cliente_id)
+            ->where('estado', 'Realizado')
+            ->whereHas('detalles', function($q) use ($creditosIds) {
+                $q->whereIn('id_credito', $creditosIds);
+            })
             ->get();
 
-        $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
-        $totalIntereses = $historialIntereses->sum('monto_interes');
+        foreach ($abonos as $abono) {
+            $movimientos->push([
+                'fecha'       => $abono->created_at,
+                'tipo'        => 'ABONO',
+                'titulo'      => 'Abono / Pago recibido',
+                'monto'       => $abono->monto_total_usd,
+                'observacion' => $abono->detalles ?? 'Abono realizado a la cuenta',
+                'detalles'    => []
+            ]);
+        }
 
-        // Sumatoria exacta desde la tabla pivote abono_detalles
+        // 4. ORDENAR CRONOLÓGICAMENTE: De la fecha más actual a la más antigua
+        $movimientos = $movimientos->sortByDesc('fecha')->values();
+
+        // 5. Cálculos para el Resumen Financiero
+        $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
+        
+        $totalIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
+            ->where('estado', 'aplicado')
+            ->sum('monto_interes');
+
         $totalAbonado = AbonoDetalle::whereIn('id_credito', $creditosIds)
             ->whereHas('abono', function($q) {
-                $q->where('estado', 'Realizado');
+                $q->where('estado', '!=', 'Anulado');
             })
             ->sum('monto_aplicado_usd');
 
-        $saldoPendienteTotal = $creditos
-            ->where('estado', 'pendiente')
-            ->sum('saldo_pendiente');
-
-        $saldoAFavorTotal = abs($creditos
-            ->where('estado', 'anticipo')
-            ->sum('saldo_pendiente'));
+        $saldoPendienteTotal = $creditos->where('estado', 'pendiente')->sum('saldo_pendiente');
+        $saldoAFavorTotal = abs($creditos->where('estado', 'anticipo')->sum('saldo_pendiente'));
 
         $resumen = [
             'monto_inicial'   => $montoInicialTotal,
@@ -891,7 +961,7 @@ class CreditoController extends Controller
 
         $pdf = Pdf::loadView('creditos.pdf.estado_cuenta', compact(
             'cliente',
-            'creditos',
+            'movimientos',
             'resumen',
             'empresa'
         ));
@@ -951,7 +1021,7 @@ class CreditoController extends Controller
 
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
             $fechaCredito = Carbon::parse($request->fecha_credito);
-            $idCajaActiva = $this->obtenerCajaActiva();
+            $idCajaActiva = $this->obtenerCajaActiva($request->id_local);
 
             $venta = new Venta();
             $venta->codigo_factura     = $codigoFactura;
@@ -1518,7 +1588,7 @@ class CreditoController extends Controller
 
         // IMPORTANTE: Ajusta aquí 'monto_abonado' al nombre real de la columna en tu BD (ej. monto_aplicado)
         $totalAbonadoPeriodo = $abonosPeriodo->where('estado', 'Realizado')->sum(function($a) {
-            return $a->monto_pagado_usd ?? $a->monto_total_usd ?? 0;
+            return $a->monto_total_usd ?? 0;
         });
 
         $totalInteresesPeriodo = $interesesPeriodo->where('estado', 'aplicado')->sum('monto_interes');

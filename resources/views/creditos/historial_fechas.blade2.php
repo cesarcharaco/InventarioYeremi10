@@ -3,7 +3,7 @@
     $totalAbonosPeriodo = $totalAbonadoPeriodo ?? 0;
     $totalIndexacionesPeriodo = $totalInteresesPeriodo ?? 0;
     
-    // Fórmula del periodo: (Créditos + Indexaciones) - Abonos
+    // Fórmula clara: (Créditos + Indexaciones) - Abonos
     $saldoNetoPeriodo = ($totalDebePeriodo + $totalIndexacionesPeriodo) - $totalAbonosPeriodo;
 
     $resumenPeriodo = [
@@ -17,7 +17,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Historial de Movimientos - {{ $cliente->nombre }}</title>
+    <title>Movimientos Crediticios - {{ $cliente->nombre }}</title>
     <style>
         @page {
             margin: 20px 25px;
@@ -182,25 +182,24 @@
                 <h1 class="company-title">YERMOTORS REPUESTOS C.A.</h1>
                 <div class="company-subtitle">Venta de Repuestos y Accesorios</div>
                 <div class="company-info-text">
-                    <strong>RIF:</strong> {{ $empresa->rif ?? 'J-50186803-4' }}<br>
-                    <strong>Dirección:</strong> {{ $empresa->direccion ?? 'Calle Páez entre Bolívar y Guzmán Blanco, Casa S/N, Sector Centro, San José de Guaribe, Estado Guárico.' }}<br>
-                    <strong>Teléfono:</strong> {{ $empresa->telefono ?? '0414-0863107' }}
+                    <strong>RIF:</strong> J-50186803-4<br>
+                    <strong>Dirección:</strong> Calle Páez entre Bolívar y Guzmán Blanco, Casa S/N, Sector Centro, San José de Guaribe, Estado Guárico.<br>
+                    <strong>Teléfono:</strong> 0414-0863107
                 </div>
             </td>
             
             <td style="width: 42%; vertical-align: top;">
                 <div class="box-header-right">
-                    <h4>HISTORIAL POR FECHA</h4>
-                    <p><strong>DESDE:</strong> {{ \Carbon\Carbon::parse($fechaInicio)->format('d / m / Y') }}</p>
-                    <p><strong>HASTA:</strong> {{ \Carbon\Carbon::parse($fechaFin)->format('d / m / Y') }}</p>
-                    <p><strong>EMISIÓN:</strong> {{ \Carbon\Carbon::now()->format('d/m/Y h:i A') }}</p>
+                    <h4>ESTADO DE CUENTA</h4>
+                    <p><strong>FECHA:</strong> {{ \Carbon\Carbon::now()->format('d / m / Y') }}</p>
+                    <p><strong>HORA:</strong> {{ \Carbon\Carbon::now()->format('h:i A') }}</p>
                     <p><strong>GENERADO POR:</strong> {{ auth()->user()->name ?? 'Sistema' }}</p>
                 </div>
             </td>
         </tr>
     </table>
 
-    {{-- Datos del Cliente y Control --}}
+    {{-- Datos del Cliente y Emisión --}}
     <table class="info-table">
         <tr>
             <td style="width: 60%; background-color: #f1f3f5; border-radius: 3px;">
@@ -211,15 +210,15 @@
                 <strong>Dirección:</strong> {{ $cliente->direccion ?? 'No especificada' }}
             </td>
             <td style="width: 40%; background-color: #f1f3f5; border-radius: 3px;">
-                <div class="box-title">Detalles de la Consulta</div>
-                <strong>Rango Solicitado:</strong> {{ \Carbon\Carbon::parse($fechaInicio)->format('d/m/Y') }} al {{ \Carbon\Carbon::parse($fechaFin)->format('d/m/Y') }}<br>
+                <div class="box-title">Detalles de Control</div>
+                <strong>Fecha Emisión:</strong> {{ \Carbon\Carbon::now()->format('d/m/Y h:i A') }}<br>
                 <strong>Estado Cliente:</strong> <span class="text-success font-bold">Activo</span>
             </td>
         </tr>
     </table>
 
     {{-- Resumen Financiero del Periodo --}}
-    <div class="section-heading">RESUMEN DEL PERIODO CONSULTADO</div>
+    <div class="section-heading">RESUMEN GENERAL DEL PERIODO</div>
     <table class="resumen-table">
         <tr>
             <td class="resumen-label">Créditos Otorgados (Periodo):</td>
@@ -237,8 +236,8 @@
         </tr>
     </table>
 
-    {{-- MOVIMIENTOS CREDITICIOS EN EL RANGO --}}
-    <div class="section-heading">DETALLE DE MOVIMIENTOS EN EL RANGO</div>
+    {{-- MOVIMIENTOS CREDITICIOS --}}
+    <div class="section-heading">MOVIMIENTOS CREDITICIOS</div>
     <table class="data-table">
       <thead>
         <tr>
@@ -265,19 +264,17 @@
             if ($esAnticipo) {
                 $totalSaldoAFavor += abs($credito->saldo_pendiente);
             } else {
-                if ($credito->created_at >= $fechaInicio && $credito->created_at <= $fechaFin) {
-                    $totalDebeGeneral += $credito->monto_inicial;
-                }
+                $totalDebeGeneral += $credito->monto_inicial;
                 
                 $abonosValidos = $credito->abonos ?? collect();
-                $totalAbonoCredito = $abonosValidos->sum(function($a) {
+                $totalAbonoGeneral += $abonosValidos->sum(function($a) {
+                    // Apunta al campo real de tu modelo AbonoDetalle
                     $estado = optional($a->abono)->estado ?? $a->estado ?? 'Realizado';
                     if (strtolower($estado) === 'realizado') {
                         return $a->monto_aplicado_usd ?? optional($a->pivot)->monto_aplicado_usd ?? $a->monto ?? 0;
                     }
                     return 0;
                 });
-                $totalAbonoGeneral += $totalAbonoCredito;
 
                 $interesesAplicados = $credito->intereses ? $credito->intereses->where('estado', 'aplicado') : collect();
                 $totalInteresesGeneral += $interesesAplicados->sum('monto_interes');
@@ -318,7 +315,7 @@
           <!-- CONTENIDO SEGÚN TIPO -->
           @if($esAnticipo)
             <tr>
-              <td class="pl-4 text-info"><em>Monto registrado a favor del cliente en este periodo</em></td>
+              <td class="pl-4 text-info"><em>Monto registrado a favor del cliente para futuros pagos</em></td>
               <td></td>
               <td class="text-right font-bold text-info">
                 +${{ number_format(abs($credito->saldo_pendiente), 2) }}
@@ -354,7 +351,7 @@
           @endif
 
           @if(!$esAnticipo)
-           {{-- INDEXACIONES APLICADAS EN EL RANGO --}}
+           {{-- INDEXACIONES --}}
            @if(isset($interesesAplicados) && $interesesAplicados->isNotEmpty())
              @foreach($interesesAplicados as $interes)
                <tr class="bg-interes">
@@ -373,46 +370,47 @@
              @endforeach
            @endif
 
-          {{-- MONTO TOTAL ABONADO (UNIFICADO CON FECHA) --}}
-          @php
-            $abonosRealizados = $abonosValidos->filter(function($a) {
-                $estado = optional($a->abono)->estado ?? $a->estado ?? 'Realizado';
-                return strtolower($estado) === 'realizado';
-            });
-
-            $fechasAbonos = $abonosRealizados->map(function($a) {
-                $abonoPadre = $a->abono ?? $a;
-                $f = $abonoPadre->created_at ?? $a->created_at;
-                return $f ? \Carbon\Carbon::parse($f)->format('d/m/Y h:i A') : null;
-            })->filter()->values();
+          {{-- ABONOS --}}
+          @php 
+            $abonosList = $credito->abonos ?? collect();
           @endphp
+          
+          @if($abonosList->isNotEmpty())
+            @foreach($abonosList as $abonoItem)
+              @php 
+                // Columna correcta según tu modelo AbonoDetalle
+                $montoReal = $abonoItem->monto_aplicado_usd 
+                             ?? optional($abonoItem->pivot)->monto_aplicado_usd 
+                             ?? $abonoItem->monto 
+                             ?? 0;
 
-          @if($totalAbonoCredito > 0)
-            <tr class="bg-abono">
-              <td class="pl-4" style="font-size: 8.5px;">
-                <strong>MONTO TOTAL ABONADO</strong>
-                @if($fechasAbonos->isNotEmpty())
-                  <span style="color: #555; font-size: 8px; font-weight: normal;">
-                    @if($fechasAbonos->count() == 1)
-                      (FECHA: {{ $fechasAbonos->first() }})
-                    @else
-                      (ÚLTIMO: {{ $fechasAbonos->last() }})
-                    @endif
-                  </span>
-                @endif
-              </td>
-              <td></td>
-              <td class="text-right font-bold text-success">
-                ${{ number_format($totalAbonoCredito, 2) }}
-              </td>
-              <td style="color: #666; font-size: 8.5px;">
-                <!-- @if($fechasAbonos->count() > 1)
-                  Total acumulado en {{ $fechasAbonos->count() }} abonos
-                @else -->
-                  Abono realizado a la cuenta
-                <!-- @endif -->
-              </td>
-            </tr>
+                // El estado vive en la tabla padre (abonos_credito)
+                $estadoAbono = optional($abonoItem->abono)->estado ?? $abonoItem->estado ?? 'Realizado';
+                $esReembolso = $montoReal < 0; 
+
+                // Datos del recibo y fechas desde la relación padre
+                $abonoPadre = $abonoItem->abono ?? $abonoItem;
+                $codigoRecibo = $abonoPadre->codigo_recibo ?? ('ABN-' . ($abonoPadre->id ?? $abonoItem->id));
+                $fechaAbono = $abonoPadre->created_at ?? $abonoItem->created_at;
+                $obsAbono = $abonoPadre->observacion ?? $abonoItem->observacion ?? ($esReembolso ? 'Devolución de saldo' : 'Abono realizado');
+              @endphp
+
+              @if(strtolower($estadoAbono) === 'realizado')
+                <tr class="{{ $esReembolso ? 'bg-interes' : 'bg-abono' }}">
+                  <td class="pl-4" style="font-size: 8.5px;">
+                    <strong>{{ $esReembolso ? '#REEMBOLSO:' : '#ABONO:' }}</strong> {{ $codigoRecibo }}
+                    <span style="color: #666;">({{ $fechaAbono ? \Carbon\Carbon::parse($fechaAbono)->format('d/m/Y h:i A') : '' }})</span>
+                  </td>
+                  <td></td>
+                  <td class="text-right font-bold {{ $esReembolso ? 'text-danger' : 'text-success' }}">
+                    {{ $esReembolso ? '-' : '' }}${{ number_format(abs($montoReal), 2) }}
+                  </td>
+                  <td style="color: #666; font-size: 8.5px;">
+                    {{ $obsAbono }}
+                  </td>
+                </tr>
+              @endif
+            @endforeach
           @endif
 
             <!-- SUBTOTAL PENDIENTE DE ESTE CRÉDITO -->
@@ -425,13 +423,13 @@
             </tr>
           @endif
 
-          <!-- SEPARADOR ENTRE CRÉDITOS -->
+          <!-- SEPARADOR ENTRE CREDITOS -->
           <tr><td colspan="4" style="background-color: #ffffff; padding: 2px; border: none;"></td></tr>
 
         @empty
           <tr>
             <td colspan="4" class="text-center text-muted" style="padding: 15px;">
-              No se encontraron movimientos o créditos registrados para el cliente en el rango de fechas seleccionado.
+              No se encontraron registros de créditos ni movimientos en el rango de fechas seleccionado.
             </td>
           </tr>
         @endforelse
@@ -471,7 +469,7 @@
 
     {{-- Pie de Página Fijo --}}
     <div class="footer">
-        Documento generado automáticamente por el sistema de gestión. Historial de movimientos crediticios.
+        Documento generado automáticamente por el sistema de gestión. Página 1 de 1
     </div>
 
 </body>

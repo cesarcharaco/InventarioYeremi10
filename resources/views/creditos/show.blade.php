@@ -41,7 +41,7 @@
                     <div class="text-muted text-uppercase small font-weight-bold">
                         Total Abonado 
                         <span class="badge badge-success">
-                            {{ $resumen['monto_inicial'] > 0 ? round(($resumen['total_abonado'] / $resumen['monto_inicial']) * 100, 1) : 0 }}%
+                            {{ $resumen['deuda_total'] > 0 ? round(($resumen['total_abonado'] / $resumen['deuda_total']) * 100, 1) : 0 }}%
                         </span>
                     </div>
                     <div class="d-flex align-items-baseline justify-content-between mt-1">

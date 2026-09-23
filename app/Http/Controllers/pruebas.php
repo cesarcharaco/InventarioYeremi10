@@ -103,3 +103,73 @@ public function verificarPin(Request $request)
         ], 422);
     });
 }
+
+
+public function pdfEstadoCuenta($cliente_id)
+    {
+        $cliente = Cliente::findOrFail($cliente_id);
+
+        // Créditos ordenados cronológicamente de más antiguo a más reciente (Solo pendientes y anticipos)
+        $creditos = Credito::where('id_cliente', $cliente_id)
+            ->whereIn('estado', ['pendiente', 'anticipo'])
+            ->with([
+                'venta.detalles.insumo',
+                'intereses' => function($q) {
+                    $q->where('estado', 'aplicado')
+                      ->orderBy('aplicado_en', 'asc'); // Ordenar indexaciones por fecha
+                },
+                'abonos' => function($q) {
+                    $q->where('abonos_credito.estado', 'Realizado')
+                      ->orderBy('abonos_credito.created_at', 'asc'); // Ordenar abonos por fecha
+                }
+            ])
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $creditosIds = $creditos->pluck('id');
+
+        $historialIntereses = CreditoInteres::whereIn('id_credito', $creditosIds)
+            ->where('estado', 'aplicado')
+            ->orderBy('aplicado_en', 'asc')
+            ->get();
+
+        $montoInicialTotal = $creditos->where('estado', 'pendiente')->sum('monto_inicial');
+        $totalIntereses = $historialIntereses->sum('monto_interes');
+
+        // Sumatoria exacta desde la tabla pivote abono_detalles
+        $totalAbonado = AbonoDetalle::whereIn('id_credito', $creditosIds)
+            ->whereHas('abono', function($q) {
+                $q->where('estado', '!=', 'Anulado');
+            })
+            ->sum('monto_aplicado_usd');
+
+        $saldoPendienteTotal = $creditos
+            ->where('estado', 'pendiente')
+            ->sum('saldo_pendiente');
+
+        $saldoAFavorTotal = abs($creditos
+            ->where('estado', 'anticipo')
+            ->sum('saldo_pendiente'));
+
+        $resumen = [
+            'monto_inicial'   => $montoInicialTotal,
+            'total_intereses' => $totalIntereses,
+            'total_abonado'   => $totalAbonado,
+            'saldo_a_favor'   => $saldoAFavorTotal,
+            'saldo_pendiente' => $saldoPendienteTotal,
+            'neto_a_pagar'    => max(0, $saldoPendienteTotal - $saldoAFavorTotal)
+        ];
+
+        $empresa = Local::first();
+
+        $pdf = Pdf::loadView('creditos.pdf.estado_cuenta', compact(
+            'cliente',
+            'creditos',
+            'resumen',
+            'empresa'
+        ));
+
+        $pdf->setPaper('letter', 'portrait');
+
+        return $pdf->stream("Estado_Cuenta_{$cliente->identificacion}.pdf");
+    }
