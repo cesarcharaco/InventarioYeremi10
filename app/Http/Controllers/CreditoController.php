@@ -8,6 +8,7 @@ use App\Models\AbonoCredito;
 use App\Models\AbonoDetalle;
 use App\Models\CreditoInteres;
 use App\Models\Caja;
+use App\Models\CajaMovimiento;
 use App\Models\Cliente;
 use App\Models\Local;
 use App\Models\DetalleVenta;
@@ -126,7 +127,7 @@ class CreditoController extends Controller
         $creditosAnticipo = $cliente->creditos->filter(function($c) {
             return $c->estado === 'anticipo' || $c->saldo_pendiente < 0;
         });
-
+        //dd($creditosAnticipo);
         // 4. CÁLCULO DE MÉTRICAS ENFOCADAS EN LA DEUDA ACTIVA
         $montoInicialPendiente = $creditosPendientes->sum('monto_inicial');
         $saldoPendienteDeuda   = $creditosPendientes->sum('saldo_pendiente');
@@ -145,7 +146,7 @@ class CreditoController extends Controller
         });
 
         // Saldo a favor acumulado
-        $saldoAFavor = abs($creditosAnticipo->sum('saldo_pendiente'));
+        $saldoAFavor = abs($creditosAnticipo->sum('saldo_a_favor'));
 
         // 5. Estructuración del Resumen
         $resumen = [
@@ -1339,7 +1340,8 @@ class CreditoController extends Controller
 
         try {
             DB::transaction(function () use ($id) {
-                // 1. BUSCAR EL CRÉDITO POR ID O POR ID DE VENTA (Ya carga una instancia del modelo Eloquent)
+                \Log::info('Iniciando eliminación de crédito', ['id' => $id]);
+                // 1. OBTENER EL CRÉDITO Y SUS RELACIONES
                 $credito = Credito::with(['venta.detalles', 'cliente'])
                     ->where(function ($q) use ($id) {
                         $q->where('id', $id)->orWhere('id_venta', $id);
@@ -1349,171 +1351,220 @@ class CreditoController extends Controller
                 if (!$credito) {
                     throw new \Exception("No existe un registro de crédito asociado al identificador [{$id}].");
                 }
+                // DEBUG: Log de valores reales
+                \Log::info('DEBUG CRÉDITO', [
+                    'id' => $credito->id,
+                    'id_venta' => $credito->id_venta,
+                    'estado_raw' => $credito->getRawOriginal('estado'),
+                    'estado_accessor' => $credito->estado,
+                    'saldo_pendiente' => $credito->saldo_pendiente,
+                    'saldo_a_favor' => $credito->saldo_a_favor,
+                    'monto_inicial' => $credito->monto_inicial,
+                ]);
+                // GUARDRAIL: Prevenir la eliminación directa de créditos pagados
+                if ($credito->estado === 'pagado' && (float)$credito->saldo_pendiente <= 0) {
+                    throw new \Exception("No se puede eliminar un crédito que ya ha sido saldado completamente. Si requiere ajustar saldos, ejecute una nota de crédito o devolución.");
+                }
 
                 $idCreditoReal = $credito->id;
-                $idCliente = $credito->id_cliente;
-                $cliente = $credito->cliente;
-                $venta = $credito->venta;
+                $idCliente     = $credito->id_cliente;
+                $cliente       = $credito->cliente;
+                $venta         = $credito->venta;
 
-                // 2. RESTAURAR INVENTARIO SI ES UNA VENTA CON DETALLES DE INSUMOS
-                $esVentaConInsumos = $venta && $venta->detalles && $venta->detalles->isNotEmpty();
+                $rawEstado  = $credito->getRawOriginal('estado');
+                $esAnticipo = ($rawEstado === 'anticipo' || $credito->saldo_pendiente < 0 || $credito->saldo_a_favor > 0);
 
-                if ($esVentaConInsumos) {
-                    foreach ($venta->detalles as $detalle) {
-                        if ($detalle->id_insumo) {
-                            $existencia = InsumosC::where('id_insumo', $detalle->id_insumo)
-                                ->where('id_local', $venta->id_local)
-                                ->first();
+                // 2. ESCENARIO A: ELIMINACIÓN DE UN ANTICIPO / SALDO A FAVOR
+                if ($esAnticipo) {
+                    if ($cliente) {
+                        $montoAnticipo = abs($credito->saldo_pendiente) > 0 
+                            ? abs($credito->saldo_pendiente) 
+                            : ($credito->saldo_a_favor > 0 ? $credito->saldo_a_favor : $credito->monto_inicial);
 
-                            if ($existencia) {
-                                $existencia->increment('cantidad', $detalle->cantidad);
-                            } else {
-                                InsumosC::create([
-                                    'id_insumo' => $detalle->id_insumo,
-                                    'id_local'  => $venta->id_local,
-                                    'cantidad'  => $detalle->cantidad,
-                                ]);
-                            }
+                        $saldoAFavorActual = (float) ($cliente->saldo_a_favor ?? 0);
+                        $montoADecrementar = min($saldoAFavorActual, (float) $montoAnticipo);
+
+                        if ($montoADecrementar > 0) {
+                            $cliente->decrement('saldo_a_favor', $montoADecrementar);
                         }
                     }
-                } else {
-                    if ($cliente && ($credito->estado === 'anticipo' || $credito->saldo_pendiente < 0)) {
-                        $montoAnticipo = abs($credito->saldo_pendiente ?? $credito->monto_inicial);
-                        $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $montoAnticipo));
-                    }
-                }
 
-                // 3. REASIGNAR ABONOS REGISTRADOS
-                $detallesAbono = DB::table('abono_detalles')
-                    ->where('id_credito', $idCreditoReal)
-                    ->get();
-
-                foreach ($detallesAbono as $detalle) {
-                    $montoAbonado = (float) $detalle->monto_aplicado_usd;
-                    $idAbonoCabecera = $detalle->id_abono;
-
-                    DB::table('abono_detalles')->where('id', $detalle->id)->delete();
-
-                    // FIX: los detalles negativos (reembolsos de saldo a favor) se anulan
-                    // junto con el crédito. Reasignarlos sumaba deuda a créditos ajenos
-                    if ($montoAbonado <= 0) {
-                        continue;
-                    }
-
-                    $siguientesCreditos = Credito::where('id_cliente', $idCliente)
-                        ->where('id', '!=', $idCreditoReal)
-                        ->whereIn('estado', ['pendiente', 'vencido', 'revalorizado'])
-                        ->where('saldo_pendiente', '>', 0)
-                        ->orderBy('created_at', 'asc')
-                        ->orderBy('id', 'asc')
+                    $detallesAbonoAnticipo = DB::table('abono_detalles')
+                        ->where('id_credito', $idCreditoReal)
                         ->get();
 
-                    $montoRestanteReasignar = $montoAbonado;
+                    foreach ($detallesAbonoAnticipo as $detalle) {
+                        $idAbonoCabecera = $detalle->id_abono;
+                        DB::table('abono_detalles')->where('id', $detalle->id)->delete();
 
-                    foreach ($siguientesCreditos as $creditoDestino) {
-                        if ($montoRestanteReasignar <= 0) break;
-
-                        $montoAbonarCredito = min($creditoDestino->saldo_pendiente, $montoRestanteReasignar);
-
-                        DB::table('abono_detalles')->insert([
-                            'id_abono'           => $idAbonoCabecera,
-                            'id_credito'         => $creditoDestino->id,
-                            'monto_aplicado_usd' => $montoAbonarCredito,
-                            'created_at'         => now(),
-                            'updated_at'         => now()
-                        ]);
-
-                        $nuevoSaldoPendiente = $creditoDestino->saldo_pendiente - $montoAbonarCredito;
-                        $nuevoEstado = ($nuevoSaldoPendiente <= 0) ? 'pagado' : $creditoDestino->estado;
-
-                        $creditoDestino->update([
-                            'saldo_pendiente' => $nuevoSaldoPendiente,
-                            'estado'          => $nuevoEstado
-                        ]);
-
-                        $montoRestanteReasignar -= $montoAbonarCredito;
+                        $tieneMasDetalles = DB::table('abono_detalles')->where('id_abono', $idAbonoCabecera)->exists();
+                        if (!$tieneMasDetalles) {
+                            DB::table('abonos_credito')->where('id', $idAbonoCabecera)->delete();
+                        }
                     }
 
-                    if ($montoRestanteReasignar > 0 && $cliente) {
-                        // FIX: crear el respaldo relacional del anticipo. Antes solo se
-                        // incrementaba clientes.saldo_a_favor y el dinero quedaba
-                        // inutilizable (ningún flujo puede aplicarlo sin un Credito.id)
-                        $idCajaRespaldo = DB::table('abonos_credito')->where('id', $idAbonoCabecera)->value('id_caja');
+                } else {
+                    // 3. ESCENARIO B: ELIMINACIÓN DE CRÉDITO DEUDOR REGULAR
+                    $detallesAbono = DB::table('abono_detalles')
+                        ->where('id_credito', $idCreditoReal)
+                        ->get();
 
-                        $ventaAnticipo = new Venta();
-                        $ventaAnticipo->codigo_factura     = 'ANT-' . strtoupper(Str::random(6));
-                        $ventaAnticipo->id_cliente         = $cliente->id;
-                        $ventaAnticipo->id_user            = auth()->id();
-                        $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
-                        $ventaAnticipo->id_caja            = $idCajaRespaldo;
-                        $ventaAnticipo->pago_usd_efectivo  = 0.00;
-                        $ventaAnticipo->pago_bs_efectivo   = 0.00;
-                        $ventaAnticipo->monto_credito_usd  = 0.00;
-                        $ventaAnticipo->total_usd          = 0.00;
-                        $ventaAnticipo->estado             = 'completada';
-                        $ventaAnticipo->observacion        = 'Respaldo de saldo a favor generado al eliminar crédito #' . $idCreditoReal;
-                        $ventaAnticipo->save();
+                    foreach ($detallesAbono as $detalle) {
+                        $montoAbonado    = (float) $detalle->monto_aplicado_usd;
+                        $idAbonoCabecera = $detalle->id_abono;
 
-                        $creditoAnticipo = Credito::create([
-                            'id_cliente'        => $cliente->id,
-                            'id_venta'          => $ventaAnticipo->id,
-                            'monto_inicial'     => 0.00,
-                            'saldo_pendiente'   => -$montoRestanteReasignar,
-                            'saldo_a_favor'     => $montoRestanteReasignar,
-                            'fecha_vencimiento' => now(),
-                            'estado'            => 'anticipo',
-                        ]);
+                        DB::table('abono_detalles')->where('id', $detalle->id)->delete();
 
-                        AbonoDetalle::create([
-                            'id_abono'           => $idAbonoCabecera,
-                            'id_credito'         => $creditoAnticipo->id,
-                            'monto_aplicado_usd' => $montoRestanteReasignar,
-                        ]);
+                        if ($montoAbonado <= 0.01) {
+                            continue;
+                        }
 
-                        $cliente->increment('saldo_a_favor', $montoRestanteReasignar);
-                    }
+                        // Reasignación FIFO a otras deudas activas
+                        $siguientesCreditos = Credito::where('id_cliente', $idCliente)
+                            ->where('id', '!=', $idCreditoReal)
+                            ->whereIn('estado', ['pendiente', 'vencido', 'revalorizado'])
+                            ->where('saldo_pendiente', '>', 0)
+                            ->orderBy('created_at', 'asc')
+                            ->orderBy('id', 'asc')
+                            ->get();
 
-                    $tieneDetalles = DB::table('abono_detalles')->where('id_abono', $idAbonoCabecera)->exists();
-                    if (!$tieneDetalles) {
-                        DB::table('abonos_credito')->where('id', $idAbonoCabecera)->delete();
+                        $montoRestanteReasignar = $montoAbonado;
+
+                        foreach ($siguientesCreditos as $creditoDestino) {
+                            if ($montoRestanteReasignar <= 0.01) break;
+
+                            $montoAbonarCredito = min($creditoDestino->saldo_pendiente, $montoRestanteReasignar);
+
+                            DB::table('abono_detalles')->insert([
+                                'id_abono'           => $idAbonoCabecera,
+                                'id_credito'         => $creditoDestino->id,
+                                'monto_aplicado_usd' => $montoAbonarCredito,
+                                'created_at'         => now(),
+                                'updated_at'         => now(),
+                            ]);
+
+                            $nuevoSaldoPendiente = $creditoDestino->saldo_pendiente - $montoAbonarCredito;
+                            $nuevoEstado = ($nuevoSaldoPendiente <= 0) ? 'pagado' : $creditoDestino->estado;
+
+                            $creditoDestino->update([
+                                'saldo_pendiente' => $nuevoSaldoPendiente,
+                                'estado'          => $nuevoEstado,
+                            ]);
+
+                            $montoRestanteReasignar -= $montoAbonarCredito;
+                        }
+
+                        // Si queda remanente > $0.01, se transforma en Saldo a Favor
+                        if ($montoRestanteReasignar > 0.01 && $cliente) {
+                            $idCajaRespaldo = DB::table('abonos_credito')->where('id', $idAbonoCabecera)->value('id_caja');
+
+                            $ventaAnticipo = new Venta();
+                            $ventaAnticipo->codigo_factura     = 'ANT-' . strtoupper(Str::random(6));
+                            $ventaAnticipo->id_cliente         = $cliente->id;
+                            $ventaAnticipo->id_user            = auth()->id();
+                            $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
+                            $ventaAnticipo->id_caja            = $idCajaRespaldo;
+                            $ventaAnticipo->pago_usd_efectivo  = 0.00;
+                            $ventaAnticipo->pago_bs_efectivo   = 0.00;
+                            $ventaAnticipo->monto_credito_usd  = 0.00;
+                            $ventaAnticipo->total_usd          = 0.00;
+                            $ventaAnticipo->estado             = 'completada';
+                            $ventaAnticipo->observacion        = 'Respaldo de saldo a favor al eliminar crédito #' . $idCreditoReal;
+                            $ventaAnticipo->save();
+
+                            $creditoAnticipo = Credito::create([
+                                'id_cliente'        => $cliente->id,
+                                'id_venta'          => $ventaAnticipo->id,
+                                'monto_inicial'     => 0.00,
+                                'saldo_pendiente'   => -$montoRestanteReasignar,
+                                'saldo_a_favor'     => $montoRestanteReasignar,
+                                'fecha_vencimiento' => now(),
+                                'estado'            => 'anticipo',
+                            ]);
+
+                            AbonoDetalle::create([
+                                'id_abono'           => $idAbonoCabecera,
+                                'id_credito'         => $creditoAnticipo->id,
+                                'monto_aplicado_usd' => $montoRestanteReasignar,
+                            ]);
+
+                            $cliente->increment('saldo_a_favor', (float) $montoRestanteReasignar);
+                        }
+
+                        $tieneDetalles = DB::table('abono_detalles')->where('id_abono', $idAbonoCabecera)->exists();
+                        if (!$tieneDetalles) {
+                            DB::table('abonos_credito')->where('id', $idAbonoCabecera)->delete();
+                        }
                     }
                 }
 
-                // 4. DESACTIVAR Y REACTIVAR LLAVES FORÁNEAS DE FORMA SEGURA
-                DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-
-                // 5. ELIMINACIÓN DE REGISTROS SECUNDARIOS Y PRINCIPAL VÍA ELOQUENT PARA ACTIVAR EL OBSERVER
+                // 4. DESVINCULAR REGISTROS SECUNDARIOS Y AUDITAR CAJA
                 DB::table('credito_intereses')->where('id_credito', $idCreditoReal)->delete();
-                DB::table('caja_movimientos')->where('id_credito', $idCreditoReal)->delete();
-                
-                // Reemplazo del Query Builder por el método delete() del modelo cargado ($credito)
-                $credito->delete();
 
+                // Protección contra NULL en CONCAT con COALESCE
+                DB::table('caja_movimientos')
+                    ->where('id_credito', $idCreditoReal)
+                    ->update([
+                        'id_credito'  => null,
+                        'observacion' => DB::raw("CONCAT(COALESCE(observacion, ''), ' [Crédito #{$idCreditoReal} Eliminado]')")
+                    ]);
+
+                // 5. MANEJO CONDICIONAL DE VENTA E INVENTARIO (ANTES de eliminar el crédito)
                 if ($venta) {
-                    if ($esVentaConInsumos) {
-                        DB::table('detalle_ventas')->where('id_venta', $venta->id)->delete();
-                    }
-                    
-                    DB::table('pago_referencias')->where('id_venta', $venta->id)->delete();
-                    DB::table('ventas_info_adicional')->where('id_venta', $venta->id)->delete();
-                    
-                    if (class_exists(Correlativo::class)) {
-                        Correlativo::where('venta_id', $venta->id)->update([
-                            'venta_id' => null, 
-                            'estado'   => 'disponible'
-                        ]);
-                    }
+                    $pagoEfectivoUsd = (float)($venta->pago_usd_efectivo ?? 0);
+                    $pagoEfectivoBs  = (float)($venta->pago_bs_efectivo ?? 0);
+                    $tuvoPagoEfectivo = ($pagoEfectivoUsd > 0 || $pagoEfectivoBs > 0);
 
-                    DB::table('ventas')->where('id', $venta->id)->delete();
+                    if ($tuvoPagoEfectivo) {
+                        // VENTA MIXTA: Se conserva el registro de venta
+                        $venta->update([
+                            'monto_credito_usd' => 0.00,
+                            'total_usd'         => max(0, (float)$venta->total_usd - (float)$credito->monto_inicial),
+                            'observacion'       => trim(($venta->observacion ?? '') . " [Crédito #{$idCreditoReal} eliminado - Venta ajustada]"),
+                        ]);
+                    } else {
+                        // VENTA 100% CRÉDITO: Reintegrar stock y borrar la venta
+                        if ($venta->detalles && $venta->detalles->isNotEmpty()) {
+                            foreach ($venta->detalles as $detalle) {
+                                if ($detalle->id_insumo) {
+                                    $existencia = InsumosC::where('id_insumo', $detalle->id_insumo)
+                                        ->where('id_local', $venta->id_local)
+                                        ->first();
+
+                                    if ($existencia) {
+                                        $existencia->increment('cantidad', $detalle->cantidad);
+                                    } else {
+                                        InsumosC::create([
+                                            'id_insumo' => $detalle->id_insumo,
+                                            'id_local'  => $venta->id_local,
+                                            'cantidad'  => $detalle->cantidad,
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (class_exists(Correlativo::class)) {
+                            Correlativo::where('venta_id', $venta->id)->update([
+                                'venta_id' => null,
+                                'estado'   => 'disponible',
+                            ]);
+                        }
+
+                        $venta->delete();
+                    }
+                     \Log::info('Venta procesada', ['id' => $venta->id]);
                 }
 
-                DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+                // 6. ELIMINAR EL CRÉDITO AL FINAL
+                $credito->delete();
+                \Log::info('Crédito eliminado', ['id' => $idCreditoReal]);
             });
-
-            return redirect()->back()->with('success', 'Crédito eliminado correctamente y saldos recalculados.');
+             \Log::info('Redirect con éxito');
+            return redirect()->back()->with('success', 'Crédito eliminado y balance de cartera ajustado correctamente.');
 
         } catch (\Exception $e) {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            \Log::error('Error en eliminación: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error al eliminar el crédito: ' . $e->getMessage());
         }
     }

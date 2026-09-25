@@ -97,13 +97,16 @@ class Credito extends Model
 
     public function getEstadoAttribute($value)
     {
-        // Si el saldo pendiente es 0 o menor, financieramente está pagado
-        if ($this->saldo_pendiente <= 0) {
+        // Respetar el estado original si en la BD ya dice 'anticipo' o si es un saldo negativo/a favor
+        if ($value === 'anticipo' || $this->saldo_pendiente < 0 || $this->saldo_a_favor > 0) {
+            return 'anticipo';
+        }
+
+        // Financieramente está pagado solo si el saldo es exactamente 0
+        if ($this->saldo_pendiente == 0) {
             return 'pagado';
         }
 
-        // Si tiene deuda pendiente, devuelve el estado real almacenado en la BD
-        // (ej: 'vencido', 'revalorizado', 'anticipo', 'pendiente')
         return $value;
     }
 

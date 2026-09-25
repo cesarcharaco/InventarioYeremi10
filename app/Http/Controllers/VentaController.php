@@ -536,13 +536,14 @@ public function create()
                     $nuevoEstadoAnt  = ($nuevoSaldoFavor <= 0) ? 'pagado' : 'anticipo';
 
                     // Actualización atómica en la base de datos
-                    DB::table('creditos')
+                    $x=DB::table('creditos')
                         ->where('id', $anticipo->id)
                         ->update([
                             'saldo_a_favor' => $nuevoSaldoFavor,
                             'estado'        => $nuevoEstadoAnt,
                             'updated_at'    => now()
                         ]);
+                
 
                     // 5. Registrar el Abono y su Detalle vinculados al nuevo crédito
                     $abono = AbonoCredito::create([
@@ -565,7 +566,7 @@ public function create()
                     ]);
                 }
             
-
+                
             // 6. Notificaciones a gerencia
             $mensajeNotificacion = ($nuevoSaldoPendiente > 0) 
                 ? "Se otorgó un crédito de {$montoCredito}$ (Cubierto {$montoAbonadoConFavor}$ con saldo a favor. Restante: {$nuevoSaldoPendiente}$)."

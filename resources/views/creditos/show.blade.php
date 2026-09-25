@@ -6,15 +6,55 @@
     <div class="app-title">
         <div>
             <h1><i class="fa fa-user"></i> Estado de Cuenta</h1>
-            <p class="text-muted mb-0">
+            <p class="text-muted mb-1">
                 <strong>{{ $cliente->nombre }}</strong> | 
                 Identificación: {{ $cliente->identificacion ?? 'N/A' }} | 
                 Teléfono: {{ $cliente->telefono ?? 'N/A' }}
             </p>
+
+            {{-- CÁLCULO Y VISUALIZACIÓN DE LÍMITE DE CRÉDITO --}}
+            @php
+                $limite = $cliente->limite_credito ?? 0; // Cambia 'limite_credito' si tu columna en BD se llama distinto
+                $deudaActual = $resumen['deuda_total'] ?? 0;
+                $disponible = $limite - $deudaActual;
+            @endphp
+
+            <div class="d-flex align-items-center flex-wrap gap-2 mt-1 small">
+                <span class="mr-3">
+                    <i class="fas fa-credit-card text-secondary"></i> <strong>Límite:</strong> 
+                    {{ number_format($limite, 2) }}$
+                </span>
+
+                <span class="mr-3">
+                    <i class="fas fa-wallet text-secondary"></i> <strong>Disponible:</strong> 
+                    <span class="{{ $disponible > 0 ? 'text-success font-weight-bold' : 'text-danger font-weight-bold' }}">
+                        {{ number_format(max(0, $disponible), 2) }}$
+                    </span>
+                </span>
+
+                {{-- Badges Informativos sobre si se le puede otorgar más crédito --}}
+                @if($limite > 0)
+                    @if($disponible > 0)
+                        <span class="badge badge-success px-2 py-1">
+                            <i class="fa fa-check-circle"></i> Apto para Crédito
+                        </span>
+                    @else
+                        <span class="badge badge-danger px-2 py-1">
+                            <i class="fa fa-exclamation-triangle"></i> Límite Excedido
+                        </span>
+                    @endif
+                @else
+                    <span class="badge badge-info px-2 py-1">
+                        <i class="fa fa-infinity"></i> Sin Límite Definido
+                    </span>
+                @endif
+            </div>
         </div>
+
         <div class="basic-tb-hd text-center">
             @include('layouts.partials.flash-messages')
         </div>
+
         <a href="{{ route('creditos.index') }}" class="btn btn-outline-secondary">
             <i class="fa fa-arrow-left"></i> Volver
         </a>
@@ -25,10 +65,10 @@
         <div class="col-md-4 mb-3">
             <div class="tile p-0 border-left border-danger shadow-sm" style="border-left-width: 4px !important;">
                 <div class="p-3">
-                    <div class="text-muted text-uppercase small font-weight-bold">Deuda Total <span class="badge badge-danger">Pendiente</span></div>
+                    <div class="text-muted text-uppercase medium font-weight-bold">Deuda Total <span class="badge badge-danger">Pendiente</span></div>
                     <div class="d-flex align-items-baseline justify-content-between mt-1">
                         <span class="h3 mb-0 font-weight-bold text-danger" style="font-variant-numeric: tabular-nums;">
-                            ${{ number_format($resumen['saldo_pendiente'], 2) }}
+                            {{ number_format($resumen['saldo_pendiente'], 2) }}$
                         </span>
                     </div>
                 </div>
@@ -38,15 +78,27 @@
         <div class="col-md-4 mb-3">
             <div class="tile p-0 border-left border-success shadow-sm" style="border-left-width: 4px !important;">
                 <div class="p-3">
-                    <div class="text-muted text-uppercase small font-weight-bold">
+                    <div class="text-muted text-uppercase medium font-weight-bold">
                         Total Abonado 
-                        <span class="badge badge-success">
-                            {{ $resumen['deuda_total'] > 0 ? round(($resumen['total_abonado'] / $resumen['deuda_total']) * 100, 1) : 0 }}%
-                        </span>
+                       
+                            @php
+                                // El total real del crédito es lo que ya pagó más lo que aún debe
+                                $montoTotalCredito = $resumen['total_abonado'] + $resumen['deuda_total'];
+                                $porcentaje = 0;
+                                
+                                if ($montoTotalCredito > 0) {
+                                    $porcentaje = round(($resumen['total_abonado'] / $montoTotalCredito) * 100, 1);
+                                }
+                            @endphp
+                            
+                            <span class="badge badge-success">
+                                {{ $porcentaje }}% Completado
+                            </span>
+                      
                     </div>
                     <div class="d-flex align-items-baseline justify-content-between mt-1">
                         <span class="h3 mb-0 font-weight-bold text-success" style="font-variant-numeric: tabular-nums;">
-                            ${{ number_format($resumen['total_abonado'], 2) }}
+                            {{ number_format($resumen['total_abonado'], 2) }}$
                         </span>
                     </div>
                 </div>
@@ -56,7 +108,7 @@
         <div class="col-md-4 mb-3">
             <div class="tile p-0 border-left {{ $resumen['saldo_a_favor'] > 0 ? 'border-info' : 'border-secondary' }} shadow-sm" style="border-left-width: 4px !important;">
                 <div class="p-3">
-                    <div class="text-muted text-uppercase small font-weight-bold">
+                    <div class="text-muted text-uppercase medium font-weight-bold">
                         Saldo a Favor 
                         @if($resumen['saldo_a_favor'] > 0)
                             <span class="badge badge-info">Disponible</span>
@@ -67,7 +119,7 @@
                     
                     <div class="d-flex align-items-baseline justify-content-between mt-1">
                         <span id="saldo_a_favor_cliente" class="h3 mb-0 font-weight-bold {{ $resumen['saldo_a_favor'] > 0 ? 'text-info' : 'text-muted' }}" style="font-variant-numeric: tabular-nums;">
-                            ${{ number_format($resumen['saldo_a_favor'], 2) }}
+                            {{ number_format($resumen['saldo_a_favor'], 2) }}$
                         </span>
                         
                         @if($resumen['saldo_a_favor'] > 0)
@@ -135,22 +187,22 @@
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <span class="text-muted small">Monto Original</span>
-                        <span class="font-weight-bold" style="font-variant-numeric: tabular-nums;">${{ number_format($resumen['monto_inicial'], 2) }}</span>
+                        <span class="font-weight-bold" style="font-variant-numeric: tabular-nums;">{{ number_format($resumen['monto_inicial'], 2) }}$</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <span class="text-muted small">Intereses (Indexación)</span>
-                        <span class="font-weight-bold text-warning" style="font-variant-numeric: tabular-nums;">+ ${{ number_format($resumen['total_intereses'], 2) }}</span>
+                        <span class="font-weight-bold text-warning" style="font-variant-numeric: tabular-nums;">+ {{ number_format($resumen['total_intereses'], 2) }}$</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <span class="text-muted small">Total Abonado</span>
-                        <span class="font-weight-bold text-success" style="font-variant-numeric: tabular-nums;">- ${{ number_format($resumen['total_abonado'], 2) }}</span>
+                        <span class="font-weight-bold text-success" style="font-variant-numeric: tabular-nums;">- {{ number_format($resumen['total_abonado'], 2) }}$</span>
                     </li>
 
                     @if($resumen['saldo_a_favor'] > 0)
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3 bg-info text-white">
                         <span class="small font-weight-bold"><i class="fa fa-star"></i> Saldo a Favor</span>
                         <div class="text-right">
-                            <strong class="d-block" style="font-variant-numeric: tabular-nums;">+${{ number_format($resumen['saldo_a_favor'], 2) }}</strong>
+                            <strong class="d-block" style="font-variant-numeric: tabular-nums;">+{{ number_format($resumen['saldo_a_favor'], 2) }}$</strong>
                             <button type="button" class="btn btn-xs btn-outline-light mt-1 py-0 px-2" style="font-size: 11px;" onclick="abrirModalGestionSaldo()">
                                 Gestionar
                             </button>
@@ -160,7 +212,7 @@
 
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3" style="background: #f8f9fa;">
                         <span class="font-weight-bold text-primary">Saldo Pendiente Neto</span>
-                        <span class="h5 mb-0 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;">${{ number_format($resumen['saldo_pendiente'], 2) }}</span>
+                        <span class="h5 mb-0 font-weight-bold text-primary" style="font-variant-numeric: tabular-nums;">{{ number_format($resumen['saldo_pendiente'], 2) }}$</span>
                     </li>
                 </ul>
             </div>
@@ -192,95 +244,114 @@
 
                 <div class="tab-content pt-3" id="tabsEstadoCuentaContent">
 
-                    {{-- TAB 1: CREDITOS Y ANTICIPOS --}}
-                    <div class="tab-pane fade show active" id="tab-creditos" role="tabpanel" aria-labelledby="tab-creditos-tab">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover" id="tabla-creditos">
-                                <thead class="thead-light">
-                                    <tr>
-                                        <th>Fecha</th>
-                                        <th>Código / Referencia</th>
-                                        <th>Tipo</th>
-                                        <th class="text-right">Monto Original ($)</th>
-                                        <th class="text-right">Saldo ($)</th>
-                                        <th class="text-center">Estado</th>
-                                        <th class="text-center">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse($cliente->creditos as $credito)
-                                    @php
-                                        $esAnticipo = $credito->estado === 'anticipo' || $credito->saldo_pendiente < 0;
-                                    @endphp
-                                    <tr class="{{ $esAnticipo ? 'table-info' : '' }}">
-                                        <td class="small text-nowrap" data-order="{{ $credito->created_at->timestamp }}">
-                                            {{ $credito->created_at->format('d/m/Y h:i A') }}
-                                        </td>
-                                        <td>
-                                            <strong>
-                                                @if($esAnticipo)
-                                                    ANT-{{ $credito->id }}
-                                                @else
-                                                    {{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}
-                                                @endif
-                                            </strong>
-                                        </td>
-                                        <td>
-                                            @if($esAnticipo)
-                                                <span class="badge badge-info">
-                                                    <i class="fas fa-wallet"></i> Saldo a Favor
-                                                </span>
-                                            @elseif($credito->venta && $credito->venta->detalles->isEmpty())
-                                                <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">
-                                                    <i class="fas fa-hand-holding-usd"></i> Directo
-                                                </span>
-                                            @else
-                                                <span class="badge badge-info">
-                                                    <i class="fas fa-shopping-cart"></i> Venta
-                                                </span>
-                                            @endif
-                                        </td>
-                                        <td class="font-weight-bold text-right" style="font-variant-numeric: tabular-nums;">
-                                            ${{ number_format($credito->monto_inicial, 2) }}
-                                        </td>
-                                        <td class="font-weight-bold text-right {{ $esAnticipo ? 'text-info' : ($credito->saldo_pendiente > 0 ? 'text-danger' : 'text-success') }}" style="font-variant-numeric: tabular-nums;">
-                                            @if($esAnticipo)
-                                                +${{ number_format(abs($credito->saldo_pendiente), 2) }}
-                                            @else
-                                                ${{ number_format($credito->saldo_pendiente, 2) }}
-                                            @endif
-                                        </td>
-                                        <td class="text-center">
-                                            @if($esAnticipo)
-                                                <span class="badge badge-info">Anticipo</span>
-                                            @else
-                                                <span class="badge badge-{{ $credito->estado === 'pendiente' ? 'danger' : 'success' }}">
-                                                    {{ ucfirst($credito->estado) }}
-                                                </span>
-                                            @endif
-                                        </td>
-                                        <td class="text-center">
-                                            <button type="button" 
-                                                    class="btn btn-danger btn-sm btn-modal-eliminar-nuevo" 
-                                                    data-id="{{ $credito->id }}"
-                                                    data-codigo="{{ $esAnticipo ? 'ANT-' . $credito->id : ($credito->venta->codigo_factura ?? 'CRD-' . $credito->id) }}"
-                                                    data-monto="{{ number_format($credito->monto_inicial, 2) }}"
-                                                    data-saldo="{{ number_format($credito->saldo_pendiente, 2) }}"
-                                                    data-tieneproductos="{{ ($credito->venta && $credito->venta->detalles->isNotEmpty()) ? '1' : '0' }}"
-                                                    title="Eliminar Crédito/Anticipo">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    @empty
-                                    <tr>
-                                        <td colspan="7" class="text-center text-muted py-3">No hay créditos ni saldos registrados para este cliente.</td>
-                                    </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                   {{-- TAB 1: CREDITOS Y ANTICIPOS --}}
+                   <div class="tab-pane fade show active" id="tab-creditos" role="tabpanel" aria-labelledby="tab-creditos-tab">
+                       <div class="table-responsive">
+                           <table class="table table-sm table-hover" id="tabla-creditos">
+                               <thead class="thead-light">
+                                   <tr>
+                                       <th>Fecha</th>
+                                       <th>Código / Referencia</th>
+                                       <th>Tipo</th>
+                                       <th class="text-right">Monto Original ($)</th>
+                                       <th class="text-right">Saldo ($)</th>
+                                       <th class="text-center">Estado</th>
+                                       <th class="text-center">Acciones</th>
+                                   </tr>
+                               </thead>
+                               <tbody>
+                                   @forelse($cliente->creditos as $credito)
+                                   @php
+                                       $esAnticipo = $credito->estado === 'anticipo' || $credito->saldo_pendiente < 0;
+                                   @endphp
+                                   <tr class="{{ $esAnticipo ? 'table-info' : '' }}">
+                                       {{-- 1. Fecha --}}
+                                       <td class="small text-nowrap" data-order="{{ $credito->created_at->timestamp }}">
+                                           {{ $credito->created_at->format('d/m/Y h:i A') }}
+                                       </td>
+
+                                       {{-- 2. Código / Referencia --}}
+                                       <td>
+                                           <strong>
+                                               @if($esAnticipo)
+                                                   ANT-{{ $credito->id }}
+                                               @else
+                                                   {{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}
+                                               @endif
+                                           </strong>
+                                       </td>
+
+                                       {{-- 3. Tipo --}}
+                                       <td>
+                                           @if($esAnticipo)
+                                               <span class="badge badge-info">
+                                                   <i class="fas fa-wallet"></i> Saldo a Favor
+                                               </span>
+                                           @elseif($credito->venta && $credito->venta->detalles->isEmpty())
+                                               <span class="badge badge-secondary" style="background-color: #6f42c1; color: #fff;">
+                                                   <i class="fas fa-hand-holding-usd"></i> Directo
+                                               </span>
+                                           @else
+                                               <span class="badge badge-info">
+                                                   <i class="fas fa-shopping-cart"></i> Venta
+                                               </span>
+                                           @endif
+                                       </td>
+
+                                       {{-- 4. Monto Original ($) --}}
+                                       <td class="font-weight-bold text-right">
+                                           @if($esAnticipo)
+                                               <span class="text-success">{{ number_format($credito->monto_inicial, 2) }}$</span>
+                                           @else
+                                               {{ number_format($credito->monto_inicial, 2) }}$
+                                           @endif
+                                       </td>
+
+                                       {{-- 5. Saldo ($) --}}
+                                       <td class="font-weight-bold text-right">
+                                           @if($esAnticipo)
+                                               <span class="text-success">{{ number_format($credito->saldo_pendiente, 2) }}$ (A favor)</span>
+                                           @else
+                                               <span class="text-danger">{{ number_format($credito->saldo_pendiente, 2) }}$</span>
+                                           @endif
+                                       </td>
+
+                                       {{-- 6. Estado (ESTA ERA LA COLUMNA FALTANTE) --}}
+                                       <td class="text-center">
+                                           @if($esAnticipo)
+                                               <span class="badge badge-success">ANTICIPO</span>
+                                           @elseif($credito->estado === 'pendiente')
+                                               <span class="badge badge-danger">PENDIENTE</span>
+                                           @elseif($credito->estado === 'pagado')
+                                               <span class="badge badge-success">PAGADO</span>
+                                           @else
+                                               <span class="badge badge-secondary">{{ strtoupper($credito->estado) }}</span>
+                                           @endif
+                                       </td>
+
+                                       {{-- 7. Acciones --}}
+                                       <td class="text-center">
+                                           <button type="button" 
+                                                   class="btn btn-danger btn-sm btn-modal-eliminar-nuevo" 
+                                                   data-id="{{ $credito->id }}"
+                                                   data-codigo="{{ $esAnticipo ? 'ANT-' . $credito->id : ($credito->venta->codigo_factura ?? 'CRD-' . $credito->id) }}"
+                                                   data-monto="{{ number_format($credito->monto_inicial, 2) }}"
+                                                   data-saldo="{{ number_format($credito->saldo_pendiente, 2) }}"
+                                                   data-tieneproductos="{{ ($credito->venta && $credito->venta->detalles->isNotEmpty()) ? '1' : '0' }}"
+                                                   title="Eliminar Crédito/Anticipo">
+                                               <i class="fas fa-trash-alt"></i>
+                                           </button>
+                                       </td>
+                                   </tr>
+                                   @empty
+                                   <tr>
+                                       <td colspan="7" class="text-center text-muted py-3">No hay créditos ni saldos registrados para este cliente.</td>
+                                   </tr>
+                                   @endforelse
+                               </tbody>
+                           </table>
+                       </div>
+                   </div>
 
                     {{-- TAB 2: HISTORIAL DE ABONOS --}}
                     <div class="tab-pane fade" id="tab-abonos" role="tabpanel" aria-labelledby="tab-abonos-tab">
@@ -315,21 +386,21 @@
                                             @endforeach
                                         </td>
                                         <td class="font-weight-bold text-right {{ $esReembolso ? 'text-danger' : 'text-success' }}" style="font-variant-numeric: tabular-nums;">
-                                            {{ $esReembolso ? '-' : '' }}${{ number_format(abs($abono->monto_total_usd), 2) }}
+                                            {{ $esReembolso ? '-' : '' }}{{ number_format(abs($abono->monto_total_usd), 2) }}$
                                         </td>
                                         <td>
                                             <div class="d-flex flex-wrap gap-1">
                                                 @if(($abono->pago_usd_efectivo ?? 0) > 0)
-                                                    <small class="badge badge-light border">Efe $: {{ number_format($abono->pago_usd_efectivo, 2) }}</small>
+                                                    <small class="badge badge-light border">Efe: {{ number_format($abono->pago_usd_efectivo, 2) }}$</small>
                                                 @endif
                                                 @if(($abono->pago_bs_efectivo ?? 0) > 0)
-                                                    <small class="badge badge-light border">Efe Bs: {{ number_format($abono->pago_bs_efectivo, 2) }}</small>
+                                                    <small class="badge badge-light border">Efe: {{ number_format($abono->pago_bs_efectivo, 2) }} Bs</small>
                                                 @endif
                                                 @if(($abono->pago_punto_bs ?? 0) > 0)
-                                                    <small class="badge badge-light border">Punto: {{ number_format($abono->pago_punto_bs, 2) }}</small>
+                                                    <small class="badge badge-light border">Punto: {{ number_format($abono->pago_punto_bs, 2) }} Bs</small>
                                                 @endif
                                                 @if(($abono->pago_pagomovil_bs ?? 0) > 0)
-                                                    <small class="badge badge-light border">P.Móvil: {{ number_format($abono->pago_pagomovil_bs, 2) }}</small>
+                                                    <small class="badge badge-light border">P.Móvil: {{ number_format($abono->pago_pagomovil_bs, 2) }} Bs</small>
                                                 @endif
                                                 @if($esReembolso)
                                                     <small class="badge badge-warning text-dark"><i class="fas fa-undo"></i> Reembolso / Devolución</small>
@@ -402,7 +473,7 @@
                                         </td>
                                         <td>{{ $interes->administrador?->name ?? 'N/A' }}</td>
                                         <td class="text-primary font-weight-bold text-right">{{ $interes->porcentaje }}%</td>
-                                        <td class="font-weight-bold text-danger text-right" style="font-variant-numeric: tabular-nums;">+${{ number_format($interes->monto_interes, 2) }}</td>
+                                        <td class="font-weight-bold text-danger text-right" style="font-variant-numeric: tabular-nums;">+{{ number_format($interes->monto_interes, 2) }}$</td>
                                         <td>
                                             <span class="badge badge-{{ $interes->estado === 'aplicado' ? 'warning' : 'danger' }}">
                                                 {{ ucfirst($interes->estado) }}
@@ -446,8 +517,204 @@
 
 @section('scripts')
 <script>
+    // =========================================================================
+    // ZONA 1: FUNCIONES GLOBALES (FUERA DE READY)
+    // Se invocan directamente desde atributos HTML (onclick, onchange, etc.)
+    // =========================================================================
+
+    function abrirModalAbono(cliente) {
+        $('#formAbono')[0].reset();
+        $('#alerta_saldo_favor').addClass('d-none');
+        $('#error-desglose').addClass('d-none');
+        $('.input-desglose').removeClass('is-invalid');
+
+        let creditosPendientes = cliente.creditos
+            ? cliente.creditos.filter(c => c.estado === 'pendiente' && parseFloat(c.saldo_pendiente) > 0)
+            : [];
+
+        if (creditosPendientes.length === 0) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Sin deudas pendientes',
+                text: 'El cliente no tiene deudas pendientes activas para abonar.'
+            });
+            return;
+        }
+
+        let primerCredito = creditosPendientes[0];
+        let url = "{{ route('creditos.abono', ':id') }}".replace(':id', primerCredito.id);
+
+        $('#formAbono').attr('action', url);
+        $('#nombre_cliente').text(cliente.nombre);
+
+        let saldoTotal = creditosPendientes.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
+        $('#txt_saldo_pendiente').text('$' + saldoTotal.toFixed(2));
+
+        $('#modalAbono').modal('show');
+    }
+
+    function abrirModalGestionSaldo() {
+        let modal = $('#modalGestionSaldo').length ? $('#modalGestionSaldo') : $('#modalReembolso');
+        if (modal.length > 0) {
+            modal.modal('show');
+        } else {
+            console.error("Modal de gestión de saldo a favor no encontrado.");
+        }
+    }
+
+    function confirmarAnulacion(url, monto) {
+        $('#formAnularAbono').attr('action', url);
+        $('#montoAbonoText').text('$' + monto);
+        $('#modalAnularAbono').modal('show');
+    }
+
+    function abrirModalInteres(cliente) {
+        let creditosPendientes = cliente.creditos
+            ? cliente.creditos.filter(c => c.estado === 'pendiente')
+            : [];
+        let saldoTotal = creditosPendientes.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
+
+        if (creditosPendientes.length === 0) {
+            Swal.fire('Atención', 'El cliente no posee créditos pendientes para indexar.', 'warning');
+            return;
+        }
+
+        let creditoId = creditosPendientes[0].id;
+
+        $.ajax({
+            url: `/creditos/${creditoId}/modal-interes`,
+            type: 'GET',
+            success: function(html) {
+                $('#contenedor-modal-interes').remove();
+                $('body').append('<div id="contenedor-modal-interes">' + html + '</div>');
+
+                $('#formAplicarInteres').attr('action', `/creditos/${creditoId}/aplicar-interes`);
+                $('#saldo_base_global').text('$' + saldoTotal.toFixed(2));
+                $('#saldo_base_global').data('valor', saldoTotal);
+
+                $('#modalAplicarInteres').modal('show');
+            },
+            error: function(xhr) {
+                var msj = (xhr.responseJSON && xhr.responseJSON.error)
+                    ? xhr.responseJSON.error
+                    : "Error al cargar modal de indexación";
+                Swal.fire('Error', msj, 'error');
+            }
+        });
+    }
+
+    function confirmarAnulacionInteres(url, monto) {
+        if (typeof Swal === 'undefined') {
+            alert('SweetAlert2 no está cargado.');
+            return;
+        }
+
+        Swal.fire({
+            title: '¿Anular Indexación?',
+            html: `Estás a punto de anular una indexación por <b>$${monto}</b>.<br><br>Ingresa una observación o motivo (opcional):`,
+            icon: 'warning',
+            input: 'text',
+            inputPlaceholder: 'Ej: Ajuste acordado con el cliente, error de cálculo...',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '<i class="fa fa-ban"></i> Sí, anular',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Anulando la indexación y recalculando saldos.',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                let form = $('<form>', {
+                    'method': 'POST',
+                    'action': url
+                });
+
+                form.append($('<input>', {
+                    'type': 'hidden',
+                    'name': '_token',
+                    'value': '{{ csrf_token() }}'
+                }));
+
+                form.append($('<input>', {
+                    'type': 'hidden',
+                    'name': 'observacion',
+                    'value': result.value || ''
+                }));
+
+                $('body').append(form);
+                form.submit();
+            }
+        });
+    }
+
+    function abrirModalCreditoDirecto(clienteId) {
+        $('#formCreditoDirecto')[0].reset();
+        $('#pin_autorizacion_directo').val('');
+
+        @cannot('gestionar-creditos-avanzado')
+            $('#estado_pin_texto').html('Requiere autorización de supervisor').removeClass('text-success').addClass('text-dark');
+            $('#bloque_pin_warning').removeClass('alert-success').addClass('alert-warning');
+        @endcannot
+
+        $('#modalCreditoDirecto').modal('show');
+    }
+
+    function editarAbono(id) {
+        $.ajax({
+            url: `/creditos/abonos/${id}/editar`,
+            type: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    let abono = response.abono;
+
+                    $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
+                    $('#edit_abono_id').text(abono.id);
+                    $('#edit_nombre_cliente').text(abono.nombre_cliente || 'Cliente');
+                    $('#edit_fecha_abono').val(abono.fecha_abono);
+                    $('#edit_monto_total_usd').val(abono.monto_total_usd);
+                    $('#edit_referencia').val(abono.referencia);
+
+                    $('#edit_pago_usd_efectivo').val(abono.pago_usd_efectivo ?? 0);
+                    $('#edit_pago_bs_efectivo').val(abono.pago_bs_efectivo ?? 0);
+                    $('#edit_pago_punto_bs').val(abono.pago_punto_bs ?? 0);
+                    $('#edit_pago_pagomovil_bs').val(abono.pago_pagomovil_bs ?? 0);
+
+                    $('#modalEditarAbono').modal('show');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = (xhr.responseJSON && xhr.responseJSON.error)
+                    ? xhr.responseJSON.error
+                    : 'Error al cargar los datos del abono.';
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('Error', errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+            }
+        });
+    }
+
+    // =========================================================================
+    // ZONA 2: UN SOLO $(document).ready()
+    // Todo lo que interactúa con el DOM, DataTables, formularios e inputs
+    // =========================================================================
+
     $(document).ready(function() {
-        // DataTables Inicialización
+
+        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
+
+        // ---------------------------------------------------------------------
+        // 1. INICIALIZACIÓN DE DATATABLES
+        // ---------------------------------------------------------------------
         if ($('#tabla-historial-abonos').length) {
             $('#tabla-historial-abonos').DataTable({
                 retrieve: true,
@@ -510,447 +777,13 @@
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
             $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
         });
-    });
 
-    function abrirModalAbono(cliente) {
-        $('#formAbono')[0].reset();
-        
-        $('#alerta_saldo_favor').addClass('d-none');
-        $('#error-desglose').addClass('d-none');
-        $('.input-desglose').removeClass('is-invalid');
-
-        // Filtrar solo créditos pendientes válidos para abonar
-        let creditosPendientes = cliente.creditos ? cliente.creditos.filter(c => c.estado === 'pendiente' && parseFloat(c.saldo_pendiente) > 0) : [];
-
-        if (creditosPendientes.length === 0) {
-            Swal.fire({
-                icon: 'info',
-                title: 'Sin deudas pendientes',
-                text: 'El cliente no tiene deudas pendientes activas para abonar.'
-            });
-            return;
-        }
-
-        let primerCredito = creditosPendientes[0];
-        let url = "{{ route('creditos.abono', ':id') }}";
-        url = url.replace(':id', primerCredito.id);
-        
-        $('#formAbono').attr('action', url);
-        $('#nombre_cliente').text(cliente.nombre);
-        
-        // Calcular la deuda pendiente real acumulada
-        let saldoTotal = creditosPendientes.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
-        $('#txt_saldo_pendiente').text('$' + saldoTotal.toFixed(2));
-
-        $('#modalAbono').modal('show');
-    }
-
-    $(document).on('input', '#monto_total_usd', function() {
-        let montoAbono = parseFloat($(this).val()) || 0;
-        let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
-
-        if (montoAbono > saldoPendiente && saldoPendiente > 0) {
-            let exceso = montoAbono - saldoPendiente;
-            $('#monto_saldo_favor').text('$' + exceso.toFixed(2));
-            $('#alerta_saldo_favor').removeClass('d-none');
-        } else {
-            $('#alerta_saldo_favor').addClass('d-none');
-        }
-    });
-
-    $('#formAbono').on('submit', function(e) {
-        let form = this;
-        let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
-        let montoAbono = parseFloat($('#monto_total_usd').val()) || 0;
-
-        // Validar Desglose
-        let totalDesglose = 0;
-        let inputs = $('.input-desglose');
-        let errorDiv = $('#error-desglose');
-
-        $('.input-desglose').each(function() {
-            let valor = parseFloat($(this).val()) || 0;
-            totalDesglose += valor;
-        });
-
-        if (totalDesglose <= 0) {
-            e.preventDefault();
-            errorDiv.removeClass('d-none').hide().fadeIn();
-            inputs.addClass('is-invalid');
-            $('.modal-body').animate({ scrollTop: 0 }, 'slow');
-            return false;
-        }
-        $('.input-desglose').removeClass('is-invalid');
-
-        // Confirmar excedente que pasará a Saldo a Favor / Anticipo
-        if (montoAbono > saldoPendiente && saldoPendiente > 0) {
-            e.preventDefault();
-            let exceso = montoAbono - saldoPendiente;
-
-            Swal.fire({
-                title: '<strong>Confirmar Generación de Saldo a Favor</strong>',
-                icon: 'info',
-                html: `
-                    <div class="text-left font-weight-normal fs-6">
-                        <p class="mb-2">El monto ingresado excede la deuda actual. El sobrante se guardará como <strong>Saldo a Favor / Anticipo</strong>.</p>
-                        <div class="card bg-light border-0 my-3 p-3 text-dark">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Deuda Cancelada:</span>
-                                <strong class="text-danger">$${saldoPendiente.toFixed(2)}</strong>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Monto Recibido:</span>
-                                <strong class="text-dark">$${montoAbono.toFixed(2)}</strong>
-                            </div>
-                            <hr class="my-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="font-weight-bold text-primary">Nuevo Saldo a Favor:</span>
-                                <span class="badge badge-info fs-6 px-2 py-1">+$${exceso.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="fa fa-check"></i> Sí, Procesar Pago',
-                cancelButtonText: 'Corregir Monto',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $(form).find('button[type="submit"]').prop('disabled', true);
-                    form.submit();
-                }
-            });
-
-            return false;
-        }
-    });
-
-    function abrirModalGestionSaldo() {
-        let modal = $('#modalGestionSaldo').length ? $('#modalGestionSaldo') : $('#modalReembolso'); 
-        if (modal.length > 0) {
-            modal.modal('show');
-        } else {
-            console.error("Modal de gestión de saldo a favor no encontrado.");
-        }
-    }
-
-    function confirmarAnulacion(url, monto) {
-        $('#formAnularAbono').attr('action', url);
-        $('#montoAbonoText').text('$' + monto);
-        $('#modalAnularAbono').modal('show');
-    }
-
-    function abrirModalInteres(cliente) {
-        let creditosPendientes = cliente.creditos ? cliente.creditos.filter(c => c.estado === 'pendiente') : [];
-        let saldoTotal = creditosPendientes.reduce((sum, c) => sum + parseFloat(c.saldo_pendiente), 0);
-
-        // Validar que el cliente tenga al menos un crédito pendiente
-        if (creditosPendientes.length === 0) {
-            Swal.fire('Atención', 'El cliente no posee créditos pendientes para indexar.', 'warning');
-            return;
-        }
-
-        // Se usa el ID del CRÉDITO en lugar del ID del cliente
-        let creditoId = creditosPendientes[0].id; 
-
-        $.ajax({
-            url: `/creditos/${creditoId}/modal-interes`, 
-            type: 'GET',
-            success: function(html) {
-                $('#contenedor-modal-interes').remove();
-                $('body').append('<div id="contenedor-modal-interes">' + html + '</div>');
-                
-                // Asignar la ruta de acción directamente en JavaScript
-                $('#formAplicarInteres').attr('action', `/creditos/${creditoId}/aplicar-interes`);
-                
-                $('#saldo_base_global').text('$' + saldoTotal.toFixed(2));
-                $('#saldo_base_global').data('valor', saldoTotal);
-
-                $('#modalAplicarInteres').modal('show');
-            },
-            error: function(xhr) {
-                var msj = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : "Error al cargar modal de indexación";
-                Swal.fire('Error', msj, 'error');
-            }
-        });
-    }
-
-        // =========================================================================
-        // CÁLCULO DINÁMICO PARA EL MODAL DE INDEXAR INTERÉS
-        // =========================================================================
-        $(document).on('input', '#input_porcentaje', function() {
-            // 1. Obtener el saldo base desde el data-valor (asignado al abrir el modal)
-            let saldoBase = parseFloat($('#saldo_base_global').data('valor')) || 0;
-            
-            // 2. Obtener el porcentaje actual escrito por el usuario
-            let porcentaje = parseFloat($(this).val()) || 0;
-
-            // 3. Referencias a los elementos del DOM
-            let btnConfirmar = $('#btn_confirmar_index');
-            let previewInteres = $('#preview_interes');
-            let previewTotal = $('#preview_total');
-
-            // 4. Validar y calcular
-            if (porcentaje > 0 && saldoBase > 0) {
-                let montoInteres = saldoBase * (porcentaje / 100);
-                let nuevoTotal = saldoBase + montoInteres;
-
-                // Actualizar la interfaz (redondeando a 2 decimales)
-                previewInteres.text('$' + montoInteres.toFixed(2));
-                previewTotal.text('$' + nuevoTotal.toFixed(2));
-
-                // Habilitar el botón de submit
-                btnConfirmar.prop('disabled', false);
-            } else {
-                // Resetear la vista si el usuario borra el input o coloca 0
-                previewInteres.text('$0.00');
-                previewTotal.text('$' + saldoBase.toFixed(2)); 
-                
-                // Volver a bloquear el botón
-                btnConfirmar.prop('disabled', true);
-            }
-        });
-
-    // =========================================================================
-    // ENVÍO DEL FORMULARIO VÍA AJAX PARA EVITAR REDIRECCIÓN
-    // =========================================================================
-    $(document).on('submit', '#formAplicarInteres', function(e) {
-        // 1. Evita que el navegador cambie de página (fundamental)
-        e.preventDefault(); 
-
-        let form = $(this);
-        let url = form.attr('action');
-        let formData = form.serialize();
-        let btnConfirmar = $('#btn_confirmar_index');
-
-        // 2. Cambiar estado del botón mientras procesa
-        btnConfirmar.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
-
-        // 3. Petición AJAX
-        $.ajax({
-            type: 'POST',
-            url: url,
-            data: formData,
-            success: function(response) {
-                if (response.success) {
-                    // Cerrar el modal de indexación actual (opcional, si usas Bootstrap)
-                    // $('#modalIndexacion').modal('hide'); 
-
-                    // 4. Mostrar el Modal de Confirmación 
-                    // Si usas SweetAlert2 (muy recomendado y común en estos paneles)
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: '¡Indexación Aplicada!',
-                            text: response.mensaje, // El mensaje que viene de tu controlador
-                            confirmButtonText: 'Aceptar',
-                            allowOutsideClick: false
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                // 5. Recargar la vista show para actualizar la deuda
-                                location.reload(); 
-                            }
-                        });
-                    } else {
-                        // Alternativa si no tienes SweetAlert2 instalado
-                        alert('¡Éxito! ' + response.mensaje);
-                        location.reload();
-                    }
-                }
-            },
-            error: function(xhr) {
-                // Restaurar el botón si hay un error
-                btnConfirmar.prop('disabled', false).text('Aplicar');
-                
-                // Mostrar error
-                let errorMsg = 'Ocurrió un error al aplicar la indexación.';
-                if (xhr.responseJSON && xhr.responseJSON.message) {
-                    errorMsg = xhr.responseJSON.message;
-                }
-                
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire('Error', errorMsg, 'error');
-                } else {
-                    alert(errorMsg);
-                }
-            }
-        });
-    });
-
-    // =========================================================================
-    // CONFIRMACIÓN Y ANULACIÓN DE INDEXACIÓN
-    // =========================================================================
-    function confirmarAnulacionInteres(url, monto) {
-        if (typeof Swal === 'undefined') {
-            alert('SweetAlert2 no está cargado.');
-            return;
-        }
-
-        Swal.fire({
-            title: '¿Anular Indexación?',
-            html: `Estás a punto de anular una indexación por <b>$${monto}</b>.<br><br>Ingresa una observación o motivo (opcional):`,
-            icon: 'warning',
-            input: 'text',
-            inputPlaceholder: 'Ej: Ajuste acordado con el cliente, error de cálculo...',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: '<i class="fa fa-ban"></i> Sí, anular',
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // 1. Mostrar estado de carga mientras el controlador procesa
-                Swal.fire({
-                    title: 'Procesando...',
-                    text: 'Anulando la indexación y recalculando saldos.',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
-
-                // 2. Crear un formulario dinámico para enviarlo por POST
-                let form = $('<form>', {
-                    'method': 'POST',
-                    'action': url
-                });
-
-                // 3. Agregar el token CSRF de Laravel
-                form.append($('<input>', {
-                    'type': 'hidden',
-                    'name': '_token',
-                    'value': '{{ csrf_token() }}'
-                }));
-
-                // 4. Agregar la observación capturada en el modal
-                form.append($('<input>', {
-                    'type': 'hidden',
-                    'name': 'observacion',
-                    'value': result.value || '' // Envía el texto o vacío si no escribió nada
-                }));
-
-                // 5. Adjuntar al DOM y enviar
-                $('body').append(form);
-                form.submit();
-            }
-        });
-    }
-    function abrirModalCreditoDirecto(clienteId) {
-            $('#formCreditoDirecto')[0].reset();
-            $('#pin_autorizacion_directo').val('');
-            
-            @cannot('gestionar-creditos-avanzado')
-                $('#estado_pin_texto').html('Requiere autorización de supervisor').removeClass('text-success').addClass('text-dark');
-                $('#bloque_pin_warning').removeClass('alert-success').addClass('alert-warning');
-            @endcannot
-
-            $('#modalCreditoDirecto').modal('show');
-        }
-
-        $(document).ready(function() {
-
-            // Evento para solicitar y validar el PIN usando SweetAlert2
-            $('#btnSolicitarPinDirecto').on('click', function() {
-                let monto = $('#monto_credito_usd').val();
-
-                if (!monto || parseFloat(monto) <= 0) {
-                    Swal.fire('Monto Requerido', 'Por favor ingresa primero el monto del crédito antes de solicitar el PIN.', 'warning');
-                    return;
-                }
-
-                Swal.fire({
-                    title: '¿Solicitar Autorización?',
-                    text: "Se enviará un PIN de 6 dígitos al supervisor para autorizar $" + monto,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sí, enviar PIN',
-                    cancelButtonText: 'Cancelar',
-                    allowOutsideClick: false 
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        // 1. Llamada AJAX a solicitar_pin
-                        $.post("{{ route('ventas.solicitar_pin') }}", {
-                            _token: "{{ csrf_token() }}",
-                            local_nombre: "{{ auth()->user()->localActual()->nombre ?? 'Local' }}",
-                            cliente_nombre: "{{ $cliente->nombre ?? 'Cliente' }}",
-                            monto_total: monto,
-                            cantidad_items: 1
-                        }, function(response) {
-
-                            if(response.wa_link) { window.open(response.wa_link, '_blank'); }
-
-                            // 2. Prompt con SweetAlert2 para ingresar el PIN
-                            Swal.fire({
-                                title: 'Introduce el PIN',
-                                text: 'El supervisor recibió un código de 6 dígitos',
-                                input: 'text',
-                                inputAttributes: { maxlength: 6, autocapitalize: 'off', id: 'swal_pin_input' },
-                                showCancelButton: true,
-                                confirmButtonText: 'Validar PIN',
-                                cancelButtonText: 'Cancelar',
-                                showLoaderOnConfirm: true,
-                                allowOutsideClick: false,
-                                didOpen: () => {
-                                    // Desactivar los listeners de foco de Bootstrap para permitir escribir en el input de SweetAlert
-                                    $(document).off('focusin.bs.modal');
-                                    if ($.fn.modal && $.fn.modal.Constructor) {
-                                        $.fn.modal.Constructor.prototype._enforceFocus = function() {};
-                                    }
-
-                                    // Forzar el foco
-                                    setTimeout(() => {
-                                        const input = Swal.getInput();
-                                        if (input) {
-                                            $(input).removeAttr('readonly').removeAttr('disabled').focus();
-                                        }
-                                    }, 200);
-                                },
-                                preConfirm: (pin) => {
-                                    return $.post("{{ route('ventas.verificar_pin') }}", {
-                                        _token: "{{ csrf_token() }}",
-                                        pin: pin
-                                    }).done(res => {
-                                        $('#pin_autorizacion_directo').val(pin); 
-                                    }).fail(error => {
-                                        Swal.showValidationMessage(error.responseJSON.message || 'PIN Incorrecto');
-                                    });
-                                }
-                            }).then((res) => {
-                                if (res.isConfirmed) {
-                                    $('#estado_pin_texto').html('<i class="fa fa-check-circle text-success"></i> Crédito Autorizado por Supervisor').removeClass('text-dark').addClass('text-success');
-                                    $('#bloque_pin_warning').removeClass('alert-warning').addClass('alert-success');
-                                    Swal.fire('Autorizado', 'Crédito habilitado con éxito.', 'success');
-                                } else {
-                                    $('#pin_autorizacion_directo').val('');
-                                }
-                            });
-                        });
-                    }
-                });
-            });
-
-            // Validación al enviar el formulario
-            $('#formCreditoDirecto').on('submit', function(e) {
-                @cannot('gestionar-creditos-avanzado')
-                    let pin = $('#pin_autorizacion_directo').val();
-                    if (!pin) {
-                        e.preventDefault();
-                        Swal.fire('Autorización Requerida', 'Debes solicitar y validar el PIN del supervisor para guardar este crédito.', 'error');
-                        return false;
-                    }
-                @endcannot
-            });
-        });
-
-    
-
-        $(document).off('click', '.btn-modal-eliminar-nuevo').on('click', '.btn-modal-eliminar-nuevo', function(e) {
+        // ---------------------------------------------------------------------
+        // 2. MODAL DE ELIMINACIÓN DE CRÉDITO
+        // ---------------------------------------------------------------------
+        $(document).on('click', '.btn-modal-eliminar-nuevo', function(e) {
             e.preventDefault();
             e.stopPropagation();
-
-            console.log("¡Click detectado!");
 
             var $btn = $(this);
 
@@ -960,7 +793,7 @@
             var saldo = $btn.attr('data-saldo');
             var tieneProductos = $btn.attr('data-tieneproductos');
 
-            console.log("Datos extraídos:", { id, codigo, monto, saldo, tieneProductos });
+            if (!id) return;
 
             $('#formEliminarCredito').attr('action', "{{ url('creditos') }}/" + id);
 
@@ -979,45 +812,268 @@
             $('#modalEliminarCredito').modal('show');
         });
 
-    document.addEventListener('DOMContentLoaded', function () {
-        // 1. Tasa BCV desde Laravel
-        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
+        // ---------------------------------------------------------------------
+        // 3. VALIDACIÓN Y EVENTOS DEL FORMULARIO DE ABONO
+        // ---------------------------------------------------------------------
+        $(document).on('input', '#monto_total_usd', function() {
+            let montoAbono = parseFloat($(this).val()) || 0;
+            let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
 
-        // 2. Elementos del DOM
-        const inputMontoTotal  = document.getElementById('monto_total_usd');
-        const inputUsdEfectivo = document.querySelector('input[name="pago_usd_efectivo"]');
-        const inputBsEfectivo  = document.querySelector('input[name="pago_bs_efectivo"]');
-        const inputPuntoBs     = document.querySelector('input[name="pago_punto_bs"]');
-        const inputPagoMovilBs = document.querySelector('input[name="pago_pagomovil_bs"]');
+            if (montoAbono > saldoPendiente && saldoPendiente > 0) {
+                let exceso = montoAbono - saldoPendiente;
+                $('#monto_saldo_favor').text('$' + exceso.toFixed(2));
+                $('#alerta_saldo_favor').removeClass('d-none');
+            } else {
+                $('#alerta_saldo_favor').addClass('d-none');
+            }
+        });
 
-        const inputsDesglose = document.querySelectorAll('.input-desglose');
-        const divError       = document.getElementById('error-desglose');
-        
-        const formAbono = inputMontoTotal ? inputMontoTotal.closest('form') : null;
-        const btnSubmit = formAbono ? formAbono.querySelector('button[type="submit"]') : null;
+        $('#formAbono').on('submit', function(e) {
+            let form = this;
+            let saldoPendiente = parseFloat($('#txt_saldo_pendiente').text().replace(/[^0-9.-]+/g, "")) || 0;
+            let montoAbono = parseFloat($('#monto_total_usd').val()) || 0;
 
-        function getNum(input) {
-            if (!input) return 0;
-            const val = parseFloat(input.value);
-            return isNaN(val) ? 0 : val;
-        }
+            let totalDesglose = 0;
+            let inputs = $('.input-desglose');
+            let errorDiv = $('#error-desglose');
 
-        // 3. Validación estricta de coincidencia
+            $('.input-desglose').each(function() {
+                let valor = parseFloat($(this).val()) || 0;
+                totalDesglose += valor;
+            });
+
+            if (totalDesglose <= 0) {
+                e.preventDefault();
+                errorDiv.removeClass('d-none').hide().fadeIn();
+                inputs.addClass('is-invalid');
+                $('.modal-body').animate({ scrollTop: 0 }, 'slow');
+                return false;
+            }
+            $('.input-desglose').removeClass('is-invalid');
+
+            if (montoAbono > saldoPendiente && saldoPendiente > 0) {
+                e.preventDefault();
+                let exceso = montoAbono - saldoPendiente;
+
+                Swal.fire({
+                    title: '<strong>Confirmar Generación de Saldo a Favor</strong>',
+                    icon: 'info',
+                    html: `
+                        <div class="text-left font-weight-normal fs-6">
+                            <p class="mb-2">El monto ingresado excede la deuda actual. El sobrante se guardará como <strong>Saldo a Favor / Anticipo</strong>.</p>
+                            <div class="card bg-light border-0 my-3 p-3 text-dark">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Deuda Cancelada:</span>
+                                    <strong class="text-danger">$${saldoPendiente.toFixed(2)}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Monto Recibido:</span>
+                                    <strong class="text-dark">$${montoAbono.toFixed(2)}</strong>
+                                </div>
+                                <hr class="my-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="font-weight-bold text-primary">Nuevo Saldo a Favor:</span>
+                                    <span class="badge badge-info fs-6 px-2 py-1">+$${exceso.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fa fa-check"></i> Sí, Procesar Pago',
+                    cancelButtonText: 'Corregir Monto',
+                    reverseButtons: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $(form).find('button[type="submit"]').prop('disabled', true);
+                        form.submit();
+                    }
+                });
+
+                return false;
+            }
+        });
+
+        // ---------------------------------------------------------------------
+        // 4. INDEXACIÓN DE INTERÉS Y AJAX
+        // ---------------------------------------------------------------------
+        $(document).on('input', '#input_porcentaje', function() {
+            let saldoBase = parseFloat($('#saldo_base_global').data('valor')) || 0;
+            let porcentaje = parseFloat($(this).val()) || 0;
+
+            let btnConfirmar = $('#btn_confirmar_index');
+            let previewInteres = $('#preview_interes');
+            let previewTotal = $('#preview_total');
+
+            if (porcentaje > 0 && saldoBase > 0) {
+                let montoInteres = saldoBase * (porcentaje / 100);
+                let nuevoTotal = saldoBase + montoInteres;
+
+                previewInteres.text('$' + montoInteres.toFixed(2));
+                previewTotal.text('$' + nuevoTotal.toFixed(2));
+                btnConfirmar.prop('disabled', false);
+            } else {
+                previewInteres.text('$0.00');
+                previewTotal.text('$' + saldoBase.toFixed(2));
+                btnConfirmar.prop('disabled', true);
+            }
+        });
+
+        $(document).on('submit', '#formAplicarInteres', function(e) {
+            e.preventDefault();
+
+            let form = $(this);
+            let btnConfirmar = $('#btn_confirmar_index');
+
+            btnConfirmar.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Procesando...');
+
+            $.ajax({
+                type: 'POST',
+                url: form.attr('action'),
+                data: form.serialize(),
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Indexación Aplicada!',
+                            text: response.mensaje,
+                            confirmButtonText: 'Aceptar',
+                            allowOutsideClick: false
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                location.reload();
+                            }
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    btnConfirmar.prop('disabled', false).text('Aplicar');
+
+                    let errorMsg = (xhr.responseJSON && xhr.responseJSON.message)
+                        ? xhr.responseJSON.message
+                        : 'Ocurrió un error al aplicar la indexación.';
+
+                    Swal.fire('Error', errorMsg, 'error');
+                }
+            });
+        });
+
+        // ---------------------------------------------------------------------
+        // 5. CRÉDITO DIRECTO Y SOLICITUD DE PIN
+        // ---------------------------------------------------------------------
+        $('#btnSolicitarPinDirecto').on('click', function() {
+            let monto = $('#monto_credito_usd').val();
+
+            if (!monto || parseFloat(monto) <= 0) {
+                Swal.fire('Monto Requerido', 'Por favor ingresa primero el monto del crédito antes de solicitar el PIN.', 'warning');
+                return;
+            }
+
+            Swal.fire({
+                title: '¿Solicitar Autorización?',
+                text: "Se enviará un PIN de 6 dígitos al supervisor para autorizar $" + monto,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, enviar PIN',
+                cancelButtonText: 'Cancelar',
+                allowOutsideClick: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.post("{{ route('ventas.solicitar_pin') }}", {
+                        _token: "{{ csrf_token() }}",
+                        local_nombre: "{{ auth()->user()->localActual()->nombre ?? 'Local' }}",
+                        cliente_nombre: "{{ $cliente->nombre ?? 'Cliente' }}",
+                        monto_total: monto,
+                        cantidad_items: 1
+                    }, function(response) {
+
+                        if (response.wa_link) {
+                            window.open(response.wa_link, '_blank');
+                        }
+
+                        Swal.fire({
+                            title: 'Introduce el PIN',
+                            text: 'El supervisor recibió un código de 6 dígitos',
+                            input: 'text',
+                            inputAttributes: { maxlength: 6, autocapitalize: 'off', id: 'swal_pin_input' },
+                            showCancelButton: true,
+                            confirmButtonText: 'Validar PIN',
+                            cancelButtonText: 'Cancelar',
+                            showLoaderOnConfirm: true,
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                $(document).off('focusin.bs.modal');
+                                if ($.fn.modal && $.fn.modal.Constructor) {
+                                    $.fn.modal.Constructor.prototype._enforceFocus = function() {};
+                                }
+                                setTimeout(() => {
+                                    const input = Swal.getInput();
+                                    if (input) {
+                                        $(input).removeAttr('readonly').removeAttr('disabled').focus();
+                                    }
+                                }, 200);
+                            },
+                            preConfirm: (pin) => {
+                                return $.post("{{ route('ventas.verificar_pin') }}", {
+                                    _token: "{{ csrf_token() }}",
+                                    pin: pin
+                                }).done(res => {
+                                    $('#pin_autorizacion_directo').val(pin);
+                                }).fail(error => {
+                                    Swal.showValidationMessage(error.responseJSON.message || 'PIN Incorrecto');
+                                });
+                            }
+                        }).then((res) => {
+                            if (res.isConfirmed) {
+                                $('#estado_pin_texto').html('<i class="fa fa-check-circle text-success"></i> Crédito Autorizado por Supervisor')
+                                    .removeClass('text-dark')
+                                    .addClass('text-success');
+                                $('#bloque_pin_warning').removeClass('alert-warning').addClass('alert-success');
+                                Swal.fire('Autorizado', 'Crédito habilitado con éxito.', 'success');
+                            } else {
+                                $('#pin_autorizacion_directo').val('');
+                            }
+                        });
+                    });
+                }
+            });
+        });
+
+        $('#formCreditoDirecto').on('submit', function(e) {
+            @cannot('gestionar-creditos-avanzado')
+                let pin = $('#pin_autorizacion_directo').val();
+                if (!pin) {
+                    e.preventDefault();
+                    Swal.fire('Autorización Requerida', 'Debes solicitar y validar el PIN del supervisor para guardar este crédito.', 'error');
+                    return false;
+                }
+            @endcannot
+        });
+
+        // ---------------------------------------------------------------------
+        // 6. VALIDACIONES DE CUADRE EN TIEMPO REAL (ABONO REGISTRAR Y EDITAR)
+        // ---------------------------------------------------------------------
         function validarCuadreMontos() {
-            const montoObjetivoUSD = getNum(inputMontoTotal);
+            const inputMontoTotal = document.getElementById('monto_total_usd');
+            if (!inputMontoTotal) return;
 
-            const usdEfectivo = getNum(inputUsdEfectivo);
-            const bsEfectivo  = getNum(inputBsEfectivo);
-            const puntoBs     = getNum(inputPuntoBs);
-            const pagoMovilBs = getNum(inputPagoMovilBs);
+            const montoObjetivoUSD = parseFloat(inputMontoTotal.value) || 0;
+            const usdEfectivo = parseFloat($('input[name="pago_usd_efectivo"]').val()) || 0;
+            const bsEfectivo  = parseFloat($('input[name="pago_bs_efectivo"]').val()) || 0;
+            const puntoBs     = parseFloat($('input[name="pago_punto_bs"]').val()) || 0;
+            const pagoMovilBs = parseFloat($('input[name="pago_pagomovil_bs"]').val()) || 0;
 
-            // Convertir montos de bolívares a dólares
             const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
             const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
 
-            // Tolerancia para comparar flotantes
             const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
             const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
+
+            const divError = document.getElementById('error-desglose');
+            const btnSubmit = inputMontoTotal.closest('form')
+                ? inputMontoTotal.closest('form').querySelector('button[type="submit"]')
+                : null;
 
             if (estanCuadrados) {
                 if (divError) divError.classList.add('d-none');
@@ -1026,7 +1082,6 @@
                 if (btnSubmit) btnSubmit.disabled = true;
                 if (divError) {
                     divError.classList.remove('d-none');
-
                     if (montoObjetivoUSD <= 0) {
                         divError.innerHTML = '<i class="fa fa-exclamation-circle"></i> Ingrese un monto a abonar válido.';
                     } else {
@@ -1036,242 +1091,75 @@
             }
         }
 
-        // 4. Asignar eventos keyup/input/change al campo total y al desglose
-        if (inputMontoTotal) {
-            ['keyup', 'input', 'change'].forEach(evt => {
-                inputMontoTotal.addEventListener(evt, validarCuadreMontos);
-            });
-        }
+        $(document).on('keyup input change', '#monto_total_usd, .input-desglose', validarCuadreMontos);
 
-        inputsDesglose.forEach(input => {
-            ['keyup', 'input', 'change'].forEach(evt => {
-                input.addEventListener(evt, validarCuadreMontos);
-            });
+        $('#formHistorialFechas').on('submit', function(e) {
+            let fechaInicio = new Date($('#fecha_inicio').val());
+            let fechaFin = new Date($('#fecha_fin').val());
 
-            input.addEventListener('blur', function() {
-                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
-                    this.value = '0';
-                    validarCuadreMontos();
-                }
-            });
-        });
-
-        // Ejecutar al cargar
-        validarCuadreMontos();
-    });
-
-    // Validación del formulario de Historial Crediticio por Fecha
-    $('#formHistorialFechas').on('submit', function(e) {
-        let fechaInicio = new Date($('#fecha_inicio').val());
-        let fechaFin = new Date($('#fecha_fin').val());
-
-        if (fechaInicio > fechaFin) {
-            e.preventDefault();
-            Swal.fire({
-                icon: 'error',
-                title: 'Rango de fechas inválido',
-                text: 'La fecha de inicio no puede ser posterior a la fecha de fin.',
-                confirmButtonColor: '#343a40'
-            });
-            return false;
-        }
-    });
-
-    function editarAbono(id) {
-        $.ajax({
-            url: `/creditos/abonos/${id}/editar`,
-            type: 'GET',
-            success: function(response) {
-                if (response.success) {
-                    let abono = response.abono;
-                    
-                    // 1. Configurar la acción del formulario (Ruta PUT: /creditos/abonos/{id})
-                    $('#formEditarAbono').attr('action', `/creditos/abonos/${abono.id}`);
-                    
-                    // 2. Rellenar los elementos visuales y campos de tu modal
-                    $('#edit_abono_id').text(abono.id);
-                    $('#edit_nombre_cliente').text(abono.nombre_cliente || 'Cliente');
-                    $('#edit_fecha_abono').val(abono.fecha_abono);
-                    $('#edit_monto_total_usd').val(abono.monto_total_usd);
-                    $('#edit_referencia').val(abono.referencia);
-                    
-                    // 3. Rellenar el desglose de pagos
-                    $('#edit_pago_usd_efectivo').val(abono.pago_usd_efectivo ?? 0);
-                    $('#edit_pago_bs_efectivo').val(abono.pago_bs_efectivo ?? 0);
-                    $('#edit_pago_punto_bs').val(abono.pago_punto_bs ?? 0);
-                    $('#edit_pago_pagomovil_bs').val(abono.pago_pagomovil_bs ?? 0);
-                    
-                    // 4. Mostrar tu modal
-                    $('#modalEditarAbono').modal('show');
-                }
-            },
-            error: function(xhr) {
-                let errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al cargar los datos del abono.';
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire('Error', errorMsg, 'error');
-                } else {
-                    alert(errorMsg);
-                }
-            }
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        // 1. Tasa BCV desde Laravel (reutilizada)
-        const TASA_BCV = parseFloat("{{ bcv_rate('USD') }}") || 1;
-
-        // 2. Elementos del DOM para el MODAL DE EDICIÓN
-        const editMontoTotal  = document.getElementById('edit_monto_total_usd');
-        const editUsdEfectivo = document.getElementById('edit_pago_usd_efectivo');
-        const editBsEfectivo  = document.getElementById('edit_pago_bs_efectivo');
-        const editPuntoBs     = document.getElementById('edit_pago_punto_bs');
-        const editPagoMovilBs = document.getElementById('edit_pago_pagomovil_bs');
-
-        const inputsDesgloseEdit = document.querySelectorAll('.input-desglose-edit');
-        const divErrorEdit       = document.getElementById('error-desglose-edit');
-        
-        const formEditarAbono = document.getElementById('formEditarAbono');
-        const btnSubmitEdit   = formEditarAbono ? formEditarAbono.querySelector('button[type="submit"]') : null;
-
-        function getNumEdit(input) {
-            if (!input) return 0;
-            const val = parseFloat(input.value);
-            return isNaN(val) ? 0 : val;
-        }
-
-        // 3. Validación estricta de cuadre de montos para Edición
-        function validarCuadreMontosEdit() {
-            if (!editMontoTotal) return;
-
-            const montoObjetivoUSD = getNumEdit(editMontoTotal);
-
-            const usdEfectivo = getNumEdit(editUsdEfectivo);
-            const bsEfectivo  = getNumEdit(editBsEfectivo);
-            const puntoBs     = getNumEdit(editPuntoBs);
-            const pagoMovilBs = getNumEdit(editPagoMovilBs);
-
-            // Convertir montos de bolívares a dólares usando la tasa BCV
-            const totalBsEnUsd = (bsEfectivo + puntoBs + pagoMovilBs) / TASA_BCV;
-            const totalDesgloseUSD = usdEfectivo + totalBsEnUsd;
-
-            // Tolerancia para comparar números flotantes
-            const diferencia = Math.abs(montoObjetivoUSD - totalDesgloseUSD);
-            const estanCuadrados = montoObjetivoUSD > 0 && diferencia < 0.01;
-
-            if (estanCuadrados) {
-                if (divErrorEdit) divErrorEdit.classList.add('d-none');
-                if (btnSubmitEdit) btnSubmitEdit.disabled = false;
-                inputsDesgloseEdit.forEach(i => i.classList.remove('is-invalid'));
-            } else {
-                if (btnSubmitEdit) btnSubmitEdit.disabled = true;
-                if (divErrorEdit) {
-                    divErrorEdit.classList.remove('d-none');
-
-                    if (montoObjetivoUSD <= 0) {
-                        divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> Ingrese un monto total válido.';
-                    } else {
-                        divErrorEdit.innerHTML = `<i class="fa fa-exclamation-circle"></i> Discrepancia: El desglose suma <b>$${totalDesgloseUSD.toFixed(2)}</b> y el monto total es <b>$${montoObjetivoUSD.toFixed(2)}</b>.`;
-                    }
-                }
-            }
-        }
-
-        // 4. Asignar eventos keyup/input/change al monto total y al desglose de edición
-        if (editMontoTotal) {
-            ['keyup', 'input', 'change'].forEach(evt => {
-                editMontoTotal.addEventListener(evt, validarCuadreMontosEdit);
-            });
-        }
-
-        inputsDesgloseEdit.forEach(input => {
-            ['keyup', 'input', 'change'].forEach(evt => {
-                input.addEventListener(evt, validarCuadreMontosEdit);
-            });
-
-            input.addEventListener('blur', function() {
-                if (this.value.trim() === '' || isNaN(parseFloat(this.value))) {
-                    this.value = '0';
-                    validarCuadreMontosEdit();
-                }
-            });
-        });
-
-        // 5. Validación al enviar el formulario de edición
-        if (formEditarAbono) {
-            formEditarAbono.addEventListener('submit', function(e) {
-                let totalDesglose = 0;
-                inputsDesgloseEdit.forEach(input => {
-                    totalDesglose += getNumEdit(input);
+            if (fechaInicio > fechaFin) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Rango de fechas inválido',
+                    text: 'La fecha de inicio no puede ser posterior a la fecha de fin.',
+                    confirmButtonColor: '#343a40'
                 });
+                return false;
+            }
+        });
 
-                if (totalDesglose <= 0) {
-                    e.preventDefault();
-                    if (divErrorEdit) {
-                        divErrorEdit.classList.remove('d-none');
-                        divErrorEdit.innerHTML = '<i class="fa fa-exclamation-circle"></i> Debe ingresar al menos un valor en el desglose.';
-                    }
-                    inputsDesgloseEdit.forEach(i => i.classList.add('is-invalid'));
-                    $('.modal-body').animate({ scrollTop: 0 }, 'slow');
-                    return false;
-                }
-            });
-        }
+        // ---------------------------------------------------------------------
+        // 7. CALCULADORAS DE CONVERSIÓN RÁPIDA (REGISTRAR Y EDITAR ABONO)
+        // ---------------------------------------------------------------------
+        $('#calc_usd').on('input', function () {
+            let usd = parseFloat($(this).val()) || 0;
+            $('#calc_bs').val((usd * TASA_BCV).toFixed(2));
+        });
 
-            // ==========================================
-            // 1. CALCULADORA - REGISTRAR ABONO
-            // ==========================================
-            $('#calc_usd').on('input', function () {
-                let usd = parseFloat($(this).val()) || 0;
-                $('#calc_bs').val((usd * TASA_BCV).toFixed(2));
-            });
+        $('#calc_bs').on('input', function () {
+            let bs = parseFloat($(this).val()) || 0;
+            if (TASA_BCV > 0) {
+                $('#calc_usd').val((bs / TASA_BCV).toFixed(2));
+            }
+        });
 
-            $('#calc_bs').on('input', function () {
-                let bs = parseFloat($(this).val()) || 0;
-                if (TASA_BCV > 0) {
-                    $('#calc_usd').val((bs / TASA_BCV).toFixed(2));
-                }
-            });
+        $('.btn-copiar-bs').on('click', function () {
+            let inputTargetName = $(this).data('target');
+            let montoBs = $('#calc_bs').val() || 0;
 
-            $('.btn-copiar-bs').on('click', function () {
-                let inputTargetName = $(this).data('target');
-                let montoBs = $('#calc_bs').val() || 0;
-                
-                // Asignar al input de desglose correspondiente y disparar evento de cambio
-                $(`#modalAbono input[name="${inputTargetName}"]`)
-                    .val(parseFloat(montoBs).toFixed(2))
-                    .trigger('input')
-                    .trigger('change');
-            });
+            $(`#modalAbono input[name="${inputTargetName}"]`)
+                .val(parseFloat(montoBs).toFixed(2))
+                .trigger('input')
+                .trigger('change');
+        });
 
-            // ==========================================
-            // 2. CALCULADORA - EDITAR ABONO
-            // ==========================================
-            $('#edit_calc_usd').on('input', function () {
-                let usd = parseFloat($(this).val()) || 0;
-                $('#edit_calc_bs').val((usd * TASA_BCV).toFixed(2));
-            });
+        $('#edit_calc_usd').on('input', function () {
+            let usd = parseFloat($(this).val()) || 0;
+            $('#edit_calc_bs').val((usd * TASA_BCV).toFixed(2));
+        });
 
-            $('#edit_calc_bs').on('input', function () {
-                let bs = parseFloat($(this).val()) || 0;
-                if (TASA_BCV > 0) {
-                    $('#edit_calc_usd').val((bs / TASA_BCV).toFixed(2));
-                }
-            });
+        $('#edit_calc_bs').on('input', function () {
+            let bs = parseFloat($(this).val()) || 0;
+            if (TASA_BCV > 0) {
+                $('#edit_calc_usd').val((bs / TASA_BCV).toFixed(2));
+            }
+        });
 
-            $('.btn-copiar-bs-edit').on('click', function () {
-                let targetId = $(this).data('target-id');
-                let montoBs = $('#edit_calc_bs').val() || 0;
-                
-                $(`#${targetId}`)
-                    .val(parseFloat(montoBs).toFixed(2))
-                    .trigger('input')
-                    .trigger('change');
-            });
+        $('.btn-copiar-bs-edit').on('click', function () {
+            let targetId = $(this).data('target-id');
+            let montoBs = $('#edit_calc_bs').val() || 0;
 
-            // Limpiar calculadoras al cerrar modales
-            $('#modalAbono, #modalEditarAbono').on('hidden.bs.modal', function () {
-                $('#calc_usd, #calc_bs, #edit_calc_usd, #edit_calc_bs').val('');
-            });
-    });
+            $(`#${targetId}`)
+                .val(parseFloat(montoBs).toFixed(2))
+                .trigger('input')
+                .trigger('change');
+        });
+
+        $('#modalAbono, #modalEditarAbono').on('hidden.bs.modal', function () {
+            $('#calc_usd, #calc_bs, #edit_calc_usd, #edit_calc_bs').val('');
+        });
+
+    }); // fin de $(document).ready()
 </script>
 @endsection
