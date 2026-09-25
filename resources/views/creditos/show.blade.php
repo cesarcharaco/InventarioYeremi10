@@ -338,7 +338,7 @@
                                                    data-monto="{{ number_format($credito->monto_inicial, 2) }}"
                                                    data-saldo="{{ number_format($credito->saldo_pendiente, 2) }}"
                                                    data-tieneproductos="{{ ($credito->venta && $credito->venta->detalles->isNotEmpty()) ? '1' : '0' }}"
-                                                   title="Eliminar Crédito/Anticipo">
+                                                   title="Eliminar Crédito/Anticipo-{{ $credito->id }}">
                                                <i class="fas fa-trash-alt"></i>
                                            </button>
                                        </td>

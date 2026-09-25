@@ -1340,27 +1340,16 @@ class CreditoController extends Controller
 
         try {
             DB::transaction(function () use ($id) {
-                \Log::info('Iniciando eliminación de crédito', ['id' => $id]);
+                
                 // 1. OBTENER EL CRÉDITO Y SUS RELACIONES
                 $credito = Credito::with(['venta.detalles', 'cliente'])
-                    ->where(function ($q) use ($id) {
-                        $q->where('id', $id)->orWhere('id_venta', $id);
-                    })
+                    ->where('id', $id)
                     ->first();
 
                 if (!$credito) {
                     throw new \Exception("No existe un registro de crédito asociado al identificador [{$id}].");
                 }
-                // DEBUG: Log de valores reales
-                \Log::info('DEBUG CRÉDITO', [
-                    'id' => $credito->id,
-                    'id_venta' => $credito->id_venta,
-                    'estado_raw' => $credito->getRawOriginal('estado'),
-                    'estado_accessor' => $credito->estado,
-                    'saldo_pendiente' => $credito->saldo_pendiente,
-                    'saldo_a_favor' => $credito->saldo_a_favor,
-                    'monto_inicial' => $credito->monto_inicial,
-                ]);
+
                 // GUARDRAIL: Prevenir la eliminación directa de créditos pagados
                 if ($credito->estado === 'pagado' && (float)$credito->saldo_pendiente <= 0) {
                     throw new \Exception("No se puede eliminar un crédito que ya ha sido saldado completamente. Si requiere ajustar saldos, ejecute una nota de crédito o devolución.");
@@ -1553,20 +1542,21 @@ class CreditoController extends Controller
 
                         $venta->delete();
                     }
-                     \Log::info('Venta procesada', ['id' => $venta->id]);
+                     
                 }
 
                 // 6. ELIMINAR EL CRÉDITO AL FINAL
                 $credito->delete();
-                \Log::info('Crédito eliminado', ['id' => $idCreditoReal]);
+                
             });
-             \Log::info('Redirect con éxito');
+             
             return redirect()->back()->with('success', 'Crédito eliminado y balance de cartera ajustado correctamente.');
+             DB::commit();
+        } catch (\Throwable $e) { // Throwable captura Exceptions y Errors de PHP
+                DB::rollBack();
 
-        } catch (\Exception $e) {
-            \Log::error('Error en eliminación: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Error al eliminar el crédito: ' . $e->getMessage());
-        }
+                return redirect()->back()->with('error', 'Ocurrió un problema: ' . $e->getMessage());
+            }
     }
 
     public function historialPorFecha(Request $request, $id)

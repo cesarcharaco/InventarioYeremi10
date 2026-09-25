@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use App\Models\Categoria;
 use App\Models\Insumos;
 use App\Observers\AuditoriaObserver;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -23,6 +26,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        DB::listen(function ($query) {
+            if (str_contains(strtolower($query->sql), 'rollback')) {
+                Log::channel('single')->warning('⚠️ ROLLBACK DETECTADO', [
+                    'sql' => $query->sql,
+                    'time' => $query->time
+                ]);
+            }
+        });
         Relation::morphMap([
             'categoria' => Categoria::class,
             'insumo'    => Insumos::class, // Apunta al modelo correcto en plural
