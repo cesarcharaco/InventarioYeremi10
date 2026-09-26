@@ -273,11 +273,9 @@
                                        {{-- 2. Código / Referencia --}}
                                        <td>
                                            <strong>
-                                               @if($esAnticipo)
-                                                   ANT-{{ $credito->id }}
-                                               @else
-                                                   {{ $credito->venta->codigo_factura ?? 'CRD-' . $credito->id }}
-                                               @endif
+                                               
+                                               {{ $credito->venta->codigo_factura }}
+                                               
                                            </strong>
                                        </td>
 
@@ -310,7 +308,7 @@
                                        {{-- 5. Saldo ($) --}}
                                        <td class="font-weight-bold text-right">
                                            @if($esAnticipo)
-                                               <span class="text-success">{{ number_format($credito->saldo_pendiente, 2) }}$ (A favor)</span>
+                                               <span class="text-success">{{ number_format($credito->saldo_a_favor, 2) }}$ (A favor)</span>
                                            @else
                                                <span class="text-danger">{{ number_format($credito->saldo_pendiente, 2) }}$</span>
                                            @endif

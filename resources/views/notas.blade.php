@@ -644,3 +644,248 @@ if (!$idCajaActiva) {
 
 //pendiente por cambiar en la base de datos del servidor
 ALTER TABLE autorizacion_pines MODIFY pin VARCHAR(255) NOT NULL;
+
+
+
+
+
+
+
+public function destroy($id)
+    {
+        if (Gate::denies('gestionar-creditos-avanzado') && !auth()->user()->esAdmin()) {
+            return redirect()->back()->with('error', 'No posee autorización suficiente para eliminar registros de crédito.');
+        }
+
+        try {
+            DB::transaction(function () use ($id) {
+                
+                // 1. OBTENER EL CRÉDITO Y SUS RELACIONES
+                $credito = Credito::with(['venta.detalles', 'cliente'])
+                    ->where('id', $id)
+                    ->first();
+
+                if (!$credito) {
+                    throw new \Exception("No existe un registro de crédito asociado al identificador [{$id}].");
+                }
+
+                $idCreditoReal = $credito->id;
+                $idCliente     = $credito->id_cliente;
+                $cliente       = $credito->cliente;
+                $venta         = $credito->venta;
+
+                // ← CAMBIO 1: Usar saldo_a_favor para detectar anticipos (campo positivo, más seguro)
+                $esAnticipo = $credito->saldo_a_favor > 0;
+
+                // ← CAMBIO 2: BLOQUEAR eliminación de anticipos (no se eliminan directamente)
+                if ($esAnticipo) {
+                    throw new \Exception(
+                        "No se puede eliminar un anticipo directamente. " .
+                        "Los anticipos se gestionan automáticamente al editar o anular abonos."
+                    );
+                }
+
+                // ← CAMBIO 3: Revertir consumo de anticipo si este crédito lo consumió
+                $anticipoPrevio = Credito::where('id_cliente', $idCliente)
+                    ->where('created_at', '<', $credito->created_at)
+                    ->orderBy('created_at', 'desc')
+                    ->first(); // ← El anticipo más reciente antes de este crédito
+
+                if ($anticipoPrevio) {
+                    // Calcular cuánto consumió este crédito (asumir que todo lo pagado vino del anticipo)
+                    $montoConsumido = $credito->monto_inicial + $credito->saldo_pendiente;
+                    if ($montoConsumido > 0) {
+                        // Revertir al anticipo
+                        $nuevoSaldoAFavor = $anticipoPrevio->saldo_a_favor + $montoConsumido;
+                        $nuevoSaldoPendiente = -$nuevoSaldoAFavor;
+                        
+                        $anticipoPrevio->update([
+                            'saldo_a_favor' => $nuevoSaldoAFavor,
+                            'saldo_pendiente' => $nuevoSaldoPendiente,
+                            'estado' => 'anticipo',
+                        ]);
+                        dd($anticipoPrevio);
+                        // Actualizar cliente
+                        //$cliente->increment('saldo_a_favor', $montoConsumido);
+                    }
+                }
+
+                // 4. ESCENARIO B: ELIMINACIÓN DE CRÉDITO DEUDOR REGULAR
+                $detallesAbono = DB::table('abono_detalles')
+                    ->where('id_credito', $idCreditoReal)
+                    ->get();
+
+                foreach ($detallesAbono as $detalle) {
+                    $montoAbonado    = (float) $detalle->monto_aplicado_usd;
+                    $idAbonoCabecera = $detalle->id_abono;
+
+                    DB::table('abono_detalles')->where('id', $detalle->id)->delete();
+
+                    if ($montoAbonado <= 0.01) {
+                        continue;
+                    }
+
+                    // Reasignación FIFO a otras deudas activas
+                    $siguientesCreditos = Credito::where('id_cliente', $idCliente)
+                        ->where('id', '!=', $idCreditoReal)
+                        ->whereIn('estado', ['pendiente', 'vencido', 'revalorizado'])
+                        ->where('saldo_pendiente', '>', 0)
+                        ->orderBy('created_at', 'asc')
+                        ->orderBy('id', 'asc')
+                        ->get();
+
+                    $montoRestanteReasignar = $montoAbonado;
+
+                    foreach ($siguientesCreditos as $creditoDestino) {
+                        if ($montoRestanteReasignar <= 0.01) break;
+
+                        $montoAbonarCredito = min($creditoDestino->saldo_pendiente, $montoRestanteReasignar);
+
+                        DB::table('abono_detalles')->insert([
+                            'id_abono'           => $idAbonoCabecera,
+                            'id_credito'         => $creditoDestino->id,
+                            'monto_aplicado_usd' => $montoAbonarCredito,
+                            'created_at'         => now(),
+                            'updated_at'         => now(),
+                        ]);
+
+                        $nuevoSaldoPendiente = $creditoDestino->saldo_pendiente - $montoAbonarCredito;
+                        $nuevoEstado = ($nuevoSaldoPendiente <= 0) ? 'pagado' : $creditoDestino->estado;
+
+                        $creditoDestino->update([
+                            'saldo_pendiente' => $nuevoSaldoPendiente,
+                            'estado'          => $nuevoEstado,
+                        ]);
+
+                        $montoRestanteReasignar -= $montoAbonarCredito;
+                    }
+
+                    // ← CAMBIO 4: Si queda remanente, sumar al anticipo existente o crear uno nuevo
+                    if ($montoRestanteReasignar > 0.01 && $cliente) {
+                        // Buscar si ya existe anticipo activo para este cliente
+                        $anticipoExistente = Credito::where('id_cliente', $cliente->id)
+                            ->where('saldo_a_favor', '>', 0)
+                            ->first();
+
+                        if ($anticipoExistente) {
+                            // Sumar al anticipo existente
+                            $anticipoExistente->increment('saldo_a_favor', $montoRestanteReasignar);
+                            $anticipoExistente->decrement('saldo_pendiente', $montoRestanteReasignar);
+                            $cliente->increment('saldo_a_favor', $montoRestanteReasignar);
+                            
+                            // Vincular este abono al anticipo existente
+                            AbonoDetalle::create([
+                                'id_abono'           => $idAbonoCabecera,
+                                'id_credito'         => $anticipoExistente->id,
+                                'monto_aplicado_usd' => $montoRestanteReasignar,
+                            ]);
+                        } else {
+                            // Crear nuevo anticipo (lógica original)
+                            $idCajaRespaldo = DB::table('abonos_credito')->where('id', $idAbonoCabecera)->value('id_caja');
+
+                            $ventaAnticipo = new Venta();
+                            $ventaAnticipo->codigo_factura     = 'ANT-' . strtoupper(Str::random(6));
+                            $ventaAnticipo->id_cliente         = $cliente->id;
+                            $ventaAnticipo->id_user            = auth()->id();
+                            $ventaAnticipo->id_local           = auth()->user()->id_local ?? 1;
+                            $ventaAnticipo->id_caja            = $idCajaRespaldo;
+                            $ventaAnticipo->pago_usd_efectivo  = 0.00;
+                            $ventaAnticipo->pago_bs_efectivo   = 0.00;
+                            $ventaAnticipo->monto_credito_usd  = 0.00;
+                            $ventaAnticipo->total_usd          = 0.00;
+                            $ventaAnticipo->estado             = 'completada';
+                            $ventaAnticipo->observacion        = 'Respaldo de saldo a favor al eliminar crédito #' . $idCreditoReal;
+                            $ventaAnticipo->save();
+
+                            $creditoAnticipo = Credito::create([
+                                'id_cliente'        => $cliente->id,
+                                'id_venta'          => $ventaAnticipo->id,
+                                'monto_inicial'     => 0.00,
+                                'saldo_pendiente'   => -$montoRestanteReasignar,
+                                'saldo_a_favor'     => $montoRestanteReasignar,
+                                'fecha_vencimiento' => now(),
+                                'estado'            => 'anticipo',
+                            ]);
+
+                            AbonoDetalle::create([
+                                'id_abono'           => $idAbonoCabecera,
+                                'id_credito'         => $creditoAnticipo->id,
+                                'monto_aplicado_usd' => $montoRestanteReasignar,
+                            ]);
+
+                            $cliente->increment('saldo_a_favor', (float) $montoRestanteReasignar);
+                        }
+                    }
+
+                    $tieneDetalles = DB::table('abono_detalles')->where('id_abono', $idAbonoCabecera)->exists();
+                    if (!$tieneDetalles) {
+                        DB::table('abonos_credito')->where('id', $idAbonoCabecera)->delete();
+                    }
+                }
+
+                // 5. DESVINCULAR REGISTROS SECUNDARIOS Y AUDITAR CAJA
+                DB::table('credito_intereses')->where('id_credito', $idCreditoReal)->delete();
+
+                DB::table('caja_movimientos')
+                    ->where('id_credito', $idCreditoReal)
+                    ->update([
+                        'id_credito'  => null,
+                        'observacion' => DB::raw("CONCAT(COALESCE(observacion, ''), ' [Crédito #{$idCreditoReal} Eliminado]')")
+                    ]);
+
+                // 6. MANEJO CONDICIONAL DE VENTA E INVENTARIO
+                if ($venta) {
+                    $pagoEfectivoUsd = (float)($venta->pago_usd_efectivo ?? 0);
+                    $pagoEfectivoBs  = (float)($venta->pago_bs_efectivo ?? 0);
+                    $tuvoPagoEfectivo = ($pagoEfectivoUsd > 0 || $pagoEfectivoBs > 0);
+
+                    if ($tuvoPagoEfectivo) {
+                        $venta->update([
+                            'monto_credito_usd' => 0.00,
+                            'total_usd'         => max(0, (float)$venta->total_usd - (float)$credito->monto_inicial),
+                            'observacion'       => trim(($venta->observacion ?? '') . " [Crédito #{$idCreditoReal} eliminado - Venta ajustada]"),
+                        ]);
+                    } else {
+                        if ($venta->detalles && $venta->detalles->isNotEmpty()) {
+                            foreach ($venta->detalles as $detalle) {
+                                if ($detalle->id_insumo) {
+                                    $existencia = InsumosC::where('id_insumo', $detalle->id_insumo)
+                                        ->where('id_local', $venta->id_local)
+                                        ->first();
+
+                                    if ($existencia) {
+                                        $existencia->increment('cantidad', $detalle->cantidad);
+                                    } else {
+                                        InsumosC::create([
+                                            'id_insumo' => $detalle->id_insumo,
+                                            'id_local'  => $venta->id_local,
+                                            'cantidad'  => $detalle->cantidad,
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (class_exists(Correlativo::class)) {
+                            Correlativo::where('venta_id', $venta->id)->update([
+                                'venta_id' => null,
+                                'estado'   => 'disponible',
+                            ]);
+                        }
+
+                        $venta->delete();
+                    }
+                }
+
+                // 7. ELIMINAR EL CRÉDITO AL FINAL
+                $credito->delete();
+                
+            });
+
+            return redirect()->back()->with('success', 'Crédito eliminado y balance de cartera ajustado correctamente.');
+
+        } catch (\Throwable $e) {
+            // ← CAMBIO 5: Eliminar DB::rollBack() manual (la transacción ya lo hace automáticamente)
+            return redirect()->back()->with('error', 'Ocurrió un problema: ' . $e->getMessage());
+        }
+    }

@@ -78,7 +78,7 @@ function checkNotifications() {
         success: function(data) {
             // Si el nuevo conteo es mayor al que teníamos, algo nuevo llegó
             if (data.count > currentNotificationCount) {
-                playNotificationSound();
+                //playNotificationSound();
                 
                 // Opcional: Actualizar el número en la campanita visualmente
                 $('.navbar-badge').text(data.count).show();
