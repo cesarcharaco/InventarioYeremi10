@@ -2034,16 +2034,22 @@ class CreditoController extends Controller
      * Anticipos incluidos: son movimientos financieros posteriores
      * y deben impedir borrar un crédito anterior.
      */
-    protected function obtenerUltimoCreditoId(?int $idCliente): ?int
+    protected function obtenerUltimoCreditoId(?int $idCliente, bool $conBloqueo = false): ?int
     {
         if (!$idCliente) {
             return null;
         }
 
-        $id = Credito::query()
+        $query = Credito::query()
             ->where('id_cliente', $idCliente)
-            ->orderByDesc('id')
-            ->value('id');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id'); // Criterio de desempate si coinciden en fecha/hora exacta
+
+        if ($conBloqueo) {
+            $query->lockForUpdate();
+        }
+
+        $id = $query->value('id');
 
         return $id !== null ? (int) $id : null;
     }
