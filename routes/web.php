@@ -266,6 +266,10 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/ofertas/importar', [InsumosMayoresController::class, 'importar'])->name('insumos-mayores.importar');
         Route::put('/pedido/{id}/actualizar', [InsumosMayoresController::class, 'actualizarPedido'])->name('pedidos.actualizar');
         Route::patch('/pedido/{id}/cancelar', [InsumosMayoresController::class, 'cancelarPedidoCliente'])->name('pedidos.cancelar.cliente');
+        
+        Route::get('/generar-plantilla', [InsumosMayoresController::class, 'plantillaForm'])->name('insumos-mayores.plantilla');
+        
+        Route::post('/generar-plantilla/exportar', [InsumosMayoresController::class, 'exportarPlantilla'])->name('insumos-mayores.exportar_plantilla');
     });
 
     // --- GRUPO ADMIN ---

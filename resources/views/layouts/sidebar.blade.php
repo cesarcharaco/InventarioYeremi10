@@ -331,6 +331,12 @@
                                     <p>Cargar Ofertas</p>
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a href="{{ route('insumos-mayores.plantilla') }}" class="nav-link {{ Request::is('mayorista/generar-plantilla*') ? 'active' : '' }}">
+                                    <i class="fas fa-file-excel nav-icon text-info"></i>
+                                    <p>Generar Plantilla Depósito</p>
+                                </a>
+                            </li>
                         </ul>
                     </li>
                 @endif

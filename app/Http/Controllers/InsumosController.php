@@ -516,6 +516,23 @@ class InsumosController extends Controller
         if ($request->filled('filtro_ubicacion')) {
             $query->where('local.nombre', $request->filtro_ubicacion);
         }
+
+        // FILTRO POR NIVEL DE STOCK ---
+        if ($request->filled('filtro_nivel_stock')) {
+            $nivel = $request->filtro_nivel_stock;
+            if ($nivel === 'critico') {
+                // Cantidad menor o igual al stock mínimo
+                $query->whereColumn('insumos_has_cantidades.cantidad', '<=', 'insumos.stock_min');
+            } elseif ($nivel === 'precaucion') {
+                // Cantidad mayor al mínimo pero menor o igual al 30% por encima del mínimo
+                $query->whereColumn('insumos_has_cantidades.cantidad', '>', 'insumos.stock_min')
+                      ->whereRaw('insumos_has_cantidades.cantidad <= (insumos.stock_min * 1.30)');
+            } elseif ($nivel === 'normal') {
+                // Cantidad mayor al 30% por encima del mínimo
+                $query->whereRaw('insumos_has_cantidades.cantidad > (insumos.stock_min * 1.30)');
+            }
+        }
+        
         // ------------------------------------------
         return DataTables::of($query)
             // --- MAPEADO DE BÚSQUEDA: ESTO ELIMINA LOS ERRORES DE LAS IMÁGENES ---
@@ -555,7 +572,19 @@ class InsumosController extends Controller
                 return '<span class="badge badge-dark">' . $row->stock_max . '</span>';
             })
             ->editColumn('cantidad', function($row) {
-                return '<span class="text-primary font-weight-bold" style="font-size: 1.1em;">' . $row->cantidad . '</span>';
+                $cantidad = (int) $row->cantidad;
+                $stockMin = (int) $row->stock_min;
+
+                if ($cantidad <= $stockMin) {
+                    // 🔴 Nivel Crítico: Stock menor o igual al mínimo
+                    return '<span class="badge badge-danger p-2" style="font-size: 1em; background-color: #dc3545; color: #fff;"><i class="fas fa-exclamation-circle"></i> ' . $row->cantidad . '</span>';
+                } elseif ($cantidad <= ($stockMin * 1.30)) {
+                    // 🟠 Nivel de Precaución: Dentro del 30% por encima del mínimo
+                    return '<span class="badge badge-warning p-2" style="font-size: 1em; background-color: #fd7e14; color: #fff;"><i class="fas fa-exclamation-triangle"></i> ' . $row->cantidad . '</span>';
+                } else {
+                    // 🔵 Nivel Normal / Saludable
+                    return '<span class="text-primary font-weight-bold" style="font-size: 1.1em;">' . $row->cantidad . '</span>';
+                }
             })
             ->editColumn('nombre_local', function($row) {
                 return '<i class="fa fa-map-marker-alt text-danger"></i> ' . e($row->nombre_local);

@@ -6,19 +6,29 @@ use App\Models\InsumosMayor;
 use App\Models\Insumos;
 use App\Models\InsumosC;
 use App\Models\Local;
+use App\Models\Categoria;
 use Illuminate\Http\Request;
 use App\Imports\InsumosImport;
 use App\Models\ListasOferta;
 use App\Models\Pedido;
 use App\Models\PedidoDetalle;
 use Maatwebsite\Excel\Facades\Excel;
-use Illuminate\Support\Facades\DB; // Añadido al namespace
+use Illuminate\Support\Facades\DB; 
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Cliente;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Font;
+use PhpOffice\PhpSpreadsheet\Style\Color;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use App\Services\BcvRateService;
 
 class InsumosMayoresController extends Controller
 {
@@ -445,4 +455,416 @@ class InsumosMayoresController extends Controller
             DB::rollBack();
             return back()->with('error', 'No se pudo realizar la operación: ' . $e->getMessage());
         }
-    }}
+    }
+
+    /**
+     * Muestra el formulario de filtros múltiples para generar la plantilla Excel de depósitos.
+     */
+    public function plantillaForm()
+    {
+        // Obtenemos solo los locales que son depósitos
+        $depositos = Local::where('tipo', 'DEPOSITO')->where('estado', 'Activo')->get();
+        
+        // Obtenemos todas las categorías de repuestos
+        $categorias = Categoria::all();
+
+        return view('insumos_mayores.generar_plantilla', compact('depositos', 'categorias'));
+    }
+
+    public function exportarPlantilla(Request $request)
+    {
+        // 1. Validar selección múltiple de depósitos y categorías
+        $request->validate([
+            'depositos'    => 'required|array',
+            'depositos.*'  => 'exists:local,id',
+            'categorias'   => 'nullable|array',
+            'categorias.*' => 'exists:categorias,id',
+        ]);
+
+        $depositosIds = $request->depositos;
+        $categoriasIds = $request->categorias ?? [];
+
+        // 2. Consultar insumos con stock positivo
+        $query = Insumos::with([
+            'categoria',
+            'existencias' => function ($q) use ($depositosIds) {
+                $q->whereIn('id_local', $depositosIds)
+                    ->where('cantidad', '>', 0);
+            },
+        ])
+            ->whereHas('existencias', function ($q) use ($depositosIds) {
+                $q->whereIn('id_local', $depositosIds)
+                    ->where('cantidad', '>', 0);
+            });
+
+        if (!empty($categoriasIds)) {
+            $query->whereIn('categoria_id', $categoriasIds);
+        }
+
+        $insumos = $query->get();
+
+        if ($insumos->isEmpty()) {
+            return back()->with(
+                'error',
+                'No se encontraron productos con stock en los depósitos seleccionados.'
+            );
+        }
+
+        // 3. Obtener la tasa BCV
+        $tasaBcv = 80.00;
+
+        try {
+            $tasaBcv = app(BcvRateService::class)->getCurrentRate('USD') ?? 80.00;
+        } catch (\Throwable $e) {
+            // Mantener el valor por defecto
+        }
+
+        // 4. Construcción del Excel
+        $spreadsheet = new Spreadsheet();
+        $ws = $spreadsheet->getActiveSheet();
+
+        $ws->setTitle('Hoja1');
+        $ws->setShowGridLines(true);
+
+        $borderThin = [
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => [
+                        'argb' => 'FFCBD5E1',
+                    ],
+                ],
+            ],
+        ];
+
+        // Cabecera institucional: filas 3 a 9
+        $ws->setCellValue(
+            'B3',
+            'YERMOTORS REPUESTOS C.A. Venta de Lubricantes y Repuestos para Motos - TELF:04140863107/04163031901'
+        );
+
+        $ws->getStyle('B3')
+            ->getFont()
+            ->setBold(true)
+            ->setSize(11)
+            ->setColor(new Color('FF1A365D'));
+
+        $ws->setCellValue('I3', 'RIF:J501868034');
+
+        $ws->getStyle('I3')
+            ->getFont()
+            ->setBold(true)
+            ->setSize(11);
+
+        $ws->setCellValue('A4', 'CLIENTE:');
+        $ws->setCellValue('G4', 'C.I./RIF:');
+
+        $ws->setCellValue('A5', 'DIRECCIÓN:');
+
+        $ws->setCellValue('A6', 'TLF:');
+        $ws->setCellValue('G6', 'WHATSAPP:');
+
+        // Condiciones comerciales
+        $ws->setCellValue('B7', 'MONTO MÍNIMO DE PEDIDO 200$');
+
+        $ws->getStyle('B7')
+            ->getFont()
+            ->setBold(true)
+            ->setColor(new Color('FF8B0000'));
+
+        $ws->setCellValue('F7', 'EN DIVISAS 20% DE DESCUENTO');
+
+        $ws->getStyle('F7')
+            ->getFont()
+            ->setBold(true)
+            ->setColor(new Color('FF1A365D'));
+
+        $ws->setCellValue('I7', 'TOTAL NETO');
+        $ws->getStyle('I7')->getFont()->setBold(true);
+
+        $ws->setCellValue('B8', 'ORDEN DE PEDIDO');
+
+        $ws->getStyle('B8')
+            ->getFont()
+            ->setBold(true)
+            ->setSize(12)
+            ->setColor(new Color('FF1A365D'));
+
+        $lastRow = 10 + count($insumos);
+
+        $ws->setCellValue('I8', '=SUM(I11:I' . $lastRow . ')');
+
+        $ws->getStyle('I8')
+            ->getFont()
+            ->setBold(true)
+            ->setSize(12)
+            ->setColor(new Color('FF8B0000'));
+
+        $ws->getStyle('I8')
+            ->getNumberFormat()
+            ->setFormatCode('$#,##0.00');
+
+        $ws->setCellValue('H9', 'TASA BCV');
+        $ws->getStyle('H9')->getFont()->setBold(true);
+
+        $ws->setCellValue('I9', $tasaBcv);
+        $ws->getStyle('I9')->getFont()->setBold(true);
+
+        $ws->getStyle('I9')
+            ->getNumberFormat()
+            ->setFormatCode('#,##0.00');
+
+        // Fila 10: encabezados de la tabla
+        $headers = [
+            'CÓDIGO',
+            'PRODUCTO',
+            '',
+            '',
+            'PRECIO',
+            'CANTIDAD',
+            'BS',
+            'BCV',
+            'DIVISAS',
+        ];
+
+        for ($colIdx = 1; $colIdx <= count($headers); $colIdx++) {
+            $cell = $ws->getCellByColumnAndRow($colIdx, 10);
+            $cell->setValue($headers[$colIdx - 1]);
+
+            $ws->getStyleByColumnAndRow($colIdx, 10)->applyFromArray([
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => [
+                        'argb' => 'FF1A365D',
+                    ],
+                ],
+                'font' => [
+                    'name' => 'Arial',
+                    'size' => 11,
+                    'bold' => true,
+                    'color' => [
+                        'argb' => 'FFFFFFFF',
+                    ],
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
+            ]);
+        }
+
+        $ws->mergeCells('B10:D10');
+
+        // 5. Poblar productos desde la fila 11
+        $startRow = 11;
+
+        foreach ($insumos as $index => $insumo) {
+            $i = $startRow + $index;
+
+            $ws->setCellValue("A{$i}", (string) $insumo->serial);
+
+            $ws->getStyle("A{$i}")
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            $descripcionCompleta = trim(
+                $insumo->producto
+                . ($insumo->descripcion ? ' ' . $insumo->descripcion : '')
+            );
+
+            $ws->setCellValue("B{$i}", $descripcionCompleta);
+            $ws->mergeCells("B{$i}:D{$i}");
+
+            $ws->getStyle("B{$i}:D{$i}")
+                ->getAlignment()
+                ->setWrapText(true)
+                ->setVertical(Alignment::VERTICAL_CENTER);
+
+            // Precio unitario base
+            $ws->setCellValue("E{$i}", (float) $insumo->costo);
+
+            $ws->getStyle("E{$i}")
+                ->getNumberFormat()
+                ->setFormatCode('$#,##0.00');
+
+            // Cantidad vacía
+            $ws->setCellValue("F{$i}", '');
+
+            $ws->getStyle("F{$i}")
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Fórmulas de cálculo
+            $ws->setCellValue("G{$i}", "=E{$i}*F{$i}*I\$9");
+
+            $ws->getStyle("G{$i}")
+                ->getNumberFormat()
+                ->setFormatCode('Bs #,##0.00');
+
+            $ws->setCellValue("H{$i}", "=E{$i}*F{$i}");
+
+            $ws->getStyle("H{$i}")
+                ->getNumberFormat()
+                ->setFormatCode('$#,##0.00');
+
+            $ws->setCellValue(
+                "I{$i}",
+                "=IF(H{$i}>0,H{$i}-H{$i}*20%,0)"
+            );
+
+            $ws->getStyle("I{$i}")
+                ->getNumberFormat()
+                ->setFormatCode('$#,##0.00');
+
+            // Bordes
+            for ($col = 1; $col <= 9; $col++) {
+                $ws->getStyleByColumnAndRow($col, $i)
+                    ->applyFromArray($borderThin);
+            }
+        }
+
+        // 6. Definir los anchos antes de calcular el tamaño del logotipo
+        $columnWidths = [
+            'A' => 16,
+            'B' => 22,
+            'C' => 15,
+            'D' => 15,
+            'E' => 14,
+            'F' => 14,
+            'G' => 18,
+            'H' => 14,
+            'I' => 16,
+        ];
+
+        foreach ($columnWidths as $colLetter => $width) {
+            $ws->getColumnDimension($colLetter)->setWidth($width);
+        }
+
+        // 7. Combinar A1:I2 y reservar espacio para el logotipo
+        $ws->mergeCells('A1:I2');
+
+        $ws->getRowDimension(1)->setRowHeight(30);
+        $ws->getRowDimension(2)->setRowHeight(30);
+
+        $logoPath = public_path('images/logo_reporte.png');
+
+        // Validar antes de enviar los encabezados de descarga
+        if (!is_file($logoPath) || !is_readable($logoPath)) {
+            return back()->with(
+                'error',
+                'No se encontró el logotipo o no se puede leer: images/logo_reporte.png'
+            );
+        }
+
+        $imageInfo = @getimagesize($logoPath);
+
+        if (
+            $imageInfo === false
+            || $imageInfo[0] <= 0
+            || $imageInfo[1] <= 0
+        ) {
+            return back()->with(
+                'error',
+                'El archivo images/logo_reporte.png no es una imagen válida.'
+            );
+        }
+
+        // Ancho del área A:I en píxeles
+        $defaultFont = $spreadsheet->getDefaultStyle()->getFont();
+        $areaWidthPx = 0;
+
+        foreach (array_keys($columnWidths) as $columnLetter) {
+            $columnWidth = $ws->getColumnDimension($columnLetter)->getWidth();
+
+            $areaWidthPx +=
+                \PhpOffice\PhpSpreadsheet\Shared\Drawing::cellDimensionToPixels(
+                    $columnWidth,
+                    $defaultFont
+                );
+        }
+
+        // Altura del área: filas 1 y 2
+        $areaHeightPx =
+            \PhpOffice\PhpSpreadsheet\Shared\Drawing::pointsToPixels(
+                $ws->getRowDimension(1)->getRowHeight()
+            )
+            +
+            \PhpOffice\PhpSpreadsheet\Shared\Drawing::pointsToPixels(
+                $ws->getRowDimension(2)->getRowHeight()
+            );
+
+        // Margen interior
+        $paddingPx = 5;
+
+        $availableWidthPx = max(
+            1,
+            $areaWidthPx - (2 * $paddingPx)
+        );
+
+        $availableHeightPx = max(
+            1,
+            $areaHeightPx - (2 * $paddingPx)
+        );
+
+        $originalWidthPx = $imageInfo[0];
+        $originalHeightPx = $imageInfo[1];
+
+        // Ajustar sin deformar ni exceder el espacio disponible
+        $scale = min(
+            $availableWidthPx / $originalWidthPx,
+            $availableHeightPx / $originalHeightPx
+        );
+
+        $imageWidthPx = max(
+            1,
+            (int) floor($originalWidthPx * $scale)
+        );
+
+        $imageHeightPx = max(
+            1,
+            (int) floor($originalHeightPx * $scale)
+        );
+
+        // Centrar horizontal y verticalmente
+        $offsetXPx = (int) floor(
+            ($areaWidthPx - $imageWidthPx) / 2
+        );
+
+        $offsetYPx = (int) floor(
+            ($areaHeightPx - $imageHeightPx) / 2
+        );
+
+        $drawing = new Drawing();
+        $drawing->setName('Logo Yermotors');
+        $drawing->setDescription('Logo institucional en A1:I2');
+        $drawing->setPath($logoPath);
+        $drawing->setCoordinates('A1');
+
+        // Las dimensiones proporcionales ya fueron calculadas
+        $drawing->setResizeProportional(false);
+        $drawing->setWidth($imageWidthPx);
+        $drawing->setHeight($imageHeightPx);
+
+        $drawing->setOffsetX($offsetXPx);
+        $drawing->setOffsetY($offsetYPx);
+        $drawing->setWorksheet($ws);
+
+        // 8. Descarga directa
+        $fileName = 'PedidosAlMayor_' . date('Y-m-d') . '.xlsx';
+
+        header(
+            'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+
+        header(
+            'Content-Disposition: attachment;filename="' . $fileName . '"'
+        );
+
+        header('Cache-Control: max-age=0');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+
+        exit;
+    }
+}

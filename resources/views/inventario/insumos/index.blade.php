@@ -4,7 +4,7 @@
 
 @section('content')
 <main class="app-content">
-  <div class="app-title">
+  <!-- <div class="app-title">
     <div>
       <h1><i class="fa fa-th-list"></i> SAYER</h1>
       <p>Sistema Administrativo | Yermotos Repuestos C.A.</p>
@@ -15,7 +15,7 @@
       <li class="breadcrumb-item"><a href="{{ route('insumos.index') }}">Insumos</a></li>
       <li class="breadcrumb-item">Listado</li>
     </ul>
-  </div>
+  </div>-->
 
   <div class="tile mb-4">
     <div class="row">
@@ -37,14 +37,7 @@
         <div class="basic-tb-hd text-center">
           @include('layouts.partials.flash-messages')
         </div>
-        <!-- <form action="{{ route('insumos.importar') }}" method="POST" enctype="multipart/form-data">
-            @csrf
-            <div class="form-group">
-                <label>Seleccionar Archivo (CSV/Excel)</label>
-                <input type="file" name="archivo" class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Procesar Oferta</button>
-        </form> -->
+        {{-- BARRA DE FILTROS ACTUALIZADA --}}
         <div class="row mb-3">
           <div class="col-md-3">
             <div class="form-group">
@@ -52,7 +45,7 @@
               <input type="text" id="filtro_producto" class="form-control form-control-sm" placeholder="Escribe para filtrar producto...">
             </div>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <div class="form-group">
               <label><strong>Estado General:</strong></label>
               <select id="filtro_estado_general" class="form-control form-control-sm">
@@ -63,7 +56,7 @@
               </select>
             </div>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <div class="form-group">
               <label><strong>Estado Local:</strong></label>
               <select id="filtro_estado_local" class="form-control form-control-sm">
@@ -73,7 +66,7 @@
               </select>
             </div>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <div class="form-group">
               <label><strong>Ubicación (Local):</strong></label>
               <select id="filtro_ubicacion" class="form-control form-control-sm">
@@ -84,7 +77,21 @@
               </select>
             </div>
           </div>
+          
+          {{-- NUEVO FILTRO: NIVEL DE STOCK --}}
+          <div class="col-md-3">
+            <div class="form-group">
+              <label><strong>Nivel de Stock:</strong></label>
+              <select id="filtro_nivel_stock" class="form-control form-control-sm">
+                <option value="">Todos los niveles</option>
+                <option value="critico">🔴 Nivel Crítico (≤ Mínimo)</option>
+                <option value="precaucion">🟠 Nivel Precaución (Primer 30%)</option>
+                <option value="normal">🔵 Nivel Normal / Saludable</option>
+              </select>
+            </div>
+          </div>
         </div>
+        {{-- FIN DE FILTROS --}}
       </div>
     </div>
 
@@ -251,6 +258,7 @@
                   d.filtro_estado_general = $('#filtro_estado_general').val();
                   d.filtro_estado_local = $('#filtro_estado_local').val();
                   d.filtro_ubicacion = $('#filtro_ubicacion').val();
+                  d.filtro_nivel_stock = $('#filtro_nivel_stock').val();
               }
           },
           "columns": [
@@ -277,8 +285,8 @@
       $('#filtro_producto').on('keyup change', function () {
           table.ajax.reload();
       });
-      $('#filtro_estado_general, #filtro_estado_local, #filtro_ubicacion').on('change', function () {
-          table.ajax.reload();
+      $('#filtro_estado_general, #filtro_estado_local, #filtro_ubicacion, #filtro_nivel_stock').on('change', function () {
+        table.ajax.reload();
       });
   });
   // Funciones auxiliares (Eliminar, Detalles, Estados)
