@@ -50,7 +50,7 @@
                     <label>Estado:</label>
                     <select id="filtro_estado" class="form-control form-control-sm filtro-datatable">
                         <option value="">PENDIENTE, RETENIDO y PROCESADO</option>
-                        <option value="PENDIENTE">PENDIENTE</option>
+                        <option value="PENDIENTE" selected>PENDIENTE</option>
                         <option value="RETENIDO">RETENIDO</option>
                         <option value="PROCESADO">PROCESADO</option>
                     </select>
