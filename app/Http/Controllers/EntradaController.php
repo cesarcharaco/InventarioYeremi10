@@ -686,4 +686,17 @@ class EntradaController extends Controller
             return redirect()->back()->with('error', 'Error al revertir la recepción: ' . $e->getMessage());
         }
     }
+
+    public function getInsumosJson()
+    {
+        if (Gate::denies('gestionar-entradas')) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $insumos = Insumos::where('estado', '!=', 'Suspendido')
+                          ->orderBy('producto', 'asc')
+                          ->get();
+
+        return response()->json($insumos);
+    }
 }

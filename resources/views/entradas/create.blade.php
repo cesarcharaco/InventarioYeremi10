@@ -145,11 +145,16 @@
                     </div>
                     <div class="card-body">
                         <div class="border-bottom pb-3 mb-3">
-                            {{-- Fila 1: Buscador Flotante de Insumo (Ancho completo) --}}
+                            {{-- Fila 1: Buscador Flotante de Insumo con Botón de Actualizar --}}
                             <div class="row">
                                 <div class="col-12 form-group position-relative">
-                                    <label>Buscar Insumo / Repuesto</label>
-                                    <input type="text" id="buscador" class="form-control" placeholder="Escribe el nombre o descripción del insumo..." autocomplete="off">
+                                    <label class="d-flex justify-content-between align-items-center">
+                                        <span>Buscar Insumo / Repuesto</span>
+                                        <button type="button" class="btn btn-tool btn-sm text-primary p-0" id="btnActualizarInsumos" title="Actualizar lista de insumos sin perder datos">
+                                            <i class="fas fa-sync-alt mr-1"></i> <small>Actualizar inventario</small>
+                                        </button>
+                                    </label>
+                                    <input type="text" id="buscador" class="form-control" placeholder="Escribe la descripción, producto o serial..." autocomplete="off">
                                     <input type="hidden" id="select_insumo_id" value="">
                                     <input type="hidden" id="select_insumo_nombre" value="">
                                     <input type="hidden" id="select_insumo_descripcion" value="">
@@ -285,7 +290,33 @@
             }
             $('#resultados-busqueda').html(html).show();
         });
+        // Actualizador en vivo de insumos por AJAX sin perder datos de la tabla
+        $('#btnActualizarInsumos').click(function() {
+            let $btn = $(this);$btn.find('i').addClass('fa-spin');
 
+            $.ajax({
+                url: "{{ route('entradas.insumos_json') }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    insumosDisponibles = response; // Actualiza la lista en memoria con lo recién registrado en otra pestaña
+                    $btn.find('i').removeClass('fa-spin');
+                    
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: 'Inventario actualizado correctamente',
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                },
+                error: function() {
+                    $btn.find('i').removeClass('fa-spin');
+                    Swal.fire('Error', 'No se pudo actualizar la lista de insumos.', 'error');
+                }
+            });
+        });
         // Botón Agregar Item
         $('#btnAgregarItem').click(function() {
             let id_insumo = $('#select_insumo_id').val();

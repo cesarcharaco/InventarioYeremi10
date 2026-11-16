@@ -233,6 +233,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/data', [EntradaController::class, 'getEntradasData'])->name('entradas.data');
         Route::get('/crear', [EntradaController::class, 'create'])->name('entradas.create');
         Route::post('/guardar', [EntradaController::class, 'store'])->name('entradas.store');
+        Route::get('/insumos-json', [EntradaController::class, 'getInsumosJson'])->name('entradas.insumos_json');
         Route::get('/recepcion/data', [EntradaController::class, 'getDataRecepciones'])->name('entradas.recepcion.data');
 
         // Nueva ruta para la bandeja de pendientes de recepción (Almacén X10)

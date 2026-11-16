@@ -50,7 +50,7 @@
               <label><strong>Estado General:</strong></label>
               <select id="filtro_estado_general" class="form-control form-control-sm">
                 <option value="">Todos los estados</option>
-                <option value="En Venta">En Venta</option>
+                <option value="En Venta" selected>En Venta</option>
                 <option value="Suspendido">Suspendido</option>
                 <option value="No Disponible">No Disponible</option>
               </select>
@@ -61,7 +61,7 @@
               <label><strong>Estado Local:</strong></label>
               <select id="filtro_estado_local" class="form-control form-control-sm">
                 <option value="">Todos los estados</option>
-                <option value="Disponible">Disponible</option>
+                <option value="Disponible" selected>Disponible</option>
                 <option value="Suspendido">Suspendido</option>
               </select>
             </div>
