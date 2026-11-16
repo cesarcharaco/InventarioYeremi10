@@ -29,12 +29,56 @@
         right: 5px !important;
     }
     .select2-container--default .select2-results__option--highlighted[aria-selected] {
-        background-color: #63E2F7 !important;
-        color: #0f172a !important; /* Texto oscuro para garantizar alto contraste y legibilidad */
+        background-color: #38bdf8 !important;
+        color: #0f172a !important;
+    }
+
+    /* --- ESTILOS ERGONÓMICOS PARA EL BUSCADOR DE INSUMOS --- */
+    #resultados-busqueda {
+        max-height: 380px;
+        overflow-y: auto;
+        border: 1px solid #94a3b8;
+        border-radius: 0.375rem;
+        background-color: #ffffff;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+    }
+    #resultados-busqueda .list-group-item {
+        color: #0f172a;
+        border-left: none;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 12px 16px;
+        transition: background-color 0.15s ease-in-out;
+    }
+    #resultados-busqueda .list-group-item:hover {
+        background-color: #f1f5f9;
+    }
+    
+    /* Jerarquía visual clara para descansar la vista */
+    .item-descripcion-principal {
+        font-size: 1.1rem; /* Texto principal grande y destacado */
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.35;
+    }
+    .item-meta-secundaria {
+        font-size: 0.85rem;
+        color: #475569;
+        font-weight: 500;
+    }
+    /* Badge de serial limpio, legible y sin fatiga visual */
+    .badge-serial-limpio {
+        background-color: #f1f5f9;
+        color: #1e293b;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid #cbd5e1;
+        letter-spacing: 0.5px;
     }
 </style>
 @endsection
-
 @section('content')
     @include('layouts.partials.flash-messages')
 
@@ -172,7 +216,9 @@
         if (!item) return;
 
         let costoStr = item.costo ? parseFloat(item.costo).toFixed(2) : '0.00';
-        let textoItem = `${item.producto} ${item.descripcion ? ' - ' + item.descripcion : ''} (Costo sugerido: $${costoStr})`;
+        let descripcionTexto = item.descripcion ? item.descripcion : item.producto;
+        // Formato claro para el input principal al seleccionarlo
+        let textoItem = `[${item.serial}] ${descripcionTexto} - ${item.producto} (Costo: $${costoStr})`;
         
         $('#select_insumo_id').val(item.id);
         $('#select_insumo_nombre').val(item.producto);
@@ -186,19 +232,17 @@
     }
 
     $(document).ready(function() {
-        // Inicializar Select2 solo para proveedores y depósitos
         $('.select2').select2({
             width: '100%'
         });
 
-        // Ocultar resultados de búsqueda al hacer clic fuera
         $(document).on('click', function(e) {
             if (!$(e.target).closest('#buscador, #resultados-busqueda').length) {
                 $('#resultados-busqueda').hide();
             }
         });
 
-        // Autocompletado en tiempo real al escribir en el buscador
+        // Autocompletado optimizado con jerarquía visual ergonómica
         $('#buscador').on('keyup', function() {
             let q = $(this).val().toLowerCase();
             if (q.length < 2) {
@@ -208,20 +252,34 @@
 
             let filtrados = insumosDisponibles.filter(item => 
                 (item.producto && item.producto.toLowerCase().includes(q)) || 
-                (item.descripcion && item.descripcion.toLowerCase().includes(q))
+                (item.descripcion && item.descripcion.toLowerCase().includes(q)) ||
+                (item.serial && item.serial.toLowerCase().includes(q))
             );
 
             let html = '';
             if (filtrados.length === 0) {
-                html = '<div class="list-group-item text-muted">No se encontraron insumos</div>';
+                html = '<div class="list-group-item text-muted py-3 text-center">No se encontraron insumos coincidentes</div>';
             } else {
                 filtrados.forEach(item => {
                     let costoVal = item.costo ? parseFloat(item.costo).toFixed(2) : '0.00';
-                    let descText = item.descripcion ? `<br><small class="text-muted"><i class="fas fa-info-circle mr-1"></i>${item.descripcion}</small>` : '';
+                    
+                    // Inversión de jerarquía: Descripción arriba y grande, Producto/Categoría y Serial abajo
+                    let textoPrincipal = item.descripcion ? item.descripcion : item.producto;
+                    let textoSecundario = item.descripcion ? item.producto : '';
+
                     html += `<a href="#" class="list-group-item list-group-item-action" onclick="seleccionarInsumo(${item.id}); return false;">
-                                <strong>${item.producto}</strong>
-                                ${descText}
-                                <span class="badge badge-info float-right mt-1">Costo: $${costoVal}</span>
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <div class="item-descripcion-principal">${textoPrincipal}</div>
+                                    <span class="badge badge-success px-2 py-1 font-weight-bold" style="font-size: 0.9rem;">$${costoVal}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="item-meta-secundaria">
+                                        ${textoSecundario ? '<span class="text-primary font-weight-bold mr-2"><i class="fas fa-tag mr-1"></i>' + textoSecundario + '</span>' : ''}
+                                    </div>
+                                    <span class="badge-serial-limpio">
+                                        <i class="fas fa-barcode mr-1 text-muted"></i>${item.serial}
+                                    </span>
+                                </div>
                              </a>`;
                 });
             }
