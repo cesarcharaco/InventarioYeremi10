@@ -256,123 +256,140 @@ class InsumosController extends Controller
     public function edit($id)
     {
         $this->authorize('gestionar-insumos');
-        // Se lee directamente de la tabla insumos ahora que centralizamos stock_min/max
         $insumo = Insumos::findOrFail($id);
 
         $categorias = Categoria::pluck('categoria', 'id');
         $modelos = ModeloVenta::pluck('modelo', 'id');
 
-        return view('inventario.insumos.edit', compact('insumo', 'categorias', 'modelos'));
+        // Obtener los locales donde está registrado el insumo junto con su estado_local y cantidad
+        $stocksLocales = DB::table('insumos_has_cantidades')
+            ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
+            ->where('insumos_has_cantidades.id_insumo', $id)
+            ->select(
+                'insumos_has_cantidades.id_local',
+                'insumos_has_cantidades.cantidad',
+                'insumos_has_cantidades.estado_local',
+                'local.nombre as nombre_local'
+            )
+            ->orderBy('local.nombre', 'asc')
+            ->get();
+
+        return view('inventario.insumos.edit', compact('insumo', 'categorias', 'modelos', 'stocksLocales'));
     }
 
     public function update(Request $request, $id)
-        {
-            $this->authorize('gestionar-insumos');
+    {
+        $this->authorize('gestionar-insumos');
 
-            // FIX: el método no validaba nada. Se agrega validación equivalente
-            // a la usada en store() (los Form Requests importados quedan para
-            // una refactorización posterior).
-            $request->validate([
-                'producto'        => 'required|string|max:255',
-                'descripcion'     => 'nullable|string',
-                'categoria_id'    => 'required|exists:categorias,id',
-                'modelo_venta_id' => 'required|exists:modelos_venta,id',
-                'serial'          => 'nullable|string|max:100',
-                'stock_min'       => 'nullable|integer|min:0',
-                'stock_max'       => 'nullable|integer|min:0',
-            ]);
+        $request->validate([
+            'producto'         => 'required|string|max:255',
+            'descripcion'      => 'nullable|string',
+            'categoria_id'     => 'required|exists:categorias,id',
+            'modelo_venta_id'  => 'required|exists:modelos_venta,id',
+            'serial'           => 'nullable|string|max:100',
+            'stock_min'        => 'nullable|integer|min:0',
+            'stock_max'        => 'nullable|integer|min:0',
+            'estado'           => 'nullable|in:En Venta,Suspendido,No Disponible',
+            'estados_locales'  => 'nullable|array',
+            'estados_locales.*'=> 'in:Disponible,Suspendido',
+        ]);
 
-            try {
-                DB::beginTransaction();
+        try {
+            DB::beginTransaction();
 
-                $insumoActual = Insumos::findOrFail($id);
+            $insumoActual = Insumos::findOrFail($id);
 
-                // FIX: se preserva el serial y el stock_min ANTES de actualizar,
-                // para poder compararlos después (antes el mensaje de nuevo
-                // serial nunca aparecía porque se comparaba contra el valor ya
-                // actualizado).
-                $serialAnterior   = $insumoActual->serial;
-                $stockMinAnterior = (int) $insumoActual->stock_min;
+            $serialAnterior   = $insumoActual->serial;
+            $stockMinAnterior = (int) $insumoActual->stock_min;
 
-                $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
+            $modelo = ModeloVenta::findOrFail($request->modelo_venta_id);
 
-                if ($request->filled('serial') && $request->serial !== $serialAnterior) {
-                    // 1. Prioridad: Serial manual escrito/escaneado por el usuario
-                    $serialFinal = $request->serial;
-                } elseif ($insumoActual->categoria_id != $request->categoria_id) {
-                    // 2. Cambió la categoría y no escribió manual: Regenera por categoría
-                    $serialFinal = $this->generarSerialInsumo($request->categoria_id);
-                } else {
-                    // 3. Sin cambios en categoría ni serial manual: Mantiene el existente
-                    $serialFinal = $serialAnterior;
-                }
+            if ($request->filled('serial') && $request->serial !== $serialAnterior) {
+                $serialFinal = $request->serial;
+            } elseif ($insumoActual->categoria_id != $request->categoria_id) {
+                $serialFinal = $this->generarSerialInsumo($request->categoria_id);
+            } else {
+                $serialFinal = $serialAnterior;
+            }
 
-                $costo = $insumoActual->costo;
-                $nuevoStockMin = (int) ($request->stock_min ?? 0);
+            $costo = $insumoActual->costo;
+            $nuevoStockMin = (int) ($request->stock_min ?? 0);
+            $precios = $modelo->calcularPrecios($costo);
 
-                // Reemplazamos la división manual por el método seguro del modelo
-                $precios = $modelo->calcularPrecios($costo);
+            // Preparar datos a actualizar en la tabla maestra insumos
+            $datosActualizar = [
+                'producto'          => $request->producto,
+                'descripcion'       => $request->descripcion,
+                'categoria_id'      => $request->categoria_id,
+                'modelo_venta_id'   => $request->modelo_venta_id,
+                'serial'            => $serialFinal,
+                'precio_venta_usd'  => $precios['precio_venta_usd'],
+                'precio_venta_bs'   => $precios['precio_venta_bs'],
+                'precio_venta_usdt' => $precios['precio_venta_usdt'],
+                'stock_min'         => $nuevoStockMin,
+                'stock_max'         => (int) ($request->stock_max ?? 0),
+            ];
 
-                $insumoActual->update([
-                    'producto'          => $request->producto,
-                    'descripcion'       => $request->descripcion,
-                    'categoria_id'      => $request->categoria_id,
-                    'modelo_venta_id'   => $request->modelo_venta_id,
-                    'serial'            => $serialFinal,
-                    'precio_venta_usd'  => $precios['precio_venta_usd'],
-                    'precio_venta_bs'   => $precios['precio_venta_bs'],
-                    'precio_venta_usdt' => $precios['precio_venta_usdt'],
-                    'stock_min'         => $nuevoStockMin, // Actualizado en insumos
-                    'stock_max'         => (int) ($request->stock_max ?? 0), // Actualizado en insumos
-                ]);
+            // Actualizar Estado Global si viene en la petición y tiene permiso
+            if ($request->filled('estado') && Gate::allows('gestionar-estado-global')) {
+                $datosActualizar['estado'] = $request->estado;
+            }
 
-                // --- LÓGICA DE NOTIFICACIÓN AUTOMÁTICA AL ACTUALIZAR ---
-                // FIX: solo se notifica si el stock mínimo SUBIÓ por encima de
-                // alguna cantidad existente. Antes cualquier edición trivial
-                // (ej. corregir la descripción) re-enviaba correos masivos por
-                // cada local que ya estaba crítico.
-                if ($nuevoStockMin > $stockMinAnterior) {
-                    $stocksLocales = DB::table('insumos_has_cantidades')
-                        ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
-                        ->where('id_insumo', $id)
-                        ->select('insumos_has_cantidades.cantidad', 'local.nombre as nombre_local')
-                        ->get();
+            $insumoActual->update($datosActualizar);
 
-                    $localesCriticos = $stocksLocales->filter(function ($stockLocal) use ($nuevoStockMin) {
-                        return (int) $stockLocal->cantidad <= $nuevoStockMin;
-                    });
-
-                    if ($localesCriticos->isNotEmpty()) {
-                        $nombresLocales = $localesCriticos->pluck('nombre_local')->implode(', ');
-                        $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
-                        $detalles = [
-                            'titulo'  => 'Stock Crítico tras Actualización',
-                            'mensaje' => "El producto {$request->producto} quedó por debajo del nuevo mínimo ({$nuevoStockMin}) en: {$nombresLocales}.",
-                            'url'     => route('insumos.index'),
-                            'icono'   => 'fas fa-sync-alt'
-                        ];
-
-                        foreach ($gerentes as $gerente) {
-                            $gerente->notify(new StockBajoNotification($detalles));
-                        }
+            // Actualizar Estados Locales por sucursal/depósito
+            if ($request->has('estados_locales') && is_array($request->estados_locales)) {
+                foreach ($request->estados_locales as $idLocal => $nuevoEstadoLocal) {
+                    if (Gate::allows('gestionar-estado-local', $idLocal)) {
+                        InsumosC::where('id_insumo', $id)
+                            ->where('id_local', $idLocal)
+                            ->update(['estado_local' => $nuevoEstadoLocal]);
                     }
                 }
-                // -------------------------------------------------------
-                DB::commit();
-
-                $mensaje = "Insumo actualizado correctamente.";
-                // FIX: comparación contra el serial anterior (ahora sí funciona)
-                if ($serialFinal != $serialAnterior) {
-                    $mensaje .= " Se ha generado un nuevo serial: " . $serialFinal;
-                }
-
-                return redirect()->route('insumos.index')->with('success', $mensaje);
-
-            } catch (\Exception $e) {
-                DB::rollBack();
-                return back()->with('error', 'Error al actualizar: ' . $e->getMessage());
             }
+
+            // --- LÓGICA DE NOTIFICACIÓN AUTOMÁTICA AL ACTUALIZAR ---
+            if ($nuevoStockMin > $stockMinAnterior) {
+                $stocksLocales = DB::table('insumos_has_cantidades')
+                    ->join('local', 'local.id', '=', 'insumos_has_cantidades.id_local')
+                    ->where('id_insumo', $id)
+                    ->select('insumos_has_cantidades.cantidad', 'local.nombre as nombre_local')
+                    ->get();
+
+                $localesCriticos = $stocksLocales->filter(function ($stockLocal) use ($nuevoStockMin) {
+                    return (int) $stockLocal->cantidad <= $nuevoStockMin;
+                });
+
+                if ($localesCriticos->isNotEmpty()) {
+                    $nombresLocales = $localesCriticos->pluck('nombre_local')->implode(', ');
+                    $gerentes = User::whereIn('role', ['admin', 'encargado','almacenista'])->get();
+                    $detalles = [
+                        'titulo'  => 'Stock Crítico tras Actualización',
+                        'mensaje' => "El producto {$request->producto} quedó por debajo del nuevo mínimo ({$nuevoStockMin}) en: {$nombresLocales}.",
+                        'url'     => route('insumos.index'),
+                        'icono'   => 'fas fa-sync-alt'
+                    ];
+
+                    foreach ($gerentes as $gerente) {
+                        $gerente->notify(new StockBajoNotification($detalles));
+                    }
+                }
+            }
+
+            DB::commit();
+
+            $mensaje = "Insumo actualizado correctamente.";
+            if ($serialFinal != $serialAnterior) {
+                $mensaje .= " Se ha generado un nuevo serial: " . $serialFinal;
+            }
+
+            return redirect()->route('insumos.index')->with('success', $mensaje);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Error al actualizar: ' . $e->getMessage());
         }
+    }
 
     public function destroy(Request $request)
     {

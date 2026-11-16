@@ -103,7 +103,71 @@
             </div>
         </div>
       </div>
+      <hr>
+      <h5 class="text-primary mb-3"><i class="fa fa-toggle-on mr-1"></i> Gestión de Estados de Disponibilidad</h5>
 
+      <div class="row">
+        {{-- 1. ESTADO GLOBAL DEL INSUMO --}}
+        <div class="col-md-4 form-group">
+          <label class="font-weight-bold">Estado Global (Catálogo General)</label>
+          <select name="estado" id="select_estado_global" class="form-control" @cannot('gestionar-estado-global') disabled @endcannot>
+            <option value="En Venta" {{ $insumo->estado == 'En Venta' ? 'selected' : '' }}>En Venta</option>
+            <option value="Suspendido" {{ $insumo->estado == 'Suspendido' ? 'selected' : '' }}>Suspendido</option>
+            <option value="No Disponible" {{ $insumo->estado == 'No Disponible' ? 'selected' : '' }}>No Disponible</option>
+          </select>
+          @cannot('gestionar-estado-global')
+            <small class="text-muted"><i class="fa fa-lock"></i> No tienes permiso para cambiar el estado global.</small>
+          @else
+            <small class="text-muted" id="ayuda_estado_global">Afecta la visibilidad del producto en todo el sistema.</small>
+          @endcannot
+        </div>
+
+        {{-- 2. ESTADO LOCAL POR SUCURSAL / DEPÓSITO --}}
+        <div class="col-md-8 form-group">
+          <label class="font-weight-bold">Estado por Sucursal / Depósito</label>
+          @if($stocksLocales->isEmpty())
+            <div class="alert alert-light border py-2 mb-0">
+              <small class="text-muted"><i class="fa fa-info-circle mr-1"></i> Este insumo aún no tiene existencias registradas en ningún local.</small>
+            </div>
+          @else
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm mb-0 bg-white">
+                <thead class="thead-light">
+                  <tr>
+                    <th>Sucursal / Depósito</th>
+                    <th width="20%" class="text-center">Stock Actual</th>
+                    <th width="35%">Estado en Local</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($stocksLocales as $sl)
+                    <tr>
+                      <td class="align-middle">
+                        <i class="fa fa-store text-primary mr-1"></i> <strong>{{ $sl->nombre_local }}</strong>
+                      </td>
+                      <td class="text-center align-middle">
+                        <span class="badge badge-secondary px-2 py-1">{{ $sl->cantidad }}</span>
+                      </td>
+                      <td class="align-middle">
+                        @php
+                            $puedeEditarLocal = Gate::allows('gestionar-estado-local', $sl->id_local);
+                        @endphp
+                        <select name="estados_locales[{{ $sl->id_local }}]" 
+                                class="form-control form-control-sm select-estado-local"
+                                data-permiso="{{ $puedeEditarLocal ? '1' : '0' }}"
+                                {{ !$puedeEditarLocal ? 'disabled' : '' }}>
+                          <option value="Disponible" {{ $sl->estado_local == 'Disponible' ? 'selected' : '' }}>Disponible</option>
+                          <option value="Suspendido" {{ $sl->estado_local == 'Suspendido' ? 'selected' : '' }}>Suspendido</option>
+                        </select>
+                      </td>
+                    </tr>
+                  @endforeach
+                </tbody>
+              </table>
+            </div>
+          @endif
+        </div>
+      </div>
       <div class="tile-footer">
         <button class="btn btn-primary" type="submit"><i class="fa fa-save"></i> Guardar Cambios</button>
         <a class="btn btn-secondary" href="{{ route('insumos.index') }}"><i class="fa fa-arrow-left"></i> Volver</a>
@@ -158,10 +222,50 @@
             }, 500); // 500ms de retraso (Debounce)
         });
 
+        // --- VALIDACIÓN DE CONSISTENCIA ENTRE ESTADO GLOBAL Y ESTADOS LOCALES ---
+        const $selectGlobal = $('#select_estado_global');
+        const $selectsLocales = $('.select-estado-local');
+        const $ayudaGlobal = $('#ayuda_estado_global');
+
+        function sincronizarEstados() {
+            let estadoGlobal = $selectGlobal.val();
+
+            if (estadoGlobal === 'Suspendido') {
+                // Regla: Si se suspende de forma global, no puede estar en venta en ningún local
+                $selectsLocales.each(function() {
+                    $(this).val('Suspendido').prop('disabled', true);
+                });
+                $ayudaGlobal.html('<span class="text-danger font-weight-bold"><i class="fa fa-ban"></i> Al estar suspendido globalmente, se suspende en todos los locales.</span>');
+            } else {
+                // Si está "En Venta" o "No Disponible", restauramos la edición según el permiso de cada local
+                $selectsLocales.each(function() {
+                    let tienePermiso = $(this).data('permiso') == '1';
+                    $(this).prop('disabled', !tienePermiso);
+                });
+                $ayudaGlobal.text('Afecta la visibilidad del producto en todo el sistema.');
+            }
+        }
+
+        // Ejecutar al cargar la página (por si ya venía suspendido) y cada vez que cambie
+        sincronizarEstados();
+        $selectGlobal.on('change', sincronizarEstados);
+
+        // Antes de enviar el formulario, habilitamos temporalmente los selects locales
+        // que fueron bloqueados por JS para que sus valores ('Suspendido') sí viajen en el POST
+        $('form').on('submit', function() {
+            if ($selectGlobal.val() === 'Suspendido') {
+                $selectsLocales.each(function() {
+                    if ($(this).data('permiso') == '1') {
+                        $(this).prop('disabled', false);
+                    }
+                });
+            }
+        });
         function limpiarClases() {
             $inputDesc.removeClass('is-valid is-invalid');
             $badge.empty();$lista.hide().empty();
         }
+
     });
 </script>
 @endsection
