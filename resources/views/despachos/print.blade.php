@@ -59,14 +59,33 @@
         <!-- CONTENEDOR PRINCIPAL DEL COMPROBANTE -->
         <div class="invoice-box">
             <!-- Encabezado del Comprobante -->
+            <!-- Encabezado del Comprobante -->
             <div class="row mb-4">
                 <div class="col-6">
                     <h4 class="text-primary font-weight-bold mb-0">COMPROBANTE DE DESPACHO</h4>
                     <span class="text-muted">Control de Inventario y Logística</span>
                 </div>
                 <div class="col-6 text-right">
-                    <h5 class="font-weight-bold text-dark">{{ $despacho->codigo }}</h5>
-                    <small class="text-muted">Fecha Emisión: {{ $despacho->fecha_despacho ? \Carbon\Carbon::parse($despacho->fecha_despacho)->format('d/m/Y h:i A') : 'N/D' }}</small>
+                    <h5 class="font-weight-bold text-dark mb-1">{{ $despacho->codigo }}</h5>
+                    <div class="mb-1">
+                        @php
+                            $estadoConfig = match($despacho->estado) {
+                                'Pendiente'                => ['clase' => 'badge-secondary', 'texto' => 'PENDIENTE'],
+                                'En Tránsito'              => ['clase' => 'badge-warning text-dark', 'texto' => 'EN TRÁNSITO'],
+                                'Recibido'                 => ['clase' => 'badge-success', 'texto' => 'RECIBIDO'],
+                                'recibido_con_incidencias' => ['clase' => 'badge-info', 'texto' => 'RECIBIDO CON INCIDENCIAS'],
+                                'Rechazado'                => ['clase' => 'badge-danger', 'texto' => 'RECHAZADO'],
+                                'Cancelado'                => ['clase' => 'badge-danger', 'texto' => 'CANCELADO'],
+                                default                    => ['clase' => 'badge-secondary', 'texto' => strtoupper($despacho->estado)],
+                            };
+                        @endphp
+                        <span class="badge {{ $estadoConfig['clase'] }} px-2 py-1" style="font-size: 0.85rem; border: 1px solid rgba(0,0,0,0.15);">
+                            ESTADO: {{ $estadoConfig['texto'] }}
+                        </span>
+                    </div>
+                    <small class="text-muted d-block">
+                        Fecha Emisión: {{ $despacho->fecha_despacho ? \Carbon\Carbon::parse($despacho->fecha_despacho)->format('d/m/Y h:i A') : 'N/D' }} {{$despacho->fecha_despacho}}
+                    </small>
                 </div>
             </div>
 
@@ -98,22 +117,32 @@
             </div>
 
             <!-- Tabla de Ítems Despachados -->
+            <!-- Tabla de Ítems Despachados -->
             <div class="row">
                 <div class="col-12 table-responsive">
                     <table class="table table-bordered table-sm text-sm">
                         <thead class="thead-light">
                             <tr>
-                                <th style="width: 10%;">#</th>
-                                <th style="width: 65%;">Descripción del Producto / Insumo</th>
-                                <th style="width: 25%;" class="text-center">Cant. Enviada</th>
+                                <th style="width: 6%;" class="text-center">#</th>
+                                <th style="width: 22%;">Serial</th>
+                                <th style="width: 54%;">Producto / Descripción</th>
+                                <th style="width: 18%;" class="text-center">Cant. Enviada</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($despacho->detalles as $index => $detalle)
                             <tr>
-                                <td>{{ $index + 1 }}</td>
-                                <td>{{ $detalle->insumos->producto ?? 'Insumo ID: ' . $detalle->id_insumo }}</td>
-                                <td class="text-center font-weight-bold">{{ $detalle->cantidad_enviada }}</td>
+                                <td class="text-center align-middle">{{ $index + 1 }}</td>
+                                <td class="align-middle font-weight-bold text-monospace">
+                                    {{ $detalle->insumos->serial ?? 'S/N' }}
+                                </td>
+                                <td class="align-middle">
+                                    <strong>{{ $detalle->insumos->producto ?? 'Insumo ID: ' . $detalle->id_insumo }}</strong>
+                                    @if(!empty($detalle->insumos->descripcion))
+                                        <div class="text-muted small mt-1">{{ $detalle->insumos->descripcion }}</div>
+                                    @endif
+                                </td>
+                                <td class="text-center align-middle font-weight-bold">{{ $detalle->cantidad_enviada }}</td>
                             </tr>
                             @endforeach
                         </tbody>

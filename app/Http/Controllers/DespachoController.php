@@ -157,6 +157,8 @@ class DespachoController extends Controller
 
                 $html .= '<button class="btn btn-info btn-sm text-white" onclick="verDetalle(' . $row->id . ', \'' . $row->codigo . '\')" title="Ver Detalle"><i class="fa fa-eye"></i></button>';
 
+                $html .= '<a href="' . route('despacho.print', $row->id) . '" target="_blank" class="btn btn-secondary btn-sm text-white" title="Imprimir Comprobante"><i class="fa fa-print"></i></a>';
+
                 if ($row->estado === self::ESTADO_PENDIENTE) {
                     if (auth()->user()->can('procesar-solicitud')) {
                         $html .= '<button class="btn btn-primary btn-sm" onclick="procesarEnvioPendienteModal(' . $row->id . ')" title="Procesar y Enviar Solicitud"><i class="fa fa-paper-plane"></i></button>';

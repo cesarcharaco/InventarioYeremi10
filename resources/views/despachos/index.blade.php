@@ -94,7 +94,7 @@
                   <th>Destino</th>
                   <th>Transportado por</th>
                   <th class="text-center">Estado</th>
-                  <th width="120" class="text-center">Acciones</th>
+                  <th width="155" class="text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
