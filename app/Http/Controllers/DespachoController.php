@@ -214,10 +214,64 @@ class DespachoController extends Controller
 
         $insumos = Insumos::where('estado', 'En Venta')->get();
 
-        // Valor sugerido para mostrar en el formulario; el definitivo se genera server-side en store()
+        // Valor sugerido. El definitivo se genera en store().
         $codigo = $this->generarCodigo('DESP-');
 
-        return view('despachos.create', compact('localesOrigen', 'localesDestino', 'insumos', 'codigo'));
+        // Datos del intento anterior, conservados por withInput().
+        $idsAnteriores = old('id_insumo', []);
+        $cantidadesAnteriores = old('cantidad', []);
+
+        // Proteger la reconstrucción ante datos que no sean arrays.
+        $idsAnteriores = is_array($idsAnteriores)
+            ? $idsAnteriores
+            : [];
+
+        $cantidadesAnteriores = is_array($cantidadesAnteriores)
+            ? $cantidadesAnteriores
+            : [];
+
+        // Consultar solo IDs con formato válido.
+        $idsParaConsultar = collect($idsAnteriores)
+            ->filter(function ($id) {
+                return is_scalar($id)
+                    && ctype_digit((string) $id)
+                    && (int) $id > 0;
+            })
+            ->unique()
+            ->values()
+            ->all();
+
+        // Sin filtrar por estado: un insumo suspendido también debe
+        // permanecer visible en la tabla para poder quitarlo.
+        $insumosAnteriores = Insumos::whereIn('id', $idsParaConsultar)
+            ->get()
+            ->keyBy('id');
+
+        $detallesAnteriores = [];
+
+        foreach ($idsAnteriores as $indice => $insumoId) {
+            if (!is_scalar($insumoId) || !ctype_digit((string) $insumoId) || (int) $insumoId <= 0) {
+                continue;
+            }
+
+            $insumo = $insumosAnteriores->get($insumoId);
+
+            $cantidad = $cantidadesAnteriores[$indice] ?? '';
+
+            $detallesAnteriores[] = [
+                'id' => (string) $insumoId,
+                'producto' => $insumo
+                    ? $insumo->producto
+                    : 'Insumo no disponible (ID: ' . $insumoId . ')',
+                'serial' => $insumo ? $insumo->serial : '',
+                'descripcion' => $insumo ? $insumo->descripcion : '',
+                'cantidad' => is_scalar($cantidad)
+                    ? (string) $cantidad
+                    : '',
+            ];
+        }
+
+        return view('despachos.create', compact('localesOrigen','localesDestino','insumos','codigo','detallesAnteriores'));
     }
 
     /**
