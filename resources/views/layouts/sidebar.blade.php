@@ -47,6 +47,15 @@
                                 <p>Inventario</p>
                             </a>
                         </li>
+                        {{-- NUEVO ENLACE: Historial de Vida del Insumo (Timeline) --}}
+                        @can('ver-logistica')
+                        <li class="nav-item">
+                            <a href="{{ route('insumos.historial_vida.index') }}" class="nav-link {{ Request::routeIs('insumos.historial_vida.*') ? 'active' : '' }}">
+                                <i class="fas fa-history nav-icon text-info"></i>
+                                <p>Historial de Vida</p>
+                            </a>
+                        </li>
+                        @endcan
                         {{-- NUEVO ENLACE: Carrito de Etiquetas --}}
                         <li class="nav-item">
                             <a href="{{ route('insumos.etiquetas') }}" class="nav-link {{ Request::routeIs('insumos.etiquetas') ? 'active' : '' }}">

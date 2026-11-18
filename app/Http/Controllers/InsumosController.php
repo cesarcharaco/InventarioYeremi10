@@ -1085,4 +1085,108 @@ class InsumosController extends Controller
             'coincidencias' => $coincidencias
         ]);
     }
+
+    public function historialVidaIndex()
+    {
+        Gate::authorize('ver-logistica');
+        return view('inventario.insumos.historial_vida');
+    }
+
+    public function getHistorialVidaData(Request $request, $id)
+    {
+        Gate::authorize('ver-logistica');
+
+        $insumo = Insumos::findOrFail($id);
+        $fechaDesde = $request->get('fecha_desde');
+        $fechaHasta = $request->get('fecha_hasta');
+
+        // 1. ENTRADAS DE PROVEEDORES (A través de detalles_entradas e insumos_recepcion o entradas_almacen)
+        $entradas = DB::table('detalles_entradas')
+            ->join('entradas_almacen', 'detalles_entradas.id_entrada', '=', 'entradas_almacen.id')
+            ->leftJoin('proveedores', 'entradas_almacen.id_proveedor', '=', 'proveedores.id')
+            ->leftJoin('local', 'entradas_almacen.id_local', '=', 'local.id')
+            ->where('detalles_entradas.id_insumo', $id)
+            ->when($fechaDesde, fn($q) => $q->whereDate('entradas_almacen.fecha_entrada', '>=', $fechaDesde))
+            ->when($fechaHasta, fn($q) => $q->whereDate('entradas_almacen.fecha_entrada', '<=', $fechaHasta))
+            ->select(
+                'entradas_almacen.fecha_entrada as fecha',
+                DB::raw("'ENTRADA' as tipo_evento"),
+                DB::raw("'success' as color_badge"),
+                DB::raw("'fas fa-arrow-circle-down' as icono"),
+                'detalles_entradas.cantidad',
+                'detalles_entradas.costo_unitario_usd as costo',
+                'local.nombre as local_nombre',
+                DB::raw("CONCAT('Proveedor: ', COALESCE(proveedores.nombre, 'N/D'), ' | Orden: ', COALESCE(entradas_almacen.nro_orden_entrega, 'S/N')) as descripcion_evento"),
+                'entradas_almacen.observaciones as observacion'
+            );
+
+        // 2. DESPACHOS (Como origen [salida] o destino [entrada por traslado])
+        $despachos = DB::table('despacho_detalles')
+            ->join('despachos', 'despacho_detalles.id_despacho', '=', 'despachos.id')
+            ->leftJoin('local as origen', 'despachos.id_local_origen', '=', 'origen.id')
+            ->leftJoin('local as destino', 'despachos.id_local_destino', '=', 'destino.id')
+            ->where('despacho_detalles.id_insumo', $id)
+            ->when($fechaDesde, fn($q) => $q->whereDate('despachos.fecha_despacho', '>=', $fechaDesde))
+            ->when($fechaHasta, fn($q) => $q->whereDate('despachos.fecha_despacho', '<=', $fechaHasta))
+            ->select(
+                'despachos.fecha_despacho as fecha',
+                DB::raw("'DESPACHO' as tipo_evento"),
+                DB::raw("'primary' as color_badge"),
+                DB::raw("'fas fa-truck' as icono"),
+                'despacho_detalles.cantidad_enviada as cantidad',
+                DB::raw("NULL as costo"),
+                'origen.nombre as local_nombre', // El local que mueve la mercancía
+                DB::raw("CONCAT('Traslado de [', origen.nombre, '] hacia [', destino.nombre, '] | Código: ', despachos.codigo, ' | Estado: ', despachos.estado) as descripcion_evento"),
+                'despachos.observacion as observacion'
+            );
+
+        // 3. INCIDENCIAS (Ajustes manuales, mermas, devoluciones, etc.)
+        $incidencias = DB::table('incidencias')
+            ->join('local', 'incidencias.id_local', '=', 'local.id')
+            ->where('incidencias.id_insumo', $id)
+            ->when($fechaDesde, fn($q) => $q->whereDate('incidencias.fecha_incidencia', '>=', $fechaDesde))
+            ->when($fechaHasta, fn($q) => $q->whereDate('incidencias.fecha_incidencia', '<=', $fechaHasta))
+            ->select(
+                'incidencias.fecha_incidencia as fecha',
+                DB::raw("'INCIDENCIA' as tipo_evento"),
+                DB::raw("CASE 
+                    WHEN incidencias.tipo IN ('Dañado de Fábrica', 'Dañado en Local', 'Perdido', 'Vencido', 'Salida', 'Egreso', 'Retiro', 'Desincorporacion', 'Otro') THEN 'danger'
+                    WHEN incidencias.tipo IN ('Dañado y Devuelto', 'Ingreso', 'Reincorporacion', 'Devolucion', 'Entrada') THEN 'info'
+                    ELSE 'secondary' 
+                END as color_badge"),
+                DB::raw("'fas fa-sliders-h' as icono"),
+                'incidencias.cantidad',
+                DB::raw("NULL as costo"),
+                'local.nombre as local_nombre',
+                DB::raw("CONCAT('Ajuste por Incidencia: ', incidencias.tipo, ' | Código: ', incidencias.codigo) as descripcion_evento"),
+                'incidencias.observacion as observacion'
+            );
+
+        // Unir las 3 consultas con UNION ALL y ordenar cronológicamente de forma descendente (lo más reciente arriba)
+        $historial = $entradas
+            ->unionAll($despachos)
+            ->unionAll($incidencias)
+            ->orderBy('fecha', 'desc')
+            ->get();
+
+        // Existencias y estado por cada local, depósito u oficina
+        $existenciasLocales = DB::table('insumos_has_cantidades')
+            ->join('local', 'insumos_has_cantidades.id_local', '=', 'local.id')
+            ->where('insumos_has_cantidades.id_insumo', $id)
+            ->select(
+                'local.id as id_local',
+                'local.nombre as local_nombre',
+                'local.tipo as tipo_local',
+                'insumos_has_cantidades.cantidad',
+                'insumos_has_cantidades.estado_local'
+            )
+            ->orderBy('local.nombre', 'asc')
+            ->get();
+
+        return response()->json([
+            'insumo' => $insumo,
+            'existencias_locales' => $existenciasLocales,
+            'historial' => $historial
+        ]);
+    }
 }

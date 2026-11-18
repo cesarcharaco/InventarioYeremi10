@@ -98,6 +98,10 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/album/foto/{fotoId}', [InsumosController::class, 'albumDestroyFoto'])->name('insumos.album.destroy_foto');
         Route::post('/album/foto/{fotoId}/principal', [InsumosController::class, 'albumSetPrincipal'])->name('insumos.album.set_principal');
         Route::get('album-general', [InsumosController::class, 'albumGeneral'])->name('insumos.album.general');
+
+        // Historial de vida de insumo (Timeline)
+        Route::get('/insumos/historial-vida', [InsumosController::class, 'historialVidaIndex'])->name('insumos.historial_vida.index');
+        Route::get('/insumos/historial-vida/data/{id}', [InsumosController::class, 'getHistorialVidaData'])->name('insumos.historial_vida.data');
     });
 
     // 3. Resource estándar de Insumos
