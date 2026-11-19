@@ -769,7 +769,7 @@ class InsumosController extends Controller
                       ->orWhere('producto', 'LIKE', "%{$search}%")
                       ->orWhere('descripcion', 'LIKE', "%{$search}%");
             })
-            ->select('id', 'serial', 'producto', 'descripcion')
+            ->select('id', 'serial', 'producto', 'descripcion', 'costo')
             ->limit(20)
             ->get();
 
@@ -1100,7 +1100,7 @@ class InsumosController extends Controller
         $fechaDesde = $request->get('fecha_desde');
         $fechaHasta = $request->get('fecha_hasta');
 
-        // 1. ENTRADAS DE PROVEEDORES (A través de detalles_entradas e insumos_recepcion o entradas_almacen)
+        // 1. ENTRADAS DE PROVEEDORES
         $entradas = DB::table('detalles_entradas')
             ->join('entradas_almacen', 'detalles_entradas.id_entrada', '=', 'entradas_almacen.id')
             ->leftJoin('proveedores', 'entradas_almacen.id_proveedor', '=', 'proveedores.id')
@@ -1120,7 +1120,7 @@ class InsumosController extends Controller
                 'entradas_almacen.observaciones as observacion'
             );
 
-        // 2. DESPACHOS (Como origen [salida] o destino [entrada por traslado])
+        // 2. DESPACHOS
         $despachos = DB::table('despacho_detalles')
             ->join('despachos', 'despacho_detalles.id_despacho', '=', 'despachos.id')
             ->leftJoin('local as origen', 'despachos.id_local_origen', '=', 'origen.id')
@@ -1135,19 +1135,19 @@ class InsumosController extends Controller
                 DB::raw("'fas fa-truck' as icono"),
                 'despacho_detalles.cantidad_enviada as cantidad',
                 DB::raw("NULL as costo"),
-                'origen.nombre as local_nombre', // El local que mueve la mercancía
+                'origen.nombre as local_nombre',
                 DB::raw("CONCAT('Traslado de [', origen.nombre, '] hacia [', destino.nombre, '] | Código: ', despachos.codigo, ' | Estado: ', despachos.estado) as descripcion_evento"),
                 'despachos.observacion as observacion'
             );
 
-        // 3. INCIDENCIAS (Ajustes manuales, mermas, devoluciones, etc.)
+        // 3. INCIDENCIAS
         $incidencias = DB::table('incidencias')
             ->join('local', 'incidencias.id_local', '=', 'local.id')
             ->where('incidencias.id_insumo', $id)
             ->when($fechaDesde, fn($q) => $q->whereDate('incidencias.fecha_incidencia', '>=', $fechaDesde))
             ->when($fechaHasta, fn($q) => $q->whereDate('incidencias.fecha_incidencia', '<=', $fechaHasta))
             ->select(
-                'incidencias.fecha_incidencia as fecha',
+                DB::raw("TIMESTAMP(incidencias.fecha_incidencia, COALESCE(TIME(incidencias.created_at), '00:00:00')) as fecha"),
                 DB::raw("'INCIDENCIA' as tipo_evento"),
                 DB::raw("CASE 
                     WHEN incidencias.tipo IN ('Dañado de Fábrica', 'Dañado en Local', 'Perdido', 'Vencido', 'Salida', 'Egreso', 'Retiro', 'Desincorporacion', 'Otro') THEN 'danger'
@@ -1162,10 +1162,34 @@ class InsumosController extends Controller
                 'incidencias.observacion as observacion'
             );
 
-        // Unir las 3 consultas con UNION ALL y ordenar cronológicamente de forma descendente (lo más reciente arriba)
+        // Stock registrado actualmente en locales (referencia, ya que insumos_has_cantidades no guarda snapshot inicial)
+        $stockRegistradoLocales = (int) DB::table('insumos_has_cantidades')
+            ->where('id_insumo', $id)
+            ->sum('cantidad');
+
+        // 4. CREACIÓN DEL INSUMO EN CATÁLOGO MAESTRO
+        $creacion = DB::table('insumos')
+            ->where('insumos.id', $id)
+            ->whereNotNull('insumos.created_at')
+            ->when($fechaDesde, fn($q) => $q->whereDate('insumos.created_at', '>=', $fechaDesde))
+            ->when($fechaHasta, fn($q) => $q->whereDate('insumos.created_at', '<=', $fechaHasta))
+            ->select(
+                'insumos.created_at as fecha',
+                DB::raw("'CREACION' as tipo_evento"),
+                DB::raw("'dark' as color_badge"),
+                DB::raw("'fas fa-plus-square' as icono"),
+                DB::raw("NULL as cantidad"),
+                'insumos.costo as costo',
+                DB::raw("'Catálogo General' as local_nombre"),
+                DB::raw("CONCAT('Alta inicial del insumo [', COALESCE(insumos.serial, 'S/N'), '] en el sistema (el stock inicial se gestionó en apertura de inventario)') as descripcion_evento"),
+                DB::raw("NULL as observacion")
+            );
+
+        // Unir las 4 consultas con UNION ALL y ordenar cronológicamente de forma descendente
         $historial = $entradas
             ->unionAll($despachos)
             ->unionAll($incidencias)
+            ->unionAll($creacion)
             ->orderBy('fecha', 'desc')
             ->get();
 
@@ -1188,5 +1212,5 @@ class InsumosController extends Controller
             'existencias_locales' => $existenciasLocales,
             'historial' => $historial
         ]);
-    }
+    }   
 }

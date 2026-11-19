@@ -40,6 +40,7 @@
                         <i class="nav-icon fas fa-box"></i>
                         <p>SAYER <i class="right fas fa-angle-left"></i></p>
                     </a>
+                    
                     <ul class="nav nav-treeview">
                         <li class="nav-item">
                             <a href="{{ route('insumos.index') }}" class="nav-link {{ Request::is('insumos') ? 'active' : '' }}">

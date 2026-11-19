@@ -137,6 +137,7 @@
             }
 
             $.get('{{ route("insumos.buscar_ajax") }}', { q: q }, function(data) {
+                console.log('Respuesta buscar_ajax:', data);
                 insumosDisponiblesCache = data;
                 let html = '';
 
@@ -145,16 +146,21 @@
                 } else {
                     data.forEach(item => {
                         let categoriaNombre = item.categoria ? item.categoria.categoria : 'REPUESTO';
-                        let precioUsd = item.precio_venta_usd ? `\$ ${parseFloat(item.precio_venta_usd).toFixed(2)}` : '';
+                        let costoUsd = (item.costo !== null && item.costo !== undefined && item.costo !== '')
+                            ? `\$ ${parseFloat(item.costo).toFixed(2)}`
+                            : '';
+
+                        let tituloPrincipal = item.descripcion || item.producto;
+                        let subtituloProducto = item.producto || categoriaNombre;
 
                         html += `
                             <a href="#" class="list-group-item list-group-item-action py-2 px-3" onclick="seleccionarInsumoHistorial(${item.id}); return false;">
                                 <div class="d-flex w-100 justify-content-between align-items-center">
-                                    <h6 class="mb-1 font-weight-bold text-dark" style="font-size: 0.95rem;">${item.producto}</h6>
-                                    ${precioUsd ? `<span class="badge badge-success px-2 py-1" style="font-size: 0.8rem;">${precioUsd}</span>` : ''}
+                                    <h6 class="mb-1 font-weight-bold text-dark" style="font-size: 0.95rem;">${tituloPrincipal}</h6>
+                                    ${costoUsd ? `<span class="badge badge-success px-2 py-1" style="font-size: 0.8rem;">Costo: ${costoUsd}</span>` : ''}
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-primary font-weight-bold"><i class="fa fa-tag mr-1"></i> ${item.descripcion || categoriaNombre}</small>
+                                    <small class="text-primary font-weight-bold" style="font-size: 0.95rem;"><i class="fa fa-tag mr-1"></i> ${subtituloProducto}</small>
                                     <span class="badge badge-light border text-muted" style="font-size: 0.75rem;"><i class="fa fa-barcode mr-1"></i> ${item.serial}</span>
                                 </div>
                             </a>
@@ -337,7 +343,6 @@
                 let fechaFormateada = formatearFechaHora(item.fecha);
                 let fechaDia = formatearDia(item.fecha);
 
-                // Etiqueta de día en el timeline si cambia la fecha
                 if (fechaDia !== fechaActualGrupo) {
                     fechaActualGrupo = fechaDia;
                     htmlTimeline += `
@@ -349,8 +354,33 @@
                     `;
                 }
 
-                let signoCantidad = item.tipo_evento === 'ENTRADA' ? '+' : (item.tipo_evento === 'DESPACHO' ? '-' : '•');
                 let badgeClass = item.color_badge || 'secondary';
+                
+                // Determinar signo visual claro según el tipo de evento y color
+                let signoCantidad = '•';
+                if (item.tipo_evento === 'ENTRADA') {
+                    signoCantidad = '+';
+                } else if (item.tipo_evento === 'DESPACHO') {
+                    signoCantidad = '-';
+                } else if (item.tipo_evento === 'INCIDENCIA') {
+                    signoCantidad = (badgeClass === 'info') ? '+' : (badgeClass === 'danger' ? '-' : '•');
+                }
+
+                // Bloque derecho de cantidad (oculto como movimiento numérico si es CREACION)
+                let bloqueCantidadHtml = '';
+                if (item.tipo_evento === 'CREACION' || item.cantidad === null) {
+                    bloqueCantidadHtml = `
+                        <div class="text-muted small">Evento de Sistema</div>
+                        <h5 class="font-weight-bold text-secondary mb-0">Alta en Catálogo</h5>
+                        ${item.costo ? `<div class="text-success small font-weight-bold mt-1">Costo Base: $ ${parseFloat(item.costo).toFixed(2)}</div>` : ''}
+                    `;
+                } else {
+                    bloqueCantidadHtml = `
+                        <div class="text-muted small">Cantidad Operada</div>
+                        <h4 class="font-weight-bold text-dark mb-0">${signoCantidad} ${item.cantidad} unidades</h4>
+                        ${item.costo ? `<div class="text-success small font-weight-bold mt-1">Costo Unitario: $ ${parseFloat(item.costo).toFixed(2)}</div>` : ''}
+                    `;
+                }
 
                 htmlTimeline += `
                     <div>
@@ -368,9 +398,7 @@
                                         ${item.observacion ? `<p class="mb-1 text-muted small font-italic"><i class="fa fa-comment-alt"></i> Obs: ${item.observacion}</p>` : ''}
                                     </div>
                                     <div class="col-md-4 text-md-right border-left">
-                                        <div class="text-muted small">Cantidad Operada</div>
-                                        <h4 class="font-weight-bold text-dark mb-0">${signoCantidad} ${item.cantidad} unidades</h4>
-                                        ${item.costo ? `<div class="text-success small font-weight-bold mt-1">Costo Unitario: $ ${parseFloat(item.costo).toFixed(2)}</div>` : ''}
+                                        ${bloqueCantidadHtml}
                                     </div>
                                 </div>
                             </div>
