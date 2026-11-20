@@ -1109,7 +1109,7 @@ class InsumosController extends Controller
             ->when($fechaDesde, fn($q) => $q->whereDate('entradas_almacen.fecha_entrada', '>=', $fechaDesde))
             ->when($fechaHasta, fn($q) => $q->whereDate('entradas_almacen.fecha_entrada', '<=', $fechaHasta))
             ->select(
-                'entradas_almacen.fecha_entrada as fecha',
+                DB::raw("TIMESTAMP(entradas_almacen.fecha_entrada, COALESCE(TIME(entradas_almacen.created_at), '00:00:00')) as fecha"),
                 DB::raw("'ENTRADA' as tipo_evento"),
                 DB::raw("'success' as color_badge"),
                 DB::raw("'fas fa-arrow-circle-down' as icono"),
@@ -1212,5 +1212,5 @@ class InsumosController extends Controller
             'existencias_locales' => $existenciasLocales,
             'historial' => $historial
         ]);
-    }   
+    }
 }
