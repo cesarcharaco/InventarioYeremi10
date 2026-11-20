@@ -1339,4 +1339,29 @@ class DespachoController extends Controller
             return response()->json(['error' => 'No se pudo consultar el inventario. Intente nuevamente.'], 500);
         }
     }
+
+    public function getStockOtrosLocales(Request $request, $idInsumo)
+    {
+        Gate::authorize('ver-logistica');
+
+        $idLocalExcluir = $request->get('excluir_local');
+
+        $localesConStock = DB::table('insumos_has_cantidades as c')
+            ->join('local', 'c.id_local', '=', 'local.id')
+            ->where('c.id_insumo', $idInsumo)
+            ->when($idLocalExcluir, function ($q) use ($idLocalExcluir) {
+                $q->where('c.id_local', '!=', $idLocalExcluir);
+            })
+            ->where('c.cantidad', '>', 0)
+            ->select(
+                'local.id as id_local',
+                'local.nombre',
+                'local.tipo',
+                'c.cantidad'
+            )
+            ->orderBy('local.nombre', 'asc')
+            ->get();
+
+        return response()->json($localesConStock);
+    }
 }

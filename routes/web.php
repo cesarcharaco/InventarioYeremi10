@@ -116,6 +116,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/create', [DespachoController::class, 'create'])->name('despacho.create');
         Route::post('/store', [DespachoController::class, 'store'])->name('despacho.store');
         Route::get('/data', [DespachoController::class, 'getDespachosData'])->name('despacho.data');
+        Route::get('/insumos/{idInsumo}/otros-locales', [DespachoController::class, 'getStockOtrosLocales'])->name('despacho.otrosLocales');
 
         // --- RUTAS PARA SOLICITUDES (ESTADO PENDIENTE) ---
         Route::get('/solicitud/crear', [DespachoController::class, 'createSolicitud'])->name('despacho.solicitud.create');

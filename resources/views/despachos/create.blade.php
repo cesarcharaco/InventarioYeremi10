@@ -116,6 +116,7 @@
                   <input type="text" id="buscador" class="form-control" placeholder="Escribe el serial o nombre del insumo..." autocomplete="off" disabled>
                   <input type="hidden" id="select_insumo_id" value="">
                   <div id="resultados-busqueda" class="list-group position-absolute w-100 shadow" style="z-index: 1000; display:none;"></div>
+                  
                 </div>
               </div>
               <div class="col-md-3">
@@ -130,7 +131,18 @@
                 </button>
               </div>
             </div>
-
+            {{-- STOCK EN OTROS LOCALES / DEPÓSITOS (EXCLUYENDO ORIGEN) --}}
+            <div id="panel-stock-otros-locales" class="mt-2 border rounded bg-light p-2" style="display: none;">
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="font-weight-bold text-primary mb-0">
+                  <i class="fas fa-store-alt mr-1"></i> Disponibilidad en otros locales / depósitos
+                </small>
+                <button type="button" id="btnToggleOtrosLocales" class="btn btn-link btn-sm p-0 text-secondary" style="font-size: 0.78rem;">
+                  <i class="fas fa-eye-slash"></i> Ocultar
+                </button>
+              </div>
+              <div id="contenido-otros-locales" class="mt-2 small"></div>
+            </div>
             <div class="table-responsive mt-4">
               <table class="table table-bordered table-hover align-middle" id="tabla_productos">
                 <thead class="table-light">
@@ -270,6 +282,8 @@
         $('#buscador').val('');
         $('#select_insumo_id').val('');
         $('#input_cantidad').val(1);
+        $('#panel-stock-otros-locales').hide();
+        $('#contenido-otros-locales').empty();
     }
 
     function seleccionarInsumo(id) {
@@ -455,6 +469,7 @@
             let origenId = $('#id_local_origen').val();
             if (!origenId) return;
             cargarInsumosDeOrigen(origenId, true);
+            
         });
 
         // Revalidar en tiempo real cuando el usuario edita directamente una cantidad en la tabla
@@ -467,6 +482,8 @@
             let q = $(this).val().toLowerCase();
             if (q.length < 2) {
                 $('#resultados-busqueda').hide();
+                $('#select_insumo_id').val('');
+                $('#panel-stock-otros-locales').hide();
                 return;
             }
 
@@ -531,7 +548,8 @@
         function aplicarCambioOrigen(origenId) {
             origenActualId = origenId;
             let destinoSelect = $('#id_local_destino');
-
+            $('#panel-stock-otros-locales').hide();
+            $('#contenido-otros-locales').empty();
             destinoSelect.find('option').prop('disabled', false);
 
             if (origenId) {
@@ -697,5 +715,61 @@
             }
         });
     });
+    
+    $(document).on('click', '#btnToggleOtrosLocales', function() {
+        let $contenido = $('#contenido-otros-locales');
+        if ($contenido.is(':visible')) {
+            $contenido.slideUp(150);
+            $(this).html('<i class="fas fa-eye"></i> Mostrar');
+        } else {
+            $contenido.slideDown(150);
+            $(this).html('<i class="fas fa-eye-slash"></i> Ocultar');
+        }
+    });
+    function seleccionarInsumo(id) {
+        let item = insumosDisponibles.find(i => i.id == id);
+        if (!item) return;
+
+        let textoItem = `${item.serial} | ${item.producto} ${item.descripcion ? '| ' + item.descripcion : ''} (Stock: ${item.stock})`;
+        $('#select_insumo_id').val(item.id);
+        $('#buscador').val(textoItem);
+        $('#resultados-busqueda').hide();
+        $('#input_cantidad').attr('max', item.stock).focus();
+
+        consultarOtrosLocales(item.id);
+    }
+    function consultarOtrosLocales(insumoId) {
+        let $panel = $('#panel-stock-otros-locales');
+        let $contenido = $('#contenido-otros-locales');
+        let $btnToggle = $('#btnToggleOtrosLocales');
+        let origenId = $('#id_local_origen').val();
+
+        let url = "{{ route('despacho.otrosLocales', ':id') }}".replace(':id', insumoId);
+
+        $contenido.html('<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Consultando otros locales...</span>');
+        $contenido.show();
+        $btnToggle.html('<i class="fas fa-eye-slash"></i> Ocultar');
+        $panel.show();
+
+        $.get(url, { excluir_local: origenId }, function(locales) {
+            if (!locales || locales.length === 0) {
+                $contenido.html(`
+                    <div class="text-danger font-weight-bold">
+                        <i class="fas fa-exclamation-circle mr-1"></i> STOCK 0 EN TODOS LOS DEMÁS LOCALES Y DEPÓSITOS
+                    </div>
+                `);
+                return;
+            }
+
+            let badges = locales.map(loc => {
+                let tipo = loc.tipo ? ` (${loc.tipo})` : '';
+                return `<span class="badge badge-info mr-1 mb-1 px-2 py-1">${loc.nombre}${tipo}: <b>${loc.cantidad}</b></span>`;
+            }).join('');
+
+            $contenido.html(`<div class="d-flex flex-wrap">${badges}</div>`);
+        }).fail(function() {
+            $contenido.html('<span class="text-danger">No se pudo consultar otros locales.</span>');
+        });
+    }
 </script>
 @endsection
