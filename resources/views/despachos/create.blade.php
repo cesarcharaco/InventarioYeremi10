@@ -470,11 +470,19 @@
                 return;
             }
 
-            let filtrados = insumosDisponibles.filter(item =>
-                (item.serial && item.serial.toLowerCase().includes(q)) ||
-                (item.producto && item.producto.toLowerCase().includes(q)) ||
-                (item.descripcion && item.descripcion.toLowerCase().includes(q))
-            );
+            let palabras = q.split(/\s+/).filter(Boolean);
+
+            let filtrados = insumosDisponibles.filter(item => {
+                let serial = (item.serial || '').toLowerCase();
+                let producto = (item.producto || '').toLowerCase();
+                let descripcion = (item.descripcion || '').toLowerCase();
+
+                return palabras.every(palabra =>
+                    serial.includes(palabra) ||
+                    producto.includes(palabra) ||
+                    descripcion.includes(palabra)
+                );
+            });
 
             let html = '';
             if (filtrados.length === 0) {

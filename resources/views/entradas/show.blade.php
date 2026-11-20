@@ -52,7 +52,7 @@
             </address>
         </div>
         <div class="col-sm-4 invoice-col text-right">
-            <b>Entrada ID: #{{ str_pad($entrada->id, 6, '0', STR_PAD_LEFT) }}</b><br>
+            <b>Nro. Factura / Orden:</b> {{ $entrada->nro_orden_entrega ?? 'S/N' }}<br>
             <br>
             {{-- CORREGIDO: Se cambia $entrada->user por $entrada->usuario para coincidir con el Controller --}}
             <b>Registrado por:</b> {{ $entrada->usuario->name ?? 'N/A' }}<br>
@@ -74,10 +74,20 @@
                 <tbody>
                     @foreach($entrada->detalles as $detalle)
                     <tr>
-                        <td class="text-bold">{{ number_format($detalle->cantidad, 2) }}</td>
-                        {{-- Ajusta 'nombre' por 'producto' si tu modelo Insumo usa esa columna --}}
-                        <td>{{ $detalle->insumo->nombre ?? $detalle->insumo->producto ?? 'N/D' }}</td>
-                        <td class="text-right text-muted">$ {{ number_format($detalle->costo_unitario_usd, 2) }}</td>
+                        <td class="text-bold">{{ number_format($detalle->cantidad,0) }}</td>
+                        <td>
+                            <strong class="text-primary">@if(!empty($detalle->insumo->serial))
+                                <i class="fas fa-barcode mr-1"></i>{{ $detalle->insumo->serial }}
+                            @endif
+                            </strong>
+                            <strong>
+                            {{ $detalle->insumo->producto ?? $detalle->insumo->nombre ?? 'N/D' }}
+                            @if(!empty($detalle->insumo->descripcion))
+                                {{ $detalle->insumo->descripcion }}
+                            @endif
+                            </strong>
+                        </td>
+                        <td class="text-right text-bold text-dark">$ {{ number_format($detalle->costo_unitario_usd, 2) }}</td>
                         <td class="text-right text-bold text-dark">$ {{ number_format($detalle->cantidad * $detalle->costo_unitario_usd, 2) }}</td>
                     </tr>
                     @endforeach

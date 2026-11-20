@@ -762,12 +762,17 @@ class InsumosController extends Controller
     {
         Gate::authorize('gestionar-insumos');
         $search = trim($request->get('q'));
+        $palabras = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY);
 
         $insumos = DB::table('insumos')
-            ->where(function ($query) use ($search) {
-                $query->where('serial', 'LIKE', "%{$search}%")
-                      ->orWhere('producto', 'LIKE', "%{$search}%")
-                      ->orWhere('descripcion', 'LIKE', "%{$search}%");
+            ->when(!empty($palabras), function ($query) use ($palabras) {
+                foreach ($palabras as $palabra) {
+                    $query->where(function ($subQuery) use ($palabra) {
+                        $subQuery->where('serial', 'LIKE', "%{$palabra}%")
+                                 ->orWhere('producto', 'LIKE', "%{$palabra}%")
+                                 ->orWhere('descripcion', 'LIKE', "%{$palabra}%");
+                    });
+                }
             })
             ->select('id', 'serial', 'producto', 'descripcion', 'costo')
             ->limit(20)
