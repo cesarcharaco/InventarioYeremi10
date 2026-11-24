@@ -74,7 +74,7 @@
                     <th>Notificación</th>
                     <th>Mensaje</th>
                     <th>Fecha</th>
-                    <th width="100" class="text-center">Acción</th>
+                    <th width="130" class="text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,7 +141,12 @@
         "autoWidth": false,
         "pageLength": 15,
         "searchDelay": 500,
-        "order": [[3, 'desc']] // Ordenado por fecha descendente por defecto
+        "order": [[3, 'desc']], // Ordenado por fecha descendente por defecto
+        "createdRow": function (row, data) {
+         if (data.estado && data.estado.indexOf('estado-no-leida') !== -1) {
+             $(row).addClass('table-light');
+         }
+     }
     });
 
     // Eventos para actualizar la tabla instantáneamente al modificar los filtros sin perder paginación

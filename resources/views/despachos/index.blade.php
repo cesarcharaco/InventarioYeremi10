@@ -390,6 +390,21 @@
         } catch (e) {
             console.log("Error en DataTable: ", e);
         }
+
+       // Abrir automáticamente el modal de detalle si se llega desde una notificación
+        const urlParams = new URLSearchParams(window.location.search);
+        const despachoDetalleId = urlParams.get('ver_detalle');
+        const despachoCodigo = urlParams.get('codigo') || ('#' + despachoDetalleId);
+
+        if (despachoDetalleId) {
+            verDetalle(despachoDetalleId, despachoCodigo);
+
+            urlParams.delete('ver_detalle');
+            urlParams.delete('codigo');
+            const nuevaQuery = urlParams.toString();
+            const nuevaUrl = window.location.pathname + (nuevaQuery ? '?' + nuevaQuery : '');
+            window.history.replaceState({}, document.title, nuevaUrl);
+        } 
     });
     
     function verDetalle(id, codigo) {

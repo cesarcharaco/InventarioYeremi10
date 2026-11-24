@@ -375,7 +375,7 @@ class DespachoController extends Controller
                 if ($userIdsDestino->isNotEmpty()) {
                     Notification::send(
                         User::whereIn('id', $userIdsDestino)->get(),
-                        new DespachoNotification($despacho, 'creado')
+                        new DespachoNotification($despacho,'creado',route('despacho.index', ['ver_detalle' => $despacho->id, 'codigo' => $despacho->codigo]))
                     );
                 }
             } catch (\Exception $e) {
@@ -554,7 +554,7 @@ class DespachoController extends Controller
                 if ($userIdsOrigen->isNotEmpty()) {
                     Notification::send(
                         User::whereIn('id', $userIdsOrigen)->get(),
-                        new DespachoNotification($despacho, 'recibido')
+                        new DespachoNotification($despacho,'recibido',route('despacho.index', ['ver_detalle' => $despacho->id, 'codigo' => $despacho->codigo]))
                     );
                 }
             } catch (\Exception $e) {
@@ -940,7 +940,7 @@ class DespachoController extends Controller
                 if ($userIdsOrigen->isNotEmpty()) {
                     Notification::send(
                         User::whereIn('id', $userIdsOrigen)->get(),
-                        new DespachoNotification($despacho, 'solicitud_creada')
+                        new DespachoNotification($despacho,'solicitud_creada',route('despacho.index', ['ver_detalle' => $despacho->id, 'codigo' => $despacho->codigo]))
                     );
                 }
             } catch (\Exception $e) {
@@ -1074,7 +1074,7 @@ class DespachoController extends Controller
                 if ($userIdsDestino->isNotEmpty()) {
                     Notification::send(
                         User::whereIn('id', $userIdsDestino)->get(),
-                        new DespachoNotification($despacho, 'creado')
+                        new DespachoNotification($despacho,'creado',route('despacho.index', ['ver_detalle' => $despacho->id, 'codigo' => $despacho->codigo]))
                     );
                 }
             } catch (\Exception $e) {

@@ -17,7 +17,6 @@ use App\Models\User;
 use App\Models\Insumos;
 use App\Models\InsumosC;
 use App\Models\Correlativo;
-use App\Notifications\StockBajoNotification;
 use App\Services\CreditoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +25,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Notifications\AlertaSistemaNotification;
 
 class CreditoController extends Controller
 {
@@ -348,8 +348,9 @@ class CreditoController extends Controller
             }
 
             foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
+                $gerente->notify(new AlertaSistemaNotification($detalles));
             }
+            
             // --------------------------------------------------------
             
             return redirect()->back()->with('success', 'Abono procesado correctamente.');
@@ -1338,12 +1339,12 @@ class CreditoController extends Controller
             $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito Directo',
                 'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",
-                'url'     => route('creditos.index'),
+                'url'     => route('creditos.show', $cliente->id),
                 'icono'   => 'fas fa-hand-holding-usd text-info'
             ];
 
             foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
+                $gerente->notify(new AlertaSistemaNotification($detalles));
             }
 
             DB::commit();
@@ -1511,12 +1512,12 @@ class CreditoController extends Controller
             $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito Directo',
                 'mensaje' => "Se otorgó un crédito directo de {$montoUsd}$ a {$cliente->nombre}.",
-                'url'     => route('creditos.index'),
+                'url'     => route('creditos.show', $cliente->id),
                 'icono'   => 'fas fa-hand-holding-usd text-info'
             ];
 
             foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
+                $gerente->notify(new AlertaSistemaNotification($detalles));
             }
 
             DB::commit();

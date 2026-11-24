@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use App\Notifications\StockBajoNotification;
+use App\Notifications\AlertaSistemaNotification;
 
 class ClienteController extends Controller
 {
@@ -98,12 +98,12 @@ class ClienteController extends Controller
                 $detalles = [
                     'titulo'  => '🆕 Nuevo Mayorista Pendiente',
                     'mensaje' => "El cliente {$datos['nombre']} se ha registrado y espera activación.",
-                    'url'     => route('clientes.index'), 
+                    'url'     => route('clientes.pendientes'),
                     'icono'   => 'fas fa-user-clock text-info'
                 ];
 
                 foreach ($gerentes as $gerente) {
-                    $gerente->notify(new StockBajoNotification($detalles));
+                    $gerente->notify(new AlertaSistemaNotification($detalles));
                 }
 
                 auth()->logout();

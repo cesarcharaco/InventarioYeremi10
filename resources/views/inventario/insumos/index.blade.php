@@ -278,7 +278,13 @@
           "autoWidth": false,
           "pageLength": 10,
           "searchDelay": 500,
-          "order": [[1, 'asc']]
+          "order": [[1, 'asc']],
+          "initComplete": function () {
+              const serialUrl = new URLSearchParams(window.location.search).get('buscar');
+              if (serialUrl) {
+                  this.api().search(serialUrl).draw();
+              }
+          },
       });
 
       // Eventos para rediseñar la tabla al cambiar los filtros sin perder paginación

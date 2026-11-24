@@ -235,7 +235,7 @@ class InsumosController extends Controller
                 $detalles = [
                     'titulo'  => '¡Stock Inicial Bajo!',
                     'mensaje' => "El producto {$insumo->producto} inició con stock crítico en " . count($localesConStockBajo) . " local(es).",
-                    'url'     => route('insumos.index'),
+                    'url' => route('insumos.index', ['buscar' => $insumo->serial]),
                     'icono'   => 'fas fa-exclamation-triangle'
                 ];
 
@@ -366,7 +366,7 @@ class InsumosController extends Controller
                     $detalles = [
                         'titulo'  => 'Stock Crítico tras Actualización',
                         'mensaje' => "El producto {$request->producto} quedó por debajo del nuevo mínimo ({$nuevoStockMin}) en: {$nombresLocales}.",
-                        'url'     => route('insumos.index'),
+                        'url' => route('insumos.index', ['buscar' => $serialFinal]),
                         'icono'   => 'fas fa-sync-alt'
                     ];
 
@@ -696,7 +696,7 @@ class InsumosController extends Controller
                     $detalles = [
                         'titulo'  => '¡Stock Inicial Bajo!',
                         'mensaje' => "El producto {$insumo->producto} inició con stock crítico ({$cantidadInicial}) en el local.",
-                        'url'     => route('insumos.index'),
+                        'url' => route('insumos.index', ['buscar' => $insumo->serial]),
                         'icono'   => 'fas fa-exclamation-triangle'
                     ];
 

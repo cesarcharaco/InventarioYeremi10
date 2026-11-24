@@ -6,13 +6,14 @@ use App\Models\Incidencias;
 use App\Models\Insumos;
 use App\Models\Local;
 use App\Models\User;
-use App\Models\InsumosC; // Representa a insumos_has_cantidades
+use App\Models\InsumosC;
 use App\Models\HistorialIncidencias;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use App\Notifications\StockBajoNotification;
 
 class IncidenciasController extends Controller
 {
@@ -176,7 +177,31 @@ class IncidenciasController extends Controller
                         ->with('warning', 'Stock insuficiente. Solo tienes ' . $stockRecord->cantidad . ' unidades disponibles.')
                         ->withInput();
                 }
+
                 $stockRecord->decrement('cantidad', $request->cantidad);
+
+                $stockMin = (int) ($stockRecord->insumo->stock_min ?? 0);
+                $cantidadRestante = (int) $stockRecord->fresh()->cantidad;
+
+                if ($stockMin > 0 && $cantidadRestante <= $stockMin) {
+                    $nombreLocal = DB::table('local')->where('id', $stockRecord->id_local)->value('nombre') ?? 'Local';
+                    $nombreProducto = $stockRecord->insumo->producto ?? 'Insumo';
+                    $serialProducto = $stockRecord->insumo->serial ?? '';
+
+                    $destinatarios = User::whereIn('role', ['admin', 'encargado', 'almacenista'])->get();
+                    $detalles = [
+                        'titulo'  => '¡Stock Bajo tras Incidencia!',
+                        'mensaje' => "{$nombreProducto} quedó en {$cantidadRestante} unidades (mínimo: {$stockMin}) en {$nombreLocal} por incidencia ({$request->tipo}).",
+                        'url'     => $serialProducto !== ''
+                            ? route('insumos.index', ['buscar' => $serialProducto])
+                            : route('insumos.index'),
+                        'icono'   => 'fas fa-exclamation-triangle text-danger',
+                    ];
+
+                    foreach ($destinatarios as $destinatario) {
+                        $destinatario->notify(new StockBajoNotification($detalles));
+                    }
+                }
             } elseif ($esSuma) {
                 $stockRecord->increment('cantidad', $request->cantidad);
             }

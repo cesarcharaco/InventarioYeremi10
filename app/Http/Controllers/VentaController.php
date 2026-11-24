@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Models\Configuracion;
 use App\Models\Correlativo;
 use App\Models\PromocionRegla;
+use App\Notifications\AlertaSistemaNotification;
 use App\Notifications\StockBajoNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -382,9 +383,6 @@ public function create()
             'observacion'       => $request->observacion
         ]);
 
-        /*foreach ($pagosRegistrar as $pago) {
-            $venta->detalles()->create($pago);
-        }*/
 
         if ($correlativoFiscal) {
             $correlativoFiscal->update([
@@ -460,7 +458,7 @@ public function create()
                 $detalles = [
                     'titulo'  => '¡Stock Agotándose!',
                     'mensaje' => "{$insumoBase->producto} quedó en {$nuevaCantidad} unidades en {$local->nombre}.",
-                    'url'     => route('insumos.index'),
+                    'url'     => route('insumos.index',['buscar' => $insumoBase->serial]),
                     'icono'   => 'fas fa-exclamation-triangle text-danger'
                 ];
 
@@ -501,51 +499,45 @@ public function create()
         }
 
         
-        // Nuevo Crédito
+       
             // Nuevo Crédito
             if ($montoCredito > 0) {
-                // 1. Obtener directamente de la BD el ÚNICO anticipo activo del cliente (Sin Eloquent)
-                    $anticipo = DB::table('creditos')
-                        ->where('id_cliente', $request->id_cliente)
-                        ->where('saldo_a_favor', '>', 0)
-                        ->latest('id')
-                        ->first();
+                $anticipo = DB::table('creditos')
+                    ->where('id_cliente', $request->id_cliente)
+                    ->where('saldo_a_favor', '>', 0)
+                    ->latest('id')
+                    ->first();
 
-                    $saldoAFavorDisponible = $anticipo ? (float) $anticipo->saldo_a_favor : 0.0;
+                $saldoAFavorDisponible = $anticipo ? (float) $anticipo->saldo_a_favor : 0.0;
 
-                // 2. Determinar montos para el cruce
                 $montoAbonadoConFavor = min($montoCredito, $saldoAFavorDisponible);
                 $nuevoSaldoPendiente  = $montoCredito - $montoAbonadoConFavor;
                 $estadoNuevoCredito   = ($nuevoSaldoPendiente <= 0) ? 'pagado' : 'pendiente';
 
-                // 3. Crear el nuevo Crédito de la venta
                 $credito = Credito::create([
                     'id_venta'           => $venta->id,
                     'id_cliente'         => $request->id_cliente,
                     'monto_inicial'      => $montoCredito,
                     'saldo_pendiente'    => $nuevoSaldoPendiente,
                     'saldo_a_favor'      => 0,
-                    'fecha_vencimiento'  => now()->addDays(15), 
+                    'fecha_vencimiento'  => now()->addDays(15),
                     'estado'             => $estadoNuevoCredito,
                     'tasa_cambio_origen' => $tasa_bcv
                 ]);
 
-                // 4. Descontar progresivamente el saldo a favor de los anticipos del cliente
-                if ($montoAbonadoConFavor > 0) {
-                    $nuevoSaldoFavor = $saldoAFavorDisponible - $montoAbonadoConFavor;
+                if ($montoAbonadoConFavor > 0 && $anticipo) {
+                    $nuevoSaldoFavor = max(0, round($saldoAFavorDisponible - $montoAbonadoConFavor, 2));
                     $nuevoEstadoAnt  = ($nuevoSaldoFavor <= 0) ? 'pagado' : 'anticipo';
 
-                    // Actualización atómica en la base de datos
-                    $x=DB::table('creditos')
+                    DB::table('creditos')
                         ->where('id', $anticipo->id)
                         ->update([
-                            'saldo_a_favor' => $nuevoSaldoFavor,
-                            'estado'        => $nuevoEstadoAnt,
-                            'updated_at'    => now()
+                            'saldo_a_favor'   => $nuevoSaldoFavor,
+                            'saldo_pendiente' => $nuevoSaldoFavor > 0 ? -$nuevoSaldoFavor : 0,
+                            'estado'          => $nuevoEstadoAnt,
+                            'updated_at'      => now()
                         ]);
-                
 
-                    // 5. Registrar el Abono y su Detalle vinculados al nuevo crédito
                     $abono = AbonoCredito::create([
                         'id_cliente'        => $request->id_cliente,
                         'id_user'           => Auth::id(),
@@ -572,15 +564,15 @@ public function create()
                 ? "Se otorgó un crédito de {$montoCredito}$ (Cubierto {$montoAbonadoConFavor}$ con saldo a favor. Restante: {$nuevoSaldoPendiente}$)."
                 : "Venta a crédito de {$montoCredito}$ saldada completamente con Saldo a Favor previo del cliente.";
 
-            $detalles = [
+           $detalles = [
                 'titulo'  => '💸 Nueva Venta a Crédito / Cruce de Saldo',
                 'mensaje' => $mensajeNotificacion,
-                'url'     => route('creditos.index'),
+                'url'     => route('creditos.show', $request->id_cliente),
                 'icono'   => 'fas fa-hand-holding-usd text-info'
             ];
 
             foreach ($gerentes as $gerente) {
-                $gerente->notify(new StockBajoNotification($detalles));
+                $gerente->notify(new AlertaSistemaNotification($detalles));
             }
         }
 
@@ -670,13 +662,13 @@ public function create()
         $detalles = [
             'titulo'  => '🔐 Solicitud de PIN de Autorización',
             'mensaje' => "{$user->name} en {$local->nombre} solicita PIN para venta de {$request->monto_total}$. Código PIN: {$pinPlano}",
-            'url'     => '#', 
+            'url'     => route('notifications.index'),
             'icono'   => 'fas fa-key text-warning'
         ];
 
         try {
             foreach ($destinatarios as $destinatario) {
-                $destinatario->notify(new StockBajoNotification($detalles));
+                $destinatario->notify(new AlertaSistemaNotification($detalles));
             }
         } catch (\Exception $e) {
             \Log::error('Error enviando notificación de PIN: ' . $e->getMessage());
