@@ -14,7 +14,11 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('tasas:actualizar')->dailyAt('09:10');
         $schedule->command('tasas:actualizar')->dailyAt('18:30');
+        $schedule->command('creditos:alertas-cobranza')
+            ->dailyAt('08:00')
+            ->withoutOverlapping();
     }
+
 
     /**
      * Register the commands for the application.

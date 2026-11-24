@@ -248,6 +248,12 @@
                                 <p>Deudores y Abonos</p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="{{ route('creditos.cobranza_alertas') }}" class="nav-link {{ Request::routeIs('creditos.cobranza_alertas') ? 'active' : '' }}">
+                                <i class="fas fa-bell nav-icon text-warning"></i>
+                                <p>Alertas de Cobranza</p>
+                            </a>
+                        </li>
                     </ul>
                 </li>
                 @endcan

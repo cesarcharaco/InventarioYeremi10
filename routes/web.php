@@ -195,6 +195,7 @@ Route::middleware(['auth'])->group(function () {
   // --- MÓDULO DE CRÉDITOS ---
   Route::prefix('creditos')->group(function () {
       Route::get('/', [CreditoController::class, 'index'])->name('creditos.index');
+      Route::get('/cobranza-alertas', [CreditoController::class, 'cobranzaAlertas'])->name('creditos.cobranza_alertas');
       Route::post('/directo-general', [CreditoController::class, 'storeDirectoGeneral'])->name('creditos.directo.store_general');
       
       // 1. Rutas GET específicas (Deben ir ANTES de /{id})
@@ -203,7 +204,7 @@ Route::middleware(['auth'])->group(function () {
       Route::get('/{id}/historial', [CreditoController::class, 'historial'])->name('creditos.historial');
       Route::get('/{id}/productos', [CreditoController::class, 'listarProductos'])->name('creditos.productos');
       Route::get('/pdf-estado-cuenta/{cliente_id}', [CreditoController::class, 'pdfEstadoCuenta'])->name('creditos.pdf_estado_cuenta');
-
+      Route::get('/pdf-notificacion/{cliente_id}', [CreditoController::class, 'pdfNotificacionCobranza'])->name('creditos.pdf_notificacion');
       // 2. Rutas POST
       Route::get('/abonos/{id}/editar', [CreditoController::class, 'editAbono'])->name('abonos.edit');
       Route::put('/abonos/{id}', [CreditoController::class, 'updateAbono'])->name('abonos.update');

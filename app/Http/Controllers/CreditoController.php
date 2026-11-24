@@ -2072,4 +2072,160 @@ class CreditoController extends Controller
         $cliente->updated_at = now();
         $cliente->save();
     }
+
+    public function cobranzaAlertas(Request $request)
+    {
+        Gate::authorize('ver-creditos');
+
+        $user = auth()->user();
+        $esAdmin = $user->esAdmin();
+
+        $localesAsignados = [];
+        if (!$esAdmin) {
+            $localesAsignados = DB::table('users_has_local')
+                ->where('id_user', $user->id)
+                ->pluck('id_local')
+                ->map(fn ($id) => (int) $id)
+                ->toArray();
+        }
+
+        $localSeleccionado = $request->filled('id_local') ? (int) $request->input('id_local') : null;
+
+        $localesFiltro = $esAdmin
+            ? ($localSeleccionado ? [$localSeleccionado] : null)
+            : $localesAsignados;
+
+        $creditosQuery = Credito::query()
+            ->with(['cliente', 'venta.local'])
+            ->where('estado', 'pendiente')
+            ->where('saldo_pendiente', '>', 0)
+            ->whereHas('cliente');
+
+        if (!$esAdmin) {
+            $creditosQuery->where(function ($q) use ($localesFiltro) {
+                $q->whereHas('venta', function ($qVenta) use ($localesFiltro) {
+                    $qVenta->whereIn('id_local', $localesFiltro ?: [-1]);
+                })->orWhereNull('id_venta');
+            });
+        } elseif ($localSeleccionado) {
+            $creditosQuery->whereHas('venta', function ($qVenta) use ($localSeleccionado) {
+                $qVenta->where('id_local', $localSeleccionado);
+            });
+        }
+
+        $creditosPendientes = $creditosQuery
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $hoy = Carbon::today();
+
+        // Agrupamos por cliente y tomamos su crédito pendiente más antiguo como referencia de antigüedad
+        $porCliente = $creditosPendientes->groupBy('id_cliente')->map(function ($creditosCliente) use ($hoy) {
+            $creditoMasAntiguo = $creditosCliente->first();
+            $fechaMasAntigua = Carbon::parse($creditoMasAntiguo->created_at)->startOfDay();
+            $diasAntiguedad = $fechaMasAntigua->diffInDays($hoy);
+
+            $tramo = null;
+            if ($diasAntiguedad >= 30) {
+                $tramo = '30';
+            } elseif ($diasAntiguedad >= 20) {
+                $tramo = '20';
+            } elseif ($diasAntiguedad >= 15) {
+                $tramo = '15';
+            }
+
+            if (!$tramo) {
+                return null;
+            }
+
+            $saldoTotalCliente = round((float) $creditosCliente->sum('saldo_pendiente'), 2);
+            $cliente = $creditoMasAntiguo->cliente;
+
+            return [
+                'cliente'              => $cliente,
+                'cliente_id'           => $cliente->id,
+                'nombre'               => $cliente->nombre,
+                'alias'                => $cliente->alias,
+                'identificacion'       => $cliente->identificacion,
+                'saldo_pendiente'      => $saldoTotalCliente,
+                'fecha_credito_antiguo'=> $fechaMasAntigua,
+                'dias_antiguedad'      => $diasAntiguedad,
+                'tramo'                => $tramo,
+                'credito_ref_id'       => $creditoMasAntiguo->id,
+            ];
+        })->filter()->values();
+
+        $grupo30 = $porCliente->where('tramo', '30')->sortByDesc('dias_antiguedad')->values();
+        $grupo20 = $porCliente->where('tramo', '20')->sortByDesc('dias_antiguedad')->values();
+        $grupo15 = $porCliente->where('tramo', '15')->sortByDesc('dias_antiguedad')->values();
+
+        $totales = [
+            'tramo_30' => round((float) $grupo30->sum('saldo_pendiente'), 2),
+            'tramo_20' => round((float) $grupo20->sum('saldo_pendiente'), 2),
+            'tramo_15' => round((float) $grupo15->sum('saldo_pendiente'), 2),
+            'general'  => round((float) $porCliente->sum('saldo_pendiente'), 2),
+        ];
+
+        $locales = $esAdmin
+            ? Local::where('estado', 'Activo')->orderBy('nombre', 'asc')->get()
+            : collect();
+
+        return view('creditos.cobranza_alertas', compact('grupo30','grupo20','grupo15','totales','locales','localSeleccionado','esAdmin'));
+    }
+
+    public function pdfNotificacionCobranza(Request $request, $cliente_id)
+    {
+        Gate::authorize('ver-creditos');
+
+        $cliente = Cliente::findOrFail($cliente_id);
+
+        $creditosPendientes = Credito::with(['venta.local'])
+            ->where('id_cliente', $cliente->id)
+            ->where('estado', 'pendiente')
+            ->where('saldo_pendiente', '>', 0)
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $creditoMasAntiguo = $creditosPendientes->first();
+        $fechaDesde = $creditoMasAntiguo
+            ? Carbon::parse($creditoMasAntiguo->created_at)->startOfDay()
+            : Carbon::today();
+
+        $diasAntiguedad = $fechaDesde->diffInDays(Carbon::today());
+        $montoTotalPendiente = round((float) $creditosPendientes->sum('saldo_pendiente'), 2);
+
+        // Determinar el local asociado al crédito pendiente más antiguo (o local activo del usuario)
+        $local = optional(optional($creditoMasAntiguo)->venta)->local
+            ?? auth()->user()->localActual()
+            ?? Local::where('estado', 'Activo')->first();
+
+        // Buscar encargado asignado al local (independientemente de quién genere el PDF)
+        $encargado = null;
+        if ($local) {
+            $encargado = User::where('role', User::ROLE_ENCARGADO)
+                ->whereHas('local', function ($q) use ($local) {
+                    $q->where('local.id', $local->id)
+                      ->where('users_has_local.status', 'activo');
+                })
+                ->first();
+        }
+
+        $empresa = Local::where('estado', 'Activo')->first() ?? Local::first();
+
+        $pdf = Pdf::loadView('creditos.pdf.notificacion_cobranza', compact(
+            'cliente',
+            'montoTotalPendiente',
+            'fechaDesde',
+            'diasAntiguedad',
+            'local',
+            'encargado',
+            'empresa'
+        ));
+
+        $pdf->setPaper('letter', 'portrait');
+
+        return $pdf->stream("Notificacion_Cobranza_{$cliente->identificacion}.pdf");
+    }
 }

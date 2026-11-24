@@ -3,6 +3,37 @@
 @section('title') Notificaciones @endsection
 
 @section('content')
+<style>
+    /* Crédito con 15+ días: amarillo */
+    #tabla-notificaciones tbody tr.credito-tramo-15 > td {
+        background-color: #fffdf0 !important;
+        border-color: #ffe69c;
+    }
+
+    #tabla-notificaciones tbody tr.credito-tramo-15 > td:first-child {
+        border-left: 4px solid #ffc107 !important;
+    }
+
+    /* Crédito con 20+ días: naranja */
+    #tabla-notificaciones tbody tr.credito-tramo-20 > td {
+        background-color: #fff6ec !important;
+        border-color: #ffd8a8;
+    }
+
+    #tabla-notificaciones tbody tr.credito-tramo-20 > td:first-child {
+        border-left: 4px solid #fd7e14 !important;
+    }
+
+    /* Crédito con 30+ días: rojo */
+    #tabla-notificaciones tbody tr.credito-tramo-30 > td {
+        background-color: #fdf2f2 !important;
+        border-color: #f5c2c7;
+    }
+
+    #tabla-notificaciones tbody tr.credito-tramo-30 > td:first-child {
+        border-left: 4px solid #dc3545 !important;
+    }
+</style>
 @include('layouts.partials.flash-messages')
 
 <main class="app-content">
@@ -143,10 +174,34 @@
         "searchDelay": 500,
         "order": [[3, 'desc']], // Ordenado por fecha descendente por defecto
         "createdRow": function (row, data) {
-         if (data.estado && data.estado.indexOf('estado-no-leida') !== -1) {
-             $(row).addClass('table-light');
-         }
-     }
+            // Extraer el texto del título, eliminando el HTML del controlador.
+            var titulo = $('<div>').html(data.titulo || '').text()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+            var claseCredito = '';
+
+            if (titulo.includes('credito con 30+ dias pendientes')) {
+                claseCredito = 'credito-tramo-30';
+            } else if (titulo.includes('credito con 20+ dias pendientes')) {
+                claseCredito = 'credito-tramo-20';
+            } else if (titulo.includes('credito con 15+ dias pendientes')) {
+                claseCredito = 'credito-tramo-15';
+            }
+
+            if (claseCredito) {
+                $(row).addClass(claseCredito);
+            } else if (
+                data.estado &&
+                data.estado.indexOf('estado-no-leida') !== -1
+            ) {
+                // Conservar tu estilo actual para las demás no leídas.
+                $(row).addClass('table-light');
+            }
+        }
     });
 
     // Eventos para actualizar la tabla instantáneamente al modificar los filtros sin perder paginación
