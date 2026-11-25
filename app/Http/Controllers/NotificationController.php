@@ -97,7 +97,7 @@ class NotificationController extends Controller
    
   public function getData(Request $request)
     {
-        Gate::authorize('ver-logistica'); 
+        Gate::authorize('ver-notificaciones'); 
         $user = auth()->user();
 
         $query = DB::table('notifications')
