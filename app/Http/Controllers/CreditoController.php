@@ -97,7 +97,7 @@ class CreditoController extends Controller
         ->get();
 
     $locales = $user->esAdmin() ? Local::where('tipo', 'LOCAL')->get() : collect();
-
+    
     return view('creditos.index', compact('clientes', 'todosLosClientes', 'locales'));
 }
 
