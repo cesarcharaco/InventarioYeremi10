@@ -78,4 +78,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(Pedido::class, 'user_id');
     }
+
+    public function idsLocalesActivos(): array
+    {
+        return $this->locales()->wherePivot('status', 'activo')->pluck('local.id')->toArray();
+    }
 }

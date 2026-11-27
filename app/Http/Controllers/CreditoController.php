@@ -29,77 +29,62 @@ use App\Notifications\AlertaSistemaNotification;
 
 class CreditoController extends Controller
 {
-    public function index(Request $request)
-{
-    Gate::authorize('ver-creditos');
+   public function index(Request $request)
+   {
+       Gate::authorize('ver-creditos');
+       $user = auth()->user();
 
-    $user = auth()->user();
+       // Locales permitidos
+       $misLocales = $user->esAdmin()
+           ? Local::where('tipo', 'LOCAL')->pluck('id')->toArray()
+           : DB::table('users_has_local')->where('id_user', $user->id)->pluck('id_local')->toArray();
 
-    // 1. Obtener los IDs de los locales del usuario
-    $misLocales = [];
-    if (!$user->esAdmin()) {
-        $misLocales = DB::table('users_has_local')
-                    ->where('id_user', $user->id)
-                    ->pluck('id_local')
-                    ->toArray();
-    }
+       // Local seleccionado: debe estar dentro de los permitidos
+       $idLocal = $request->input('local');
+       $localesFiltro = ($idLocal && in_array((int)$idLocal, $misLocales))
+           ? [(int)$idLocal]
+           : $misLocales;
 
-    // Callback base: Valida únicamente el acceso por local (permite ver historial con 0 deuda o saldos pagados)
-    $filtroLocalCredito = function($qCredito) use ($user, $misLocales) {
-        if (!$user->esAdmin()) {
-            $qCredito->where(function($q) use ($misLocales) {
-                $q->whereHas('venta', function($qVenta) use ($misLocales) {
-                    $qVenta->whereIn('id_local', $misLocales);
-                })
-                ->orWhereNull('id_venta');
-            });
-        }
-    };
+       // Acceso por local (sin orWhereNull)
+       $filtroLocal = function ($q) use ($localesFiltro) {
+           $q->whereHas('venta', fn($v) => $v->whereIn('id_local', $localesFiltro));
+       };
 
-    // Callback estricto: Filtra únicamente créditos activos/anticipos y aplica el filtro de local
-    $filtroCreditosActivos = function($qCredito) use ($filtroLocalCredito) {
-        $filtroLocalCredito($qCredito);
-        $qCredito->whereIn('estado', ['pendiente', 'anticipo']);
-    };
+       // Solo deudas activas en esos locales
+       $filtroActivos = function ($q) use ($filtroLocal) {
+           $filtroLocal($q);
+           $q->whereIn('estado', ['pendiente', 'anticipo']);
+       };
 
-    // 2. Consulta principal modificada:
-    // - whereHas con $filtroLocalCredito: Trae a clientes con créditos activos Y clientes con 0 deuda. 
-    //   Excluye automáticamente a los que NUNCA han tenido créditos.
-    // - with y withSum con $filtroCreditosActivos: Siguen cargando y sumando solo lo pendiente/activo.
-    $query = Cliente::whereHas('creditos', $filtroLocalCredito)
-        ->with(['creditos' => $filtroCreditosActivos])
-        // FIX: sumas separadas. Antes 'saldo_total_pendiente' restaba los anticipos
-        // (saldo negativo) mostrando una deuda neta en vez de la deuda real
-        ->withSum(['creditos as saldo_total_pendiente' => function($q) use ($filtroLocalCredito) {
-            $filtroLocalCredito($q);
-            $q->where('estado', 'pendiente');
-        }], 'saldo_pendiente')
-        ->withSum(['creditos as saldo_total_favor' => function($q) use ($filtroLocalCredito) {
-            $filtroLocalCredito($q);
-            $q->where('estado', 'anticipo')->where('saldo_pendiente', '<', 0);
-        }], 'saldo_pendiente');
+       $query = Cliente::whereHas('creditos', $filtroActivos)
+           ->with(['creditos' => $filtroActivos])
+           ->withSum(['creditos as saldo_total_pendiente' => function ($q) use ($filtroLocal) {
+               $filtroLocal($q);
+               $q->where('estado', 'pendiente');
+           }], 'saldo_pendiente')
+           ->withSum(['creditos as saldo_total_favor' => function ($q) use ($filtroLocal) {
+               $filtroLocal($q);
+               $q->where('estado', 'anticipo')->where('saldo_pendiente', '<', 0);
+           }], 'saldo_pendiente');
 
-    // 3. Filtro de búsqueda por nombre, identificación o alias
-    if ($request->filled('buscar')) {
-        $buscar = $request->buscar;
-        $query->where(function($q) use ($buscar) {
-            $q->where('nombre', 'like', "%{$buscar}%")
-              ->orWhere('identificacion', 'like', "%{$buscar}%")
-              ->orWhere('alias', 'like', "%{$buscar}%");
-        });
-    }
+       if ($request->filled('buscar')) {
+           $buscar = $request->buscar;
+           $query->where(fn($q) => $q
+               ->where('nombre', 'like', "%{$buscar}%")
+               ->orWhere('identificacion', 'like', "%{$buscar}%")
+               ->orWhere('alias', 'like', "%{$buscar}%"));
+       }
 
-    $clientes = $query->get();
+       $clientes = $query->get();
 
-    // 4. Modal / Selector: Clientes que no tienen créditos activos ni anticipos
-    $todosLosClientes = Cliente::whereDoesntHave('creditos', $filtroCreditosActivos)
-        ->orderBy('nombre', 'asc')
-        ->get();
-
-    $locales = $user->esAdmin() ? Local::where('tipo', 'LOCAL')->get() : collect();
-    
-    return view('creditos.index', compact('clientes', 'todosLosClientes', 'locales'));
-}
+       // Clientes sin créditos activos en esos locales (para el modal)
+       $todosLosClientes = Cliente::whereDoesntHave('creditos', $filtroActivos)
+           ->orderBy('nombre')->get();
+           //dd($todosLosClientes);
+       $locales = Local::whereIn('id', $misLocales)->get();
+      
+       return view('creditos.index', compact('clientes', 'todosLosClientes', 'locales', 'idLocal'));
+   }
 
     public function show($id)
     {
@@ -995,24 +980,20 @@ class CreditoController extends Controller
         }
     }
 
-    private function obtenerCajaActiva($id_local_request = null): int
+    private function obtenerCajaActiva(int $idLocal, bool $bloquear = false): int
     {
-        $user = Auth::user();
-        
-        // Si es admin y envió un id_local desde el modal, usamos ese. Si no, usamos el del usuario.
-        if ($user->esAdmin() && $id_local_request) {
-            $localId = $id_local_request;
-        } else {
-            $local = $user ? $user->localActual() : null;
-            $localId = $local ? $local->id : ($user->id_local ?? 1);
+        $q = Caja::where('id_local', $idLocal)
+                 ->where('estado', 'abierta')
+                 ->orderByDesc('id');
+
+        if ($bloquear) {
+            $q->lockForUpdate();
         }
 
-        $caja = Caja::where('id_local', $localId)
-                    ->where('estado', 'abierta')
-                    ->first();
+        $caja = $q->first();
 
         if (!$caja) {
-            throw new \Exception('No hay una caja abierta en el local seleccionado para registrar el movimiento.');
+            throw new \Exception('No hay una caja abierta en el local seleccionado. No se puede registrar el crédito.');
         }
 
         return $caja->id;
@@ -1188,63 +1169,64 @@ class CreditoController extends Controller
             'id_local'          => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable'
         ]);
 
-        $montoUsd = (float) $request->monto_credito_usd;
-        $cliente = Cliente::findOrFail($cliente_id);
+        // Local y caja se validan primero: sin caja abierta no se gasta el PIN ni se registra nada
+        try {
+            $idLocal      = $this->resolverLocal($request);
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal);
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
-        // Validación 1: El crédito individual supera el límite establecido
+        $montoUsd = (float) $request->monto_credito_usd;
+        $cliente  = Cliente::findOrFail($cliente_id);
+
         if ($cliente->limite_credito > 0 && $montoUsd > $cliente->limite_credito) {
             return redirect()->back()->with('error', 'El monto del crédito ($' . number_format($montoUsd, 2) . ') supera el límite de crédito establecido para el cliente ($' . number_format($cliente->limite_credito, 2) . ').');
         }
 
-        // Validación 2: La deuda actual acumulada + el nuevo crédito superan el límite
         $saldoPendienteActual = $cliente->creditos()->where('estado', 'pendiente')->sum('saldo_pendiente');
         if ($cliente->limite_credito > 0 && ($saldoPendienteActual + $montoUsd) > $cliente->limite_credito) {
             return redirect()->back()->with('error', 'La deuda actual ($' . number_format($saldoPendienteActual, 2) . ') más este nuevo crédito supera el límite permitido del cliente ($' . number_format($cliente->limite_credito, 2) . ').');
         }
-        
-        if (Gate::denies('gestionar-creditos-avanzado')) {
-            $local = auth()->user()->localActual();
 
-            // Buscamos que coincida el PIN y que su estado sea 'usado' (porque el AJAX lo acaba de quemar)
-            $auth = AutorizacionPin::where('id_local', $local->id)
-                        ->where('pin', trim($request->pin_autorizacion))
+        if (Gate::denies('gestionar-creditos-avanzado')) {
+            $auth = AutorizacionPin::where('id_local', $idLocal)
+                        ->where('pin', trim((string) $request->pin_autorizacion))
                         ->where('estado', 'usado')
                         ->first();
 
             if (!$auth) {
                 return redirect()->back()->with('error', 'No se encontró una autorización válida para esta operación.');
             }
-
-            // Opcional: Si quieres asegurarte de que no reutilicen un PIN viejísimo de hace horas, 
-            // puedes verificar que updated_at sea de hace menos de 2 o 5 minutos.
         }
 
-        $montoUsd = (float) $request->monto_credito_usd;
         $tasa_bcv = bcv_rate('USD');
         DB::beginTransaction();
 
         try {
             $cliente = Cliente::findOrFail($cliente_id);
 
+            // Segunda barrera: la caja sigue abierta y queda bloqueada durante la transacción
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal, true);
+
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
-            $fechaCredito = Carbon::parse($request->fecha_credito);
-            $idCajaActiva = $this->obtenerCajaActiva($request->id_local);
+            $fechaCredito  = Carbon::parse($request->fecha_credito);
 
             $venta = new Venta();
             $venta->codigo_factura     = $codigoFactura;
             $venta->id_cliente         = $cliente->id;
             $venta->id_user            = auth()->id();
-            $venta->id_local           = auth()->user()->esAdmin() ? $request->id_local : (auth()->user()->id_local ?? 3);
+            $venta->id_local           = $idLocal;
             $venta->id_caja            = $idCajaActiva;
-            
+
             $venta->pago_usd_efectivo  = 0.00;
             $venta->pago_bs_efectivo   = 0.00;
             $venta->monto_credito_usd  = $montoUsd;
             $venta->total_usd          = $montoUsd;
-            
+
             $venta->estado             = 'completada';
             $venta->observacion        = $request->observacion;
-            
+
             $venta->created_at         = $fechaCredito;
             $venta->updated_at         = now();
             $venta->save();
@@ -1261,7 +1243,6 @@ class CreditoController extends Controller
                 'updated_at'         => now(),
             ]);
 
-            // APLICAR SALDOS A FAVOR / ANTICIPOS ACTIVOS
             $anticipos = Credito::where('id_cliente', $cliente->id)
                 ->where('estado', 'anticipo')
                 ->where('saldo_pendiente', '<', 0)
@@ -1279,7 +1260,6 @@ class CreditoController extends Controller
 
                 $descuento = min($deudaPendiente, $disponibleAnticipo);
 
-                // Crear cabecera de abono para la transacción automática de saldo a favor
                 $abonoCabecera = AbonoCredito::create([
                     'id_cliente'       => $cliente->id,
                     'id_user'          => auth()->id(),
@@ -1290,7 +1270,6 @@ class CreditoController extends Controller
                     'created_at'       => $fechaCredito
                 ]);
 
-                // Crear el detalle vinculando al nuevo crédito
                 AbonoDetalle::create([
                     'id_abono'           => $abonoCabecera->id,
                     'id_credito'         => $credito->id,
@@ -1319,19 +1298,9 @@ class CreditoController extends Controller
                 }
                 $anticipo->save();
 
-                // FIX: sincronizar el saldo global del cliente (antes quedaba duplicado
-                // y podía gastarse dos veces)
-                if ($cliente && $descuento > 0) {
-                    // 1. Forzamos el casteo a float. Si es null, se convierte automáticamente en 0.0
-                    $saldoActual = (float) $cliente->saldo_a_favor;
-                    
-                    // 2. Calculamos el monto numérico exacto a descontar
-                    $montoADescontar = min($saldoActual, $descuento);
-
-                    // 3. Solo hacemos la consulta a la BD si realmente hay algo que descontar
-                    if ($montoADescontar > 0) {
-                        $cliente->decrement('saldo_a_favor', $montoADescontar);
-                    }
+                $montoADescontar = min((float) $cliente->saldo_a_favor, $descuento);
+                if ($montoADescontar > 0) {
+                    $cliente->decrement('saldo_a_favor', $montoADescontar);
                 }
             }
 
@@ -1372,30 +1341,32 @@ class CreditoController extends Controller
             'monto_credito_usd' => 'required|numeric|min:0.01',
             'fecha_credito'     => 'required|date',
             'observacion'       => 'nullable|string',
-            'pin_autorizacion'  => 'nullable|string'
+            'pin_autorizacion'  => 'nullable|string',
+            'id_local'          => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable'
         ]);
 
-        $montoUsd = (float) $request->monto_credito_usd;
-        $cliente = Cliente::findOrFail($request->cliente_id);
+        try {
+            $idLocal      = $this->resolverLocal($request);
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal);
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
-        // Validación 1: El crédito individual supera el límite establecido
+        $montoUsd = (float) $request->monto_credito_usd;
+        $cliente  = Cliente::findOrFail($request->cliente_id);
+
         if ($cliente->limite_credito > 0 && $montoUsd > $cliente->limite_credito) {
             return redirect()->back()->with('error', 'El monto del crédito ($' . number_format($montoUsd, 2) . ') supera el límite de crédito establecido para ' . $cliente->nombre . ' ($' . number_format($cliente->limite_credito, 2) . ').');
         }
 
-        // Validación 2: La deuda actual acumulada + el nuevo crédito superan el límite
         $saldoPendienteActual = $cliente->creditos()->where('estado', 'pendiente')->sum('saldo_pendiente');
         if ($cliente->limite_credito > 0 && ($saldoPendienteActual + $montoUsd) > $cliente->limite_credito) {
             return redirect()->back()->with('error', 'La deuda actual ($' . number_format($saldoPendienteActual, 2) . ') más este nuevo crédito supera el límite permitido para ' . $cliente->nombre . ' ($' . number_format($cliente->limite_credito, 2) . ').');
         }
-        
-        if (Gate::denies('gestionar-creditos-avanzado')) {
-            $local = auth()->user()->localActual();
-            $localId = $local ? $local->id : (auth()->user()->id_local ?? 1);
 
-            // Verificamos que el PIN exista, pertenezca al local y esté recién marcado como 'usado' por el AJAX
-            $auth = AutorizacionPin::where('id_local', $localId)
-                        ->where('pin', trim($request->pin_autorizacion))
+        if (Gate::denies('gestionar-creditos-avanzado')) {
+            $auth = AutorizacionPin::where('id_local', $idLocal)
+                        ->where('pin', trim((string) $request->pin_autorizacion))
                         ->where('estado', 'usado')
                         ->first();
 
@@ -1404,32 +1375,32 @@ class CreditoController extends Controller
             }
         }
 
-        $montoUsd = (float) $request->monto_credito_usd;
         $tasa_bcv = bcv_rate('USD');
         DB::beginTransaction();
 
         try {
             $cliente = Cliente::findOrFail($request->cliente_id);
 
-            $idCajaActiva = $this->obtenerCajaActiva();
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal, true);
+
             $codigoFactura = 'CRD-' . strtoupper(Str::random(6));
-            $fechaCredito = Carbon::parse($request->fecha_credito);
+            $fechaCredito  = Carbon::parse($request->fecha_credito);
 
             $venta = new Venta();
             $venta->codigo_factura     = $codigoFactura;
             $venta->id_cliente         = $cliente->id;
             $venta->id_user            = auth()->id();
-            $venta->id_local           = auth()->user()->id_local ?? 3;
+            $venta->id_local           = $idLocal;
             $venta->id_caja            = $idCajaActiva;
-            
+
             $venta->pago_usd_efectivo  = 0.00;
             $venta->pago_bs_efectivo   = 0.00;
             $venta->monto_credito_usd  = $montoUsd;
             $venta->total_usd          = $montoUsd;
-            
+
             $venta->estado             = 'completada';
             $venta->observacion        = $request->observacion;
-            
+
             $venta->created_at         = $fechaCredito;
             $venta->updated_at         = now();
             $venta->save();
@@ -1439,7 +1410,7 @@ class CreditoController extends Controller
                 'id_cliente'         => $cliente->id,
                 'monto_inicial'      => $montoUsd,
                 'saldo_pendiente'    => $montoUsd,
-                'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15), 
+                'fecha_vencimiento'  => $fechaCredito->copy()->addDays(15),
                 'estado'             => 'pendiente',
                 'tasa_cambio_origen' => $tasa_bcv,
                 'created_at'         => $fechaCredito,
@@ -1501,10 +1472,9 @@ class CreditoController extends Controller
                 }
                 $anticipo->save();
 
-                // FIX: sincronizar el saldo global del cliente (antes quedaba duplicado
-                // y podía gastarse dos veces)
-                if ($cliente && $descuento > 0) {
-                    $cliente->decrement('saldo_a_favor', min($cliente->saldo_a_favor, $descuento));
+                $montoADescontar = min((float) $cliente->saldo_a_favor, $descuento);
+                if ($montoADescontar > 0) {
+                    $cliente->decrement('saldo_a_favor', $montoADescontar);
                 }
             }
 
@@ -2227,5 +2197,28 @@ class CreditoController extends Controller
         $pdf->setPaper('letter', 'portrait');
 
         return $pdf->stream("Notificacion_Cobranza_{$cliente->identificacion}.pdf");
+    }
+
+    private function resolverLocal(Request $request): int
+    {
+        $user = auth()->user();
+
+        if ($user->esAdmin()) {
+            if (!$request->filled('id_local')) {
+                throw new \RuntimeException('Debes seleccionar un local.');
+            }
+            return (int) $request->id_local;
+        }
+
+        $ids = $user->idsLocalesActivos();
+
+        if ($request->filled('id_local') && in_array((int) $request->id_local, $ids, true)) {
+            return (int) $request->id_local;
+        }
+        if (count($ids) === 1) {
+            return (int) $ids[0];
+        }
+
+        throw new \RuntimeException('No se pudo determinar el local. Selecciona uno.');
     }
 }
