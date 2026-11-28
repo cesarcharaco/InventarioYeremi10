@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Credito;
+use App\Models\Cliente;
 use App\Models\CreditoInteres;
 use App\Models\AbonoCredito;
 use App\Models\AbonoDetalle;
@@ -82,19 +83,24 @@ class CreditoService
     public function procesarGestionSaldo(int $creditoId, string $accion, array $datos): array
     {
         return DB::transaction(function () use ($creditoId, $accion, $datos) {
-            $credito = Credito::lockForUpdate()->findOrFail($creditoId);
-            $monto = $credito->saldo_a_favor;
+            if (!in_array($accion, ['aplicar', 'reembolso'], true)) {
+                throw new \Exception('Acción no válida.');
+            }
 
-            if ($monto <= 0) return ['success' => false, 'message' => 'No hay saldo disponible'];
+            $credito = Credito::lockForUpdate()->findOrFail($creditoId);
+            $monto   = round((float) $credito->saldo_a_favor, 2);
+
+            if ($monto <= 0) {
+                return ['status' => 'error', 'success' => false, 'message' => 'No hay saldo disponible'];
+            }
+
+            $idCaja = $this->validarCajaOperable($datos['id_caja'] ?? null);
 
             if ($accion === 'aplicar') {
-                $idCajaActiva = $datos['id_caja'] ?? auth()->user()->id_caja ?? 1;
-
-                // 1. Crear cabecera de abono
                 $abonoCabecera = AbonoCredito::create([
                     'id_cliente'        => $credito->id_cliente,
                     'id_user'           => auth()->id(),
-                    'id_caja'           => $idCajaActiva,
+                    'id_caja'           => $idCaja,
                     'monto_total_usd'   => $monto,
                     'pago_usd_efectivo' => 0.00,
                     'pago_bs_efectivo'  => 0.00,
@@ -104,7 +110,6 @@ class CreditoService
                     'estado'            => 'Realizado'
                 ]);
 
-                // 2. Crear el detalle imputado al crédito
                 AbonoDetalle::create([
                     'id_abono'           => $abonoCabecera->id,
                     'id_credito'         => $credito->id,
@@ -115,20 +120,64 @@ class CreditoService
                 if ($credito->saldo_pendiente <= 0) {
                     $credito->estado = 'pagado';
                 }
-            } elseif ($accion === 'reembolso') {
+            } else { // reembolso
+                $forma = (string) ($datos['forma_salida'] ?? 'Efectivo USD');
+                $esBs  = stripos($forma, 'bs') !== false;
+
                 CajaMovimiento::create([
-                    'monto'    => $monto,
-                    'tipo'     => 'egreso',
-                    'metodo'   => $datos['forma_salida'] ?? 'Efectivo USD',
-                    'detalles' => $datos['referencia'] ?? 'Reembolso de saldo a favor',
-                    'id_user'  => auth()->id()
+                    'id_caja'      => $idCaja,
+                    'id_user'      => auth()->id(),
+                    'id_credito'   => $credito->id,
+                    'tipo'         => 'egreso',
+                    'categoria'    => 'reembolso_saldo',
+                    'efectivo_usd' => $esBs ? 0 : $monto,
+                    'efectivo_bs'  => $esBs ? round($monto * (float) bcv_rate('USD'), 2) : 0,
+                    'observacion'  => ($datos['referencia'] ?? 'Reembolso de saldo a favor') . ' (' . $forma . ')',
                 ]);
+
+                if ($credito->estado === 'anticipo') {
+                    $credito->saldo_pendiente = 0;
+                    $credito->estado = 'pagado';
+
+                    $cliente = Cliente::lockForUpdate()->find($credito->id_cliente);
+                    if ($cliente) {
+                        $descontar = min((float) $cliente->saldo_a_favor, $monto);
+                        if ($descontar > 0) {
+                            $cliente->decrement('saldo_a_favor', $descontar);
+                        }
+                    }
+                }
             }
 
             $credito->saldo_a_favor = 0;
             $credito->save();
 
-            return ['success' => true];
+            return ['status' => 'success', 'success' => true, 'message' => 'Operación realizada correctamente.'];
         });
+    }
+
+    private function validarCajaOperable($idCaja): int
+    {
+        if (!$idCaja) {
+            throw new \Exception('No se indicó una caja para registrar la operación.');
+        }
+
+        $caja = DB::table('cajas')->where('id', $idCaja)->lockForUpdate()->first();
+
+        if (!$caja) {
+            throw new \Exception('No existe la caja indicada.');
+        }
+
+        $estado = strtolower(trim((string) ($caja->estado ?? '')));
+        if ($estado !== 'abierta' || !empty($caja->fecha_cierre)) {
+            throw new \Exception('La caja indicada no está abierta.');
+        }
+
+        $user = auth()->user();
+        if (!$user->esAdmin() && !in_array((int) $caja->id_local, $user->idsLocalesActivos(), true)) {
+            throw new \Exception('No tienes acceso al local de esta caja.');
+        }
+
+        return (int) $caja->id;
     }
 }

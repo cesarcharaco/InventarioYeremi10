@@ -150,17 +150,14 @@ class CreditoController extends Controller
 
     public function registrarAbono(Request $request, $id)
     {
-        // 1. Validaciones iniciales
         $request->validate([
             'monto_total_usd' => 'required|numeric|min:0.01',
             'fecha_abono'     => 'required|date',
-            'id_local'        => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable' // NUEVO
+            'id_local'        => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable'
         ]);
 
-        // OBTENER LA TASA DE CAMBIO
         $tasa_bcv = bcv_rate('USD');
 
-        // Seguridad: Evitar división por cero si la función falla o devuelve 0
         if (!$tasa_bcv || $tasa_bcv <= 0) {
             return back()->with('error', 'No se pudo obtener la tasa del BCV. Verifique el sistema de tasas e intente nuevamente.');
         }
@@ -170,43 +167,49 @@ class CreditoController extends Controller
         $pagoPuntoBs     = (float)($request->pago_punto_bs ?? 0);
         $pagoPagomovilBs = (float)($request->pago_pagomovil_bs ?? 0);
 
-        // 2. Conversión de Bolívares a Dólares
-        $totalPagosBs = $pagoBsEfectivo + $pagoPuntoBs + $pagoPagomovilBs;
+        $totalPagosBs          = $pagoBsEfectivo + $pagoPuntoBs + $pagoPagomovilBs;
         $totalBsConvertidoAUsd = $totalPagosBs / $tasa_bcv;
-
-        // 3. Sumatoria unificada en USD
-        $totalDesgloseUsd = $pagoUsdEfectivo + $totalBsConvertidoAUsd;
+        $totalDesgloseUsd      = $pagoUsdEfectivo + $totalBsConvertidoAUsd;
 
         if ($totalDesgloseUsd <= 0) {
             return back()->with('error', 'Debe registrar al menos un valor en el desglose.');
         }
-        
-        // FIX: Tolerancia de 0.05 USD (5 centavos) para absorber diferencias matemáticas de redondeo en BS
+
         if (abs($totalDesgloseUsd - (float) $request->monto_total_usd) > 0.05) {
             return back()->with(
-                'error', 
+                'error',
                 'El desglose de pagos ($' . number_format($totalDesgloseUsd, 2) . ' equivalentes) no coincide con el monto total del abono ($' . number_format($request->monto_total_usd, 2) . ').'
             );
         }
 
+        // Local y caja: se validan antes de tocar la base de datos
         try {
-            // Obtenemos el cliente y sus datos antes de la transacción para evitar que queden en NULL
+            $idLocal      = $this->resolverLocal($request);
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal);
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        try {
             $creditoReferencia = Credito::findOrFail($id);
-            $cliente = $creditoReferencia->cliente;
-            $clienteId = $cliente->id;
-            $clienteNombre = $cliente->nombre;
+            $cliente           = $creditoReferencia->cliente;
+            $clienteId         = $cliente->id;
+            $clienteNombre     = $cliente->nombre;
 
-            $montoTotalUSD = 0;
+            $montoTotalUSD         = 0;
             $creditoCanceladoTotal = false;
-            
-            DB::transaction(function () use ($request, $creditoReferencia, $cliente, $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs, &$montoTotalUSD, &$creditoCanceladoTotal) {
 
-                $idCajaActiva = $this->obtenerCajaActiva($request->id_local);
-                
-                $fechaAbono = Carbon::parse($request->fecha_abono);
+            DB::transaction(function () use (
+                $request, $cliente, $idLocal,
+                $pagoUsdEfectivo, $pagoBsEfectivo, $pagoPuntoBs, $pagoPagomovilBs,
+                &$montoTotalUSD, &$creditoCanceladoTotal
+            ) {
+                // Segunda barrera: la caja sigue abierta y queda bloqueada
+                $idCajaActiva = $this->obtenerCajaActiva($idLocal, true);
+
+                $fechaAbono    = Carbon::parse($request->fecha_abono);
                 $montoTotalUSD = round($request->monto_total_usd, 2);
 
-                // 2. Crear la cabecera única del abono (AbonoCredito)
                 $abonoCabecera = AbonoCredito::create([
                     'id_cliente'        => $cliente->id,
                     'id_user'           => Auth::id(),
@@ -222,7 +225,6 @@ class CreditoController extends Controller
                     'updated_at'        => now(),
                 ]);
 
-                // 3. Buscamos TODOS los créditos pendientes del cliente (Más antiguos primero)
                 $creditos = Credito::where('id_cliente', $cliente->id)
                     ->where('estado', 'pendiente')
                     ->orderBy('created_at', 'asc')
@@ -231,11 +233,10 @@ class CreditoController extends Controller
 
                 $montoRestante = $montoTotalUSD;
 
-                // 4. Amortización e imputación a través de AbonoDetalle
                 foreach ($creditos as $credito) {
                     if ($montoRestante <= 0) break;
 
-                    $saldo = round($credito->saldo_pendiente, 2);
+                    $saldo         = round($credito->saldo_pendiente, 2);
                     $montoAplicado = min($montoRestante, $saldo);
 
                     AbonoDetalle::create([
@@ -258,26 +259,26 @@ class CreditoController extends Controller
                     $montoRestante = round($montoRestante - $montoAplicado, 2);
                 }
 
-                // 5. MANEJO DEL EXCEDENTE (Saldo a favor / Anticipo)
+                // Excedente: saldo a favor / anticipo, en el local resuelto
                 if ($montoRestante > 0) {
                     $codigoAnticipo = 'ANT-' . strtoupper(Str::random(6));
 
                     $ventaAnticipo = new Venta();
-                    $ventaAnticipo->codigo_factura     = $codigoAnticipo;
-                    $ventaAnticipo->id_cliente         = $cliente->id;
-                    $ventaAnticipo->id_user            = auth()->id();
-                    $ventaAnticipo->id_local           = auth()->user()->esAdmin() ? $request->id_local : (auth()->user()->id_local ?? 1);
-                    $ventaAnticipo->id_caja            = $idCajaActiva;
-                    
-                    $ventaAnticipo->pago_usd_efectivo  = 0.00;
-                    $ventaAnticipo->pago_bs_efectivo   = 0.00;
-                    $ventaAnticipo->monto_credito_usd  = 0.00;
-                    $ventaAnticipo->total_usd          = 0.00;
-                    
-                    $ventaAnticipo->estado             = 'completada';
-                    $ventaAnticipo->observacion        = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo';
-                    $ventaAnticipo->created_at         = $fechaAbono;
-                    $ventaAnticipo->updated_at         = now();
+                    $ventaAnticipo->codigo_factura    = $codigoAnticipo;
+                    $ventaAnticipo->id_cliente        = $cliente->id;
+                    $ventaAnticipo->id_user           = auth()->id();
+                    $ventaAnticipo->id_local          = $idLocal;
+                    $ventaAnticipo->id_caja           = $idCajaActiva;
+
+                    $ventaAnticipo->pago_usd_efectivo = 0.00;
+                    $ventaAnticipo->pago_bs_efectivo  = 0.00;
+                    $ventaAnticipo->monto_credito_usd = 0.00;
+                    $ventaAnticipo->total_usd         = 0.00;
+
+                    $ventaAnticipo->estado            = 'completada';
+                    $ventaAnticipo->observacion       = 'Venta generada automáticamente para respaldo de Saldo a Favor / Anticipo';
+                    $ventaAnticipo->created_at        = $fechaAbono;
+                    $ventaAnticipo->updated_at        = now();
                     $ventaAnticipo->save();
 
                     $creditoAnticipo = Credito::create([
@@ -300,12 +301,9 @@ class CreditoController extends Controller
                         'updated_at'         => now(),
                     ]);
 
-                    if ($cliente) {
-                        $cliente->increment('saldo_a_favor', $montoRestante);
-                    }
+                    $cliente->increment('saldo_a_favor', $montoRestante);
                 }
-                
-                // 6. Verificar si el cliente se ha quedado sin deudas pendientes (Cancelación total)
+
                 $pendientesRestantes = Credito::where('id_cliente', $cliente->id)
                     ->where('estado', 'pendiente')
                     ->count();
@@ -313,7 +311,6 @@ class CreditoController extends Controller
                 $creditoCanceladoTotal = ($pendientesRestantes === 0);
             });
 
-            // --- ENVÍO DE NOTIFICACIONES A GERENTES Y ENCARGADOS ---
             $gerentes = User::whereIn('role', ['admin', 'encargado'])->get();
 
             if ($creditoCanceladoTotal) {
@@ -335,12 +332,10 @@ class CreditoController extends Controller
             foreach ($gerentes as $gerente) {
                 $gerente->notify(new AlertaSistemaNotification($detalles));
             }
-            
-            // --------------------------------------------------------
-            
+
             return redirect()->back()->with('success', 'Abono procesado correctamente.');
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return back()->with('error', 'Error al procesar: ' . $e->getMessage());
         }
     }
@@ -358,7 +353,14 @@ class CreditoController extends Controller
         }
 
         $abono = AbonoCredito::with('cliente')->findOrFail($id);
-
+        try {
+            $this->verificarAccesoLocalAbono($abono);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'error'   => $e->getMessage(),
+            ], 403);
+        }
         if ($abono->estado !== 'Realizado') {
             return response()->json([
                 'success' => false,
@@ -440,10 +442,7 @@ class CreditoController extends Controller
                     throw new \Exception('No se puede modificar un abono anulado.');
                 }
 
-                /*
-                 * Candado común: todas las operaciones financieras del cliente
-                 * deberían bloquear primero este mismo registro.
-                 */
+                $idLocalAbono = $this->verificarAccesoLocalAbono($abono);
                 $cliente = Cliente::query()
                     ->lockForUpdate()
                     ->findOrFail($abono->id_cliente);
@@ -670,7 +669,8 @@ class CreditoController extends Controller
                             'ANT-' . strtoupper(Str::random(6));
                         $ventaAnticipo->id_cliente = $cliente->id;
                         $ventaAnticipo->id_user = $abono->id_user;
-                        $ventaAnticipo->id_local = auth()->user()->id_local ?? 1;
+                        $ventaAnticipo->created_at  = $abono->created_at;
+                        $ventaAnticipo->updated_at  = now();
                         $ventaAnticipo->id_caja = $abono->id_caja;
                         $ventaAnticipo->pago_usd_efectivo = 0.00;
                         $ventaAnticipo->pago_bs_efectivo = 0.00;
@@ -866,56 +866,63 @@ class CreditoController extends Controller
         return view('creditos.modals.modal_interes', compact('credito'))->render();
     }
 
-    // CÓDIGO CORREGIDO (CreditoController.php - aplicarInteres):
     public function aplicarInteres(Request $request, $id)
     {
+        Gate::authorize('revalorizar-credito'); // ajusta al permiso que uses para indexar
+
         $request->validate([
-            'porcentaje' => 'required|numeric|min:0.01|max:100',
+            'porcentaje'  => 'required|numeric|min:0.01|max:100',
             'observacion' => 'nullable|string|max:255'
         ]);
-        
+
         try {
-            $res = DB::transaction(function () use ($request, $id) {
+            $user = auth()->user();
+
+            $res = DB::transaction(function () use ($request, $id, $user) {
                 $creditoRef = Credito::findOrFail($id);
-                
-                // Obtener TODOS los créditos pendientes con saldo del cliente
-                $creditosPendientes = Credito::where('id_cliente', $creditoRef->id_cliente)
+
+                $query = Credito::where('id_cliente', $creditoRef->id_cliente)
                     ->where('estado', 'pendiente')
-                    ->where('saldo_pendiente', '>', 0)
-                    ->lockForUpdate()
-                    ->get();
+                    ->where('saldo_pendiente', '>', 0);
+
+                if (!$user->esAdmin()) {
+                    $misLocales = $user->idsLocalesActivos();
+                    $query->whereHas('venta', fn($v) => $v->whereIn('id_local', $misLocales));
+                }
+
+                $creditosPendientes = $query->lockForUpdate()->get();
 
                 if ($creditosPendientes->isEmpty()) {
-                    throw new \Exception('No hay créditos pendientes con saldo mayor a cero para aplicar intereses.');
+                    throw new \Exception('No hay créditos pendientes con saldo mayor a cero para aplicar intereses en tu local.');
                 }
 
                 foreach ($creditosPendientes as $credito) {
-                    $saldoAnterior = $credito->saldo_pendiente;
-                    $montoInteres = $saldoAnterior * ($request->porcentaje / 100);
-                    $saldoNuevo = $saldoAnterior + $montoInteres;
+                    $saldoAnterior = round((float) $credito->saldo_pendiente, 2);
+                    $montoInteres  = round($saldoAnterior * ((float) $request->porcentaje / 100), 2);
+                    $saldoNuevo    = round($saldoAnterior + $montoInteres, 2);
 
                     CreditoInteres::create([
-                        'id_credito'    => $credito->id,
-                        'id_user'       => Auth::id(),
-                        'monto_interes' => $montoInteres,
-                        'porcentaje'    => $request->porcentaje,
-                        'saldo_anterior'=> $saldoAnterior,
-                        'saldo_nuevo'   => $saldoNuevo,
-                        'aplicado_en'   => now(),
-                        'estado'        => 'aplicado',
-                        'observacion'   => $request->observacion
+                        'id_credito'     => $credito->id,
+                        'id_user'        => Auth::id(),
+                        'monto_interes'  => $montoInteres,
+                        'porcentaje'     => $request->porcentaje,
+                        'saldo_anterior' => $saldoAnterior,
+                        'saldo_nuevo'    => $saldoNuevo,
+                        'aplicado_en'    => now(),
+                        'estado'         => 'aplicado',
+                        'observacion'    => $request->observacion
                     ]);
 
                     $credito->saldo_pendiente = $saldoNuevo;
                     $credito->save();
                 }
 
-                return ['success' => true, 'mensaje' => "Interés aplicado exitosamente a los créditos pendientes."];
+                return ['success' => true, 'mensaje' => 'Interés aplicado exitosamente a los créditos pendientes.'];
             });
 
             return response()->json($res);
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'mensaje' => $e->getMessage()], 422);
         }
     }
 
@@ -958,24 +965,35 @@ class CreditoController extends Controller
         return redirect()->back()->with('success', $mensaje);
     }
 
-    public function gestionarSaldo(Request $request, $id)
+    public function gestionarSaldo(Request $request, $id)   // conserva tu nombre y parámetros
     {
         $request->validate([
             'tipo_accion' => 'required|in:aplicar,reembolso',
-            'referencia'  => 'nullable|string|max:255',
+            'id_local'    => auth()->user()->esAdmin() ? 'required|exists:local,id' : 'nullable',
         ]);
 
         try {
-            $service = new CreditoService();
-            $resultado = $service->procesarGestionSaldo($id, $request->tipo_accion, $request->all());
+            $idLocal      = $this->resolverLocal($request);
+            $idCajaActiva = $this->obtenerCajaActiva($idLocal);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
 
-            if ($resultado['status'] === 'success') {
+        try {
+            $service = new CreditoService();
+            $resultado = $service->procesarGestionSaldo(
+                $id,
+                $request->tipo_accion,
+                array_merge($request->all(), ['id_caja' => $idCajaActiva])
+            );
+
+            if (($resultado['status'] ?? null) === 'success') {
                 return redirect()->back()->with('success', $resultado['message']);
             }
 
-            return redirect()->back()->with('error', 'No se pudo completar la operación.');
+            return redirect()->back()->with('error', $resultado['message'] ?? 'No se pudo completar la operación.');
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return redirect()->back()->with('error', 'Error al gestionar saldo: ' . $e->getMessage());
         }
     }
@@ -983,7 +1001,8 @@ class CreditoController extends Controller
     private function obtenerCajaActiva(int $idLocal, bool $bloquear = false): int
     {
         $q = Caja::where('id_local', $idLocal)
-                 ->where('estado', 'abierta')
+                 ->whereRaw('LOWER(TRIM(estado)) = ?', ['abierta'])
+                 ->whereNull('fecha_cierre')
                  ->orderByDesc('id');
 
         if ($bloquear) {
@@ -993,7 +1012,7 @@ class CreditoController extends Controller
         $caja = $q->first();
 
         if (!$caja) {
-            throw new \Exception('No hay una caja abierta en el local seleccionado. No se puede registrar el crédito.');
+            throw new \Exception('No hay una caja abierta en el local seleccionado. No se puede registrar la operación.');
         }
 
         return $caja->id;
@@ -2220,5 +2239,18 @@ class CreditoController extends Controller
         }
 
         throw new \RuntimeException('No se pudo determinar el local. Selecciona uno.');
+    }
+
+    private function verificarAccesoLocalAbono(AbonoCredito $abono): int
+    {
+        $caja = Caja::findOrFail($abono->id_caja);
+        $user = auth()->user();
+
+        if (!$user->esAdmin()
+            && !in_array((int) $caja->id_local, $user->idsLocalesActivos(), true)) {
+            throw new \Exception('No tienes acceso al local de este abono.');
+        }
+
+        return (int) $caja->id_local;
     }
 }
